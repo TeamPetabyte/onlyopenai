@@ -270,9 +270,7 @@
             <!-- Phase 16.26: single unified login form.
                  The old role-tabs UI (User Login / Admin Login) was cosmetic —
                  the server determines role from the user record, not from
-                 which tab the visitor clicked. Removed for clarity.
-                 Demo credentials below are kept ONLY as a dev convenience
-                 (single block showing both admin + user creds). -->
+                 which tab the visitor clicked. Removed for clarity. -->
 
             <!-- Error -->
             <div class="error-msg" id="error-msg"></div>
@@ -291,15 +289,6 @@
                 </div>
 
                 <button class="btn-login" type="submit" id="login-btn">เข้าสู่ระบบ</button>
-
-                <!-- Demo credentials block (dev only — remove before production) -->
-                <div class="demo-hint" style="margin-top:18px">
-                    <div style="font-size:.68rem;color:#666;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">
-                        🛠 Demo credentials
-                    </div>
-                    <div><strong>Admin:</strong> admin / admin123</div>
-                    <div><strong>User:</strong> user / user123 &nbsp;·&nbsp; user2 / user456 &nbsp;·&nbsp; user3 / user789</div>
-                </div>
             </form>
         </div>
 
@@ -398,9 +387,8 @@
             }
         }
 
-        // Pre-fill user credentials on load
-        document.getElementById('username').value = 'user';
-        document.getElementById('password').value = 'user123';
+        // Fields start blank — users type their own credentials.
+        // (Browser may still offer saved logins via autocomplete.)
     </script>
 </body>
 

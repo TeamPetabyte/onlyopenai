@@ -6,8 +6,9 @@
 
    Resolution order:
      1. window.__API_BASE__   (server-injected at runtime, optional)
-     2. Same host as the page on port 3001 (works in LAN/prod)
-     3. Fallback: localhost:3001
+     2. Same origin   (HTTPS behind a proxy/tunnel, or backend on :3001)
+     3. Same host : 3001   (dev split-server: static :8080 + backend :3001)
+     4. Fallback: localhost:3001
 
    Usage in any module:
      const url = window.AppConfig.api('/api/users');
@@ -22,12 +23,21 @@
             if (typeof window !== 'undefined' && window.__API_BASE__) {
                 return String(window.__API_BASE__).replace(/\/+$/, '');
             }
-            // 2) Auto-detect: same host as the page, port 3001
-            //    e.g. page on http://192.168.69.50:8080 → API on http://192.168.69.50:3001
             if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-                const host = window.location.hostname;
+                const loc = window.location;
+                const host = loc.hostname;
                 // Skip "file://" and exotic protocols
                 if (host && host !== '') {
+                    // 2) Same-origin: when served over HTTPS (behind a reverse
+                    //    proxy / tunnel like Cloudflare, Caddy, nginx) or directly
+                    //    by the backend on :3001, the API lives at the SAME origin
+                    //    as the page. Using location.origin keeps scheme+port in
+                    //    sync and avoids mixed-content under HTTPS.
+                    if (loc.protocol === 'https:' || loc.port === '3001' || loc.port === '') {
+                        return loc.origin.replace(/\/+$/, '');
+                    }
+                    // 3) Dev split-server: static on :8080, backend on :3001
+                    //    (same host, fixed backend port).
                     return 'http://' + host + ':3001';
                 }
             }
