@@ -3,7 +3,7 @@
  * OpenAI Streaming proxy + PostgreSQL database
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express      = require('express');
 const cors         = require('cors');
 const helmet       = require('helmet');
@@ -362,9 +362,30 @@ const HAS_API_KEY = !!(
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 let openai = null;
 let OpenAI = null;
+// Optional corporate egress proxy + fail-fast timeout for OpenAI calls.
+// On a locked-down company network the server often cannot reach
+// api.openai.com directly (blocked or proxy-only). openai v4 uses a
+// node-fetch shim and does NOT auto-honor HTTPS_PROXY — the agent must be
+// wired in explicitly. The timeout makes a blocked egress fail fast (and the
+// chat UI shows a real error) instead of hanging silently on the SDK default.
+const _OAI_PROXY = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+let _oaiAgent = undefined;
+if (_OAI_PROXY) {
+    try {
+        const { HttpsProxyAgent } = require('https-proxy-agent');
+        _oaiAgent = new HttpsProxyAgent(_OAI_PROXY);
+        console.log(`🌐 OpenAI egress via proxy: ${_OAI_PROXY}`);
+    } catch (e) {
+        console.warn('[openai] HTTPS_PROXY is set but `https-proxy-agent` is not installed — run `npm i https-proxy-agent` in server/. Continuing WITHOUT proxy.');
+    }
+}
+// timeout = time to start getting a response (does not cut a flowing stream);
+// maxRetries 0 so a hard egress block fails once, fast, and surfaces clearly.
+const OAI_OPTS = { timeout: 60000, maxRetries: 0, ...(_oaiAgent ? { httpAgent: _oaiAgent } : {}) };
+
 if (HAS_API_KEY) {
     OpenAI = require('openai');
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, ...OAI_OPTS });
     console.log(`✅ OpenAI ready — model: ${MODEL}`);
 } else {
     console.log('⚠️  No OpenAI API Key — MOCK mode');
@@ -426,7 +447,7 @@ async function getProjectOpenAI(userId) {
     const key = cryptoStore.tryDecrypt(blob);
     if (!key || !/^sk-/i.test(key)) return openai;     // bad/placeholder — fallback
 
-    const client = new OpenAI({ apiKey: key });
+    const client = new OpenAI({ apiKey: key, ...OAI_OPTS });
     _projectClientCache.set(projectId, {
         client,
         decryptedKeyTail: key.slice(-4),               // for diagnostic logs only

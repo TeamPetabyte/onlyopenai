@@ -135,11 +135,25 @@ const AIClient = {
                             stopped: !!event.stopped,
                         });
 
-                    } else if (event.type === 'use_mock' || event.type === 'error') {
-                        // Fallback to mock
+                    } else if (event.type === 'use_mock') {
+                        // Server DELIBERATELY asked for mock (e.g. no API key configured).
                         this._mode = 'mock';
-                        console.warn('[AIClient] Falling back to MockAI:', event.reason || event.error);
+                        console.warn('[AIClient] Server requested MockAI:', event.reason);
                         await MockAI.run(skillId, prompt, onChunk, onDone);
+                        return;
+                    } else if (event.type === 'error') {
+                        // REAL backend/OpenAI failure (e.g. cannot reach api.openai.com).
+                        // Show it instead of faking an answer with MockAI.
+                        console.error('[AIClient] Backend error:', event.error);
+                        if (typeof onError === 'function') {
+                            onError({ status: 'stream_error', error: event.error, message: event.error });
+                        }
+                        await onDone({
+                            inputTokens: 0, outputTokens: 0, cost: 0,
+                            durationMs: Date.now() - startTime,
+                            sessionId: sessionId || null,
+                            blocked: true,
+                        });
                         return;
                     }
                 }
@@ -158,8 +172,9 @@ const AIClient = {
             }
 
         } catch (err) {
-            // User-initiated cancel — NOT a failure, don't fall through to mock.
-            if (err.name === 'AbortError' || userCtrl.signal.aborted) {
+            const abortReason = userCtrl.signal && userCtrl.signal.reason;
+            // User pressed Stop — benign, stay silent.
+            if (abortReason === 'user_cancel') {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
                     durationMs: Date.now() - startTime,
@@ -168,9 +183,25 @@ const AIClient = {
                 });
                 return;
             }
-            console.error('[AIClient] Stream error:', err.message);
-            this._mode = 'mock';
-            await MockAI.run(skillId, prompt, onChunk, onDone);
+            // Otherwise it's a REAL failure — the 90s safety timeout fired (server
+            // never answered, usually because it can't reach api.openai.com) or a
+            // network/stream error. Surface it instead of silently faking a MockAI
+            // reply, so the user actually sees WHY nothing came back.
+            const isTimeout = abortReason === 'timeout'
+                || err.name === 'AbortError' || (userCtrl.signal && userCtrl.signal.aborted);
+            const msg = isTimeout
+                ? 'หมดเวลารอ — เซิร์ฟเวอร์ตอบ AI ไม่สำเร็จ (มักเกิดจากเซิร์ฟเวอร์ต่อ api.openai.com ไม่ได้ / ถูกไฟร์วอลล์บล็อก)'
+                : ('เชื่อมต่อไม่สำเร็จ: ' + (err.message || 'unknown error'));
+            console.error('[AIClient] Stream failure:', abortReason || err.message);
+            if (typeof onError === 'function') {
+                onError({ status: isTimeout ? 'timeout' : 'network_error', error: msg, message: msg });
+            }
+            await onDone({
+                inputTokens: 0, outputTokens: 0, cost: 0,
+                durationMs: Date.now() - startTime,
+                sessionId: sessionId || null,
+                blocked: true,
+            });
         } finally {
             clearTimeout(timeoutId);
             if (this._abortCtrl === userCtrl) this._abortCtrl = null;
