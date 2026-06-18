@@ -3901,8 +3901,13 @@ app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) =
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    // no-transform stops Cloudflare/proxies from compressing the stream;
+    // X-Accel-Buffering:no stops them from buffering it. Without these a tunnel
+    // holds the whole response and delivers it at once (long silent pause → the
+    // full answer pops in) instead of streaming token-by-token.
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
     const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -4409,8 +4414,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     // checkChatBudget() gate above covers both pool + cap.
 
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    // no-transform stops Cloudflare/proxies from compressing the stream;
+    // X-Accel-Buffering:no stops them from buffering it. Without these a tunnel
+    // holds the whole response and delivers it at once (long silent pause → the
+    // full answer pops in) instead of streaming token-by-token.
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
     const sendEvent = (data) => {
