@@ -3314,37 +3314,15 @@ app.delete('/api/history', requireAdmin, async (req, res) => {
 
 // POST /api/history  — บันทึกหลังรัน skill
 app.post('/api/history', requireAuth, async (req, res) => {
-    // Phase 16.9: also accept cachedTokens / reasoningTokens from the client
-    // so the legacy POST-history path captures the same fields as the new
-    // server-side persistence. Both fall back to 0 when client doesn't send
-    // them (older clients keep working).
-    const { userId, skillId, skillName, prompt, response,
-            inputTokens, outputTokens, cachedTokens, reasoningTokens,
-            cost, durationMs } = req.body;
-    try {
-        // หา project_id จาก user
-        const uRow = await pool.query('SELECT project_id FROM tbl_user WHERE user_id=$1', [userId]);
-        const projectId = uRow.rows[0]?.project_id || 'proj_sap_dev';
-        const responseId = require('crypto').randomBytes(16).toString('hex');
-        await pool.query(`
-            INSERT INTO tbl_response
-                (response_id, project_id, user_id, model, created_at, input_param, output_param,
-                 input_tokens, input_cached_tokens, output_tokens, output_reasoning_tokens, total_tokens)
-            VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7,$8,$9,$10,$11)`,
-            [responseId, projectId, userId, process.env.OPENAI_MODEL || 'gpt-4o',
-             prompt || '', response || '',
-             inputTokens || 0, cachedTokens || 0,
-             outputTokens || 0, reasoningTokens || 0,
-             (inputTokens||0)+(outputTokens||0)]);
-        // Phase 21.10 (Concept B) — deduct from project pool, not user wallet.
-        // WHERE project_credits >= cost is the atomic guard against negative.
-        const dedRes = await pool.query(`UPDATE tbl_balance SET project_credits = project_credits - $1
-            WHERE project_id=$2 AND project_credits >= $1`, [cost || 0, projectId]);
-        if (dedRes.rowCount === 0 && (cost || 0) > 0) {
-            console.warn(`[history] ⚠ project pool insufficient — project:${projectId} cost:${cost}`);
-        }
-        res.json({ ok: true, deducted: dedRes.rowCount > 0 });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    // DEPRECATED — no-op kept only so older clients don't get a 404.
+    //
+    // /api/chat now persists tbl_response, deducts the project pool, AND writes
+    // the credit ledger authoritatively in one place. This legacy endpoint used
+    // to ALSO insert tbl_response and deduct the pool, which DOUBLE-CHARGED every
+    // chat: the project pool was debited twice while the ledger recorded it once
+    // (symptom: pool drops ~2× the logged usage). Neutralised so billing happens
+    // in exactly one path. Returns ok without touching money or writing rows.
+    res.json({ ok: true, deducted: false, deprecated: true });
 });
 
 // ══════════════════════════════════════════════════════════

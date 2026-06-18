@@ -1979,17 +1979,11 @@
                 this.usageHistory.unshift(entry);
                 if (this.usageHistory.length > 200) this.usageHistory = this.usageHistory.slice(0, 200);
                 this.balance = Math.max(0, this.balance - (entry.cost || 0)); this.save();
-                const s = Auth.getSession();
-                if (s && s.userId) {
-                    fetch(BASE + '/api/history', {
-                        method: 'POST', headers: Auth.authHeaders(),
-                        body: JSON.stringify({
-                            userId: s.userId, skillId: entry.skillId, skillName: entry.skillName,
-                            skillEmoji: entry.skillEmoji, prompt: entry.prompt, response: entry.response,
-                            inputTokens: entry.inputTokens, outputTokens: entry.outputTokens, cost: entry.cost, durationMs: entry.durationMs
-                        })
-                    }).catch(() => { });
-                }
+                // NOTE: usage is persisted + billed server-side by /api/chat
+                // (tbl_response + project-pool deduction + credit ledger, all in
+                // one place). The old POST /api/history here ran a SECOND pool
+                // deduction → double-charge, so it was removed. The local
+                // balance/history update above is UI-only.
             },
         };
 
