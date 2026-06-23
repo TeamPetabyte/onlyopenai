@@ -140,4 +140,116 @@ function buildRouterCatalog() {
     }));
 }
 
-module.exports = { load, getSkills, getSkill, getStatus, buildRouterCatalog };
+// ── Write path (Phase 22): admin UI prompt management ─────────
+//
+// Prompt engineers edit/add skills directly from the admin page. These
+// helpers read the current file fresh, mutate the skills[] array, then
+// write it back atomically (temp file + rename) and reload the in-memory
+// cache so the chat router picks up the change immediately — no restart,
+// no manual "reload" click needed.
+//
+// NOTE: edits made on the deployed server are written to that machine's
+// skill-prompts.json only; they are NOT in git and WILL be overwritten by
+// the next code update (ZIP/clone). The canonical copy still lives in the
+// repo — keep them in sync (the admin UI shows the file path).
+
+const SKILL_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/i;
+
+/** Read + parse the file fresh for a write op. Returns { doc } or { error }. */
+function _readDocForWrite() {
+    let doc = { version: 1, skills: [] };
+    if (fs.existsSync(FILE)) {
+        let raw;
+        try {
+            raw = fs.readFileSync(FILE, 'utf8');
+        } catch (e) {
+            return { error: 'read failed: ' + e.message };
+        }
+        try {
+            doc = JSON.parse(raw);
+        } catch (e) {
+            return { error: 'refusing to overwrite — current file is invalid JSON: ' + e.message };
+        }
+    }
+    if (!doc || typeof doc !== 'object') doc = { version: 1, skills: [] };
+    if (!Array.isArray(doc.skills)) doc.skills = [];
+    return { doc };
+}
+
+/** Atomically write the doc to disk, then reload the cache. */
+function _writeDoc(doc) {
+    const out = JSON.stringify(doc, null, 2) + '\n';
+    if (Buffer.byteLength(out, 'utf8') > MAX_FILE_BYTES) {
+        return { error: 'file would exceed size cap (' + MAX_FILE_BYTES + ' bytes)' };
+    }
+    const tmp = FILE + '.tmp';
+    try {
+        fs.writeFileSync(tmp, out, 'utf8');
+        fs.renameSync(tmp, FILE);
+    } catch (e) {
+        try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+        return { error: 'write failed: ' + e.message };
+    }
+    load(); // refresh in-memory cache + router catalog
+    return { error: null };
+}
+
+/**
+ * Create or update a skill. `input` = { id, label, description, content,
+ * openaiPromptId }. Returns { ok, created, skill } or { ok:false, error }.
+ */
+function upsertSkill(input) {
+    if (!input || typeof input !== 'object') return { ok: false, error: 'no payload' };
+    const id = String(input.id || '').trim();
+    if (!id) return { ok: false, error: 'id is required' };
+    if (!SKILL_ID_RE.test(id)) {
+        return { ok: false, error: 'id must be 2-64 chars: letters, digits, _ or - (no spaces)' };
+    }
+    const content = String(input.content == null ? '' : input.content);
+    if (content.trim().length < 1) return { ok: false, error: 'content is required' };
+
+    const { doc, error } = _readDocForWrite();
+    if (error) return { ok: false, error };
+
+    const entry = {
+        id,
+        label:          String(input.label || id),
+        description:    String(input.description || ''),
+        openaiPromptId: String(input.openaiPromptId || ''),
+        content,
+    };
+    const idx = doc.skills.findIndex(s => s && s.id === id);
+    let created = false;
+    if (idx >= 0) {
+        doc.skills[idx] = { ...doc.skills[idx], ...entry };
+    } else {
+        doc.skills.push(entry);
+        created = true;
+    }
+
+    const w = _writeDoc(doc);
+    if (w.error) return { ok: false, error: w.error };
+    return { ok: true, created, skill: entry };
+}
+
+/** Delete a skill by id. Returns { ok, deleted } or { ok:false, error }. */
+function deleteSkill(id) {
+    id = String(id || '').trim();
+    if (!id) return { ok: false, error: 'id is required' };
+
+    const { doc, error } = _readDocForWrite();
+    if (error) return { ok: false, error };
+
+    const before = doc.skills.length;
+    doc.skills = doc.skills.filter(s => !(s && s.id === id));
+    if (doc.skills.length === before) return { ok: false, error: 'skill not found: ' + id };
+
+    const w = _writeDoc(doc);
+    if (w.error) return { ok: false, error: w.error };
+    return { ok: true, deleted: id };
+}
+
+module.exports = {
+    load, getSkills, getSkill, getStatus, buildRouterCatalog,
+    upsertSkill, deleteSkill,
+};

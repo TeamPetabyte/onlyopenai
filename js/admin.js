@@ -1206,6 +1206,7 @@ var admin = {
         + '🧩 ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b></div>';
       return;
     }
+    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     var cards = skills.map(function (s) {
       var statusBadge = s.isPlaceholder
         ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">⚠ Placeholder</span>'
@@ -1214,6 +1215,7 @@ var admin = {
         ? '<span style="font-family:JetBrains Mono,monospace;font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
         : '<span style="color:var(--text-3);font-size:.72rem;font-style:italic">no openai ref</span>';
 
+      var idJs = "'" + String(s.id).replace(/'/g, "\\'") + "'";
       return '<div class="glass-card" style="margin-bottom:14px">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
         +   '<div style="flex:1;min-width:240px">'
@@ -1226,6 +1228,10 @@ var admin = {
         +       openaiPill
         +     '</div>'
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
+        +   '</div>'
+        +   '<div style="display:flex;gap:8px;flex-shrink:0">'
+        +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
+        +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
         + '</div>'
         + '<details style="margin-top:10px">'
@@ -1252,6 +1258,101 @@ var admin = {
         } else {
           flash('✅ Reload เรียบร้อย · ' + (d.status?.count || 0) + ' skills');
         }
+        self.renderSkills();
+      })
+      .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });
+  },
+
+  // ── Phase 22: add / edit / delete skill prompts from the UI ──────
+  _fillSkillModal: function (s) {
+    var g = function (id) { return document.getElementById(id); };
+    g('es-id').value      = s.id || '';
+    g('es-label').value   = s.label || '';
+    g('es-desc').value    = s.description || '';
+    g('es-openai').value  = s.openaiPromptId || '';
+    g('es-content').value = s.content || '';
+    g('es-error').textContent = '';
+    this._updateSkillCharCount();
+  },
+
+  _updateSkillCharCount: function () {
+    var el = document.getElementById('es-content');
+    var c  = document.getElementById('es-charcount');
+    if (el && c) c.textContent = (el.value || '').length.toLocaleString() + ' chars';
+  },
+
+  openAddSkill: function () {
+    document.getElementById('es-title').textContent = '➕ เพิ่ม Skill ใหม่';
+    document.getElementById('es-mode').value = 'add';
+    document.getElementById('es-id').readOnly = false;
+    this._fillSkillModal({});
+    showModal('modal-edit-skill');
+    var ec = document.getElementById('es-content');
+    if (ec && !ec._cc) { ec._cc = true; ec.addEventListener('input', this._updateSkillCharCount); }
+    setTimeout(function () { document.getElementById('es-id').focus(); }, 50);
+  },
+
+  openEditSkill: function (id) {
+    var self = this;
+    fetch(BASE + '/api/skills/' + encodeURIComponent(id), { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { flash('❌ โหลด skill ไม่สำเร็จ: ' + (d.error || 'unknown'), 'error'); return; }
+        document.getElementById('es-title').textContent = '✏️ แก้ไข Skill';
+        document.getElementById('es-mode').value = 'edit';
+        document.getElementById('es-id').readOnly = true;  // id is the key — fixed on edit
+        self._fillSkillModal(d.skill);
+        showModal('modal-edit-skill');
+        var ec = document.getElementById('es-content');
+        if (ec && !ec._cc) { ec._cc = true; ec.addEventListener('input', self._updateSkillCharCount); }
+      })
+      .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });
+  },
+
+  submitEditSkill: function () {
+    var self = this;
+    var g = function (id) { return document.getElementById(id); };
+    var errEl = g('es-error');
+    var payload = {
+      id:             (g('es-id').value || '').trim(),
+      label:          (g('es-label').value || '').trim(),
+      description:    (g('es-desc').value || '').trim(),
+      openaiPromptId: (g('es-openai').value || '').trim(),
+      content:        g('es-content').value || '',
+    };
+    if (!payload.id)               { errEl.textContent = 'กรุณากรอก Skill ID'; return; }
+    if (!payload.content.trim())   { errEl.textContent = 'กรุณากรอก Content (system prompt)'; return; }
+    errEl.textContent = '';
+
+    var btn = document.querySelector('#modal-edit-skill .btn-modal-submit');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+
+    fetch(BASE + '/api/skills', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { errEl.textContent = d.error || 'บันทึกไม่สำเร็จ'; return; }
+        hideModal('modal-edit-skill');
+        flash(d.created ? '✅ เพิ่ม skill เรียบร้อย (มีผลทันที)' : '✅ บันทึก skill เรียบร้อย (มีผลทันที)');
+        self.renderSkills();
+      })
+      .catch(function (e) { errEl.textContent = 'Network error: ' + e.message; })
+      .finally(function () { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } });
+  },
+
+  deleteSkillPrompt: function (id) {
+    var self = this;
+    if (!confirm('ลบ skill "' + id + '" ออกจาก registry?\n(ไฟล์บนเครื่องนี้จะถูกแก้ทันที)')) return;
+    fetch(BASE + '/api/skills/' + encodeURIComponent(id), {
+      method: 'DELETE', headers: Auth.authHeaders(),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { flash('❌ ลบไม่สำเร็จ: ' + (d.error || 'unknown'), 'error'); return; }
+        flash('🗑 ลบ skill "' + id + '" เรียบร้อย');
         self.renderSkills();
       })
       .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });

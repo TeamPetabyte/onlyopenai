@@ -1287,12 +1287,10 @@
                 </svg>
                 <span data-i18n="nav.balance">Balance</span>
             </a>
-            <!-- Phase 18 / 20.2: Skill Prompts — HIDDEN until ABAP team paste
-                 the real prompt content into server/config/skill-prompts.json.
-                 The view + JS handlers stay wired so flipping `display:''`
-                 brings it back instantly. -->
+            <!-- Phase 22: Skill Prompts — prompt engineers add/edit prompts
+                 and hot-reload directly from this admin page. -->
             <a class="nav-item" onclick="admin.navigate('skills');return false;"
-               href="#" id="nav-skills" style="display:none">
+               href="#" id="nav-skills">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2L2 7l10 5 10-5-10-5z"/>
                     <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
@@ -1729,10 +1727,11 @@
                 <div>
                     <h2 class="page-title">Skill Prompts</h2>
                     <p class="page-subtitle"><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span>
-                        · แก้ไขผ่านไฟล์ <code style="font-size:.78rem;background:var(--surface-3);padding:1px 6px;border-radius:4px">server/config/skill-prompts.json</code></p>
+                        · เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</p>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.openAddSkill()">➕ <span data-i18n="skills.add">เพิ่ม Skill</span></button>
                     <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.reloadSkills()">⚡ Reload from file</button>
                 </div>
             </div>
@@ -2141,6 +2140,52 @@
         </div>
     </div>
 
+    <!-- MODAL: Add / Edit Skill Prompt (Phase 22) -->
+    <div class="modal-overlay" id="modal-edit-skill">
+        <div class="modal-box" style="max-width:760px">
+            <div class="modal-title" id="es-title">✏️ แก้ไข Skill</div>
+            <!-- when editing: id is fixed; when adding: id is editable -->
+            <input type="hidden" id="es-mode" value="edit" />
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label class="modal-label">Skill ID <span style="color:#e05555">*</span></label>
+                    <input class="modal-input" id="es-id" type="text"
+                        placeholder="เช่น obsolete_check" autocomplete="off" />
+                    <div style="font-size:.68rem;color:var(--text-3);margin-top:4px">a-z 0-9 _ - · ห้ามเว้นวรรค · แก้ไม่ได้หลังสร้าง</div>
+                </div>
+                <div class="modal-field">
+                    <label class="modal-label">Label</label>
+                    <input class="modal-input" id="es-label" type="text" placeholder="ชื่อที่อ่านง่าย" autocomplete="off" />
+                </div>
+            </div>
+            <div class="modal-field">
+                <label class="modal-label">Description <span style="color:var(--text-3);font-weight:400">(router ใช้เลือก skill จากคำถาม)</span></label>
+                <textarea class="modal-input" id="es-desc" rows="2"
+                    placeholder="อธิบายว่า skill นี้ใช้เมื่อไร เช่น 'ตรวจหา statement ที่ obsolete ในโค้ด ABAP'"></textarea>
+            </div>
+            <div class="modal-field">
+                <label class="modal-label">OpenAI Prompt ID <span style="color:var(--text-3);font-weight:400">(ไม่บังคับ)</span></label>
+                <input class="modal-input" id="es-openai" type="text" placeholder="pmpt_… (ถ้ามี)" autocomplete="off" />
+            </div>
+            <div class="modal-field">
+                <label class="modal-label">Content (system prompt) <span style="color:#e05555">*</span>
+                    <span id="es-charcount" style="float:right;color:var(--text-3);font-weight:400;font-size:.72rem">0 chars</span>
+                </label>
+                <textarea class="modal-input" id="es-content" rows="16"
+                    style="font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.5;white-space:pre"
+                    placeholder="วาง prompt เต็มที่นี่… ใช้ {code} เป็นจุดที่จะแทนด้วยโค้ดของผู้ใช้"></textarea>
+                <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45">
+                    💡 ใส่ <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px">{code}</code> ตรงที่ต้องการให้ระบบแทนด้วยโค้ดที่ผู้ใช้ส่งมา
+                </div>
+            </div>
+            <div class="modal-error" id="es-error"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="hideModal('modal-edit-skill')"><span data-i18n="btn.cancelTh">ยกเลิก</span></button>
+                <button class="btn-modal-submit" onclick="admin.submitEditSkill()"><span data-i18n="btn.save">บันทึก</span></button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Top-up Project -->
     <div class="modal-overlay" id="modal-topup">
         <div class="modal-box" style="max-width:420px">
@@ -2498,11 +2543,11 @@
         </div>
     </div>
 
-    <script src="js/i18n.js?v=phase21-22"></script>
+    <script src="js/i18n.js?v=phase22"></script>
     <script src="js/config.js?v=phase9-1"></script>
     <script src="js/auth.js?v=phase9-1"></script>
     <script src="js/pricing.js"></script>
-    <script src="js/admin.js?v=phase21-22"></script>
+    <script src="js/admin.js?v=phase22"></script>
 </body>
 
 </html>

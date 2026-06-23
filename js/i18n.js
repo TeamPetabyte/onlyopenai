@@ -68,6 +68,8 @@
       // common buttons / actions
       'btn.refresh': '🔄 รีเฟรช',
       'btn.save': '💾 บันทึก',
+      'btn.edit': 'แก้ไข',
+      'skills.add': 'เพิ่ม Skill',
       'btn.cancel': 'Cancel',
       'btn.addUser': '+ Add User',
       'btn.topupProject': '+ เติมเงิน Project',
@@ -268,6 +270,8 @@
 
       'btn.refresh': '🔄 Refresh',
       'btn.save': '💾 Save',
+      'btn.edit': 'Edit',
+      'skills.add': 'Add Skill',
       'btn.cancel': 'Cancel',
       'btn.addUser': '+ Add User',
       'btn.topupProject': '+ Top up Project',

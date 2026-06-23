@@ -2701,6 +2701,61 @@ app.post('/api/skills/reload', requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/skills/:id — full record incl. content (admin edit modal needs it;
+// the list endpoint deliberately strips content to keep the payload small).
+app.get('/api/skills/:id', requireAdmin, (req, res) => {
+    try {
+        const s = skillPrompts.getSkill(req.params.id);
+        if (!s) return res.status(404).json({ ok: false, error: 'skill not found' });
+        res.json({ ok: true, skill: s });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// POST /api/skills — create or update a skill (Phase 22 prompt management).
+// Body: { id, label, description, content, openaiPromptId }. Writes
+// skill-prompts.json atomically and hot-reloads the registry so the chat
+// router uses the new prompt immediately.
+app.post('/api/skills', requireAdmin, (req, res) => {
+    try {
+        const body = req.body || {};
+        const result = skillPrompts.upsertSkill({
+            id:             body.id,
+            label:          body.label,
+            description:    body.description,
+            content:        body.content,
+            openaiPromptId: body.openaiPromptId,
+        });
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+        logAdminAction(req, {
+            action: result.created ? 'create_skill_prompt' : 'update_skill_prompt',
+            targetType: 'skill',
+            targetId: result.skill.id,
+            extra: { label: result.skill.label, contentLength: result.skill.content.length },
+        });
+        res.json({ ok: true, created: result.created, status: skillPrompts.getStatus() });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// DELETE /api/skills/:id — remove a skill from the registry.
+app.delete('/api/skills/:id', requireAdmin, (req, res) => {
+    try {
+        const result = skillPrompts.deleteSkill(req.params.id);
+        if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+        logAdminAction(req, {
+            action: 'delete_skill_prompt',
+            targetType: 'skill',
+            targetId: result.deleted,
+        });
+        res.json({ ok: true, status: skillPrompts.getStatus() });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // POST /api/sync-now — manual trigger. Returns the result of THIS run.
 app.post('/api/sync-now', requireAdmin, async (req, res) => {
     try {
