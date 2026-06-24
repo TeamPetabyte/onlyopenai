@@ -2686,9 +2686,9 @@ app.get('/api/skills', requireAdmin, (req, res) => {
     }
 });
 
-app.post('/api/skills/reload', requireAdmin, (req, res) => {
+app.post('/api/skills/reload', requireAdmin, async (req, res) => {
     try {
-        skillPrompts.load();
+        await skillPrompts.load();
         const status = skillPrompts.getStatus();
         logAdminAction(req, {
             action: 'reload_skill_prompts',
@@ -2717,15 +2717,16 @@ app.get('/api/skills/:id', requireAdmin, (req, res) => {
 // Body: { id, label, description, content, openaiPromptId }. Writes
 // skill-prompts.json atomically and hot-reloads the registry so the chat
 // router uses the new prompt immediately.
-app.post('/api/skills', requireAdmin, (req, res) => {
+app.post('/api/skills', requireAdmin, async (req, res) => {
     try {
         const body = req.body || {};
-        const result = skillPrompts.upsertSkill({
+        const result = await skillPrompts.upsertSkill({
             id:             body.id,
             label:          body.label,
             description:    body.description,
             content:        body.content,
             openaiPromptId: body.openaiPromptId,
+            updatedBy:      (req.session && (req.session.username || req.session.userId)) || 'admin',
         });
         if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
         logAdminAction(req, {
@@ -2741,9 +2742,11 @@ app.post('/api/skills', requireAdmin, (req, res) => {
 });
 
 // DELETE /api/skills/:id — remove a skill from the registry.
-app.delete('/api/skills/:id', requireAdmin, (req, res) => {
+app.delete('/api/skills/:id', requireAdmin, async (req, res) => {
     try {
-        const result = skillPrompts.deleteSkill(req.params.id);
+        const result = await skillPrompts.deleteSkill(req.params.id, {
+            deletedBy: (req.session && (req.session.username || req.session.userId)) || 'admin',
+        });
         if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
         logAdminAction(req, {
             action: 'delete_skill_prompt',
@@ -5009,7 +5012,11 @@ async function boot() {
     // Phase 18: load skill-prompts.json into the router's in-memory cache.
     // Safe to skip on parse error — `getSkills()` returns [] and the chat
     // path falls back to Assistant-only behaviour.
-    skillPrompts.load();
+    // Phase 23: prompts now live in tbl_prompt (DB). Wire the pool and load
+    // from DB (seeds from the JSON file on first boot when the table is empty;
+    // falls back to the file if the DB is unreachable).
+    skillPrompts.setPool(pool);
+    await skillPrompts.load();
 
     // 3. Signal handlers — let Docker/systemd/PM2 stop us cleanly
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
