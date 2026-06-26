@@ -91,23 +91,25 @@
             margin-bottom: 30px;
         }
 
-        .brand-logo {
-            width: 176px;
-            max-width: 64%;
-            margin: 0 auto 16px;
-            background: #ffffff;
-            border: 1px solid rgba(70, 145, 218, 0.14);
-            border-radius: 24px;
-            padding: 16px 20px;
-            box-shadow:
-                0 14px 34px rgba(46, 108, 176, 0.18),
-                0 2px 6px rgba(46, 108, 176, 0.08);
-        }
-
-        .brand-logo img {
-            width: 100%;
+        /* Floating mascot (same motion as the chat welcome screen) */
+        .brand-mascot {
+            width: 172px;
+            max-width: 58%;
             height: auto;
             display: block;
+            margin: 0 auto 14px;
+            filter: drop-shadow(0 12px 22px rgba(74, 123, 214, 0.22));
+            animation:
+                mascotFade 0.6s ease both,
+                mascotFloat 4.5s ease-in-out 0.4s infinite;
+            will-change: transform;
+        }
+
+        @keyframes mascotFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes mascotFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .brand-mascot { animation: mascotFade 0.4s ease both; }
         }
 
         .brand-name {
@@ -244,9 +246,7 @@
         <!-- Brand: full Petabyte logo (TB monogram + wordmark) on a white
              rounded badge so it reads cleanly over the pastel background. -->
         <div class="brand">
-            <div class="brand-logo">
-                <img src="/assets/logo-ptb.png" alt="Petabyte" />
-            </div>
+            <img class="brand-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
             <div class="brand-name">PipekAI</div>
             <div class="brand-sub">AI Coding Assistant for SAP / ABAP</div>
         </div>
