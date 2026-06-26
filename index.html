@@ -934,13 +934,33 @@
             line-height: 1;
         }
 
-        /* PipekAI mascot on the welcome screen */
+        /* PipekAI mascot on the welcome screen — fades in, then floats gently.
+           opacity (fade) and transform (float) are split across two keyframes
+           so they don't fight over the same property. */
         .chat-empty-mascot {
-            width: 168px;
-            max-width: 56%;
+            width: 176px;
+            max-width: 58%;
             height: auto;
-            margin-bottom: 12px;
-            filter: drop-shadow(0 8px 20px rgba(74, 123, 214, 0.22));
+            margin-bottom: 14px;
+            filter: drop-shadow(0 12px 22px rgba(74, 123, 214, 0.22));
+            animation:
+                mascotFade 0.6s ease both,
+                mascotFloat 4.5s ease-in-out 0.4s infinite;
+            will-change: transform;
+        }
+
+        @keyframes mascotFade {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        @keyframes mascotFloat {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-10px); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .chat-empty-mascot { animation: mascotFade 0.4s ease both; }
         }
 
         .chat-empty-title {
