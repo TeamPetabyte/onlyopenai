@@ -3102,7 +3102,16 @@ var admin = {
       .then(function (d) {
         if (!d.ok) { errEl.textContent = '❌ DB ปฏิเสธ: ' + (d.error || 'unknown'); return; }
         hideModal('modal-add-project');
-        flash('✅ สร้าง Project "' + name + '" เรียบร้อย (DB id=' + d.id + ')');
+        // Surface the OpenAI linking result. The project row always lands in the
+        // DB; but if the OpenAI Admin API call failed, openai_project_id is null
+        // and usage/quota won't sync until it's linked — warn instead of a silent ✅.
+        if (d.openai && d.openai.synced === false) {
+          flash('⚠ สร้าง Project "' + name + '" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: '
+            + (d.openai.error || 'unknown') + ' — ยังไม่มี OpenAI project id', 'error');
+        } else {
+          flash('✅ สร้าง Project "' + name + '" เรียบร้อย'
+            + (d.openai && d.openai.project_id ? ' · OpenAI: ' + d.openai.project_id : ''));
+        }
         self.fetchProjectsFromDB().then(function () {
           self.renderProjects();
           self.refreshProjectSelects();

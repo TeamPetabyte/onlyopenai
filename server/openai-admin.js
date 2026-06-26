@@ -21,10 +21,68 @@
 //   that owns the data (so its TTL/invalidation logic stays in one place).
 // • Service-account name pattern: 'dashboard-sa' so we can find it later.
 
+const https = require('https');
+const { URL } = require('url');
+
 const ADMIN_KEY = process.env.OPENAI_ADMIN_KEY || '';
 const BASE = 'https://api.openai.com';
 
 function isEnabled() { return !!ADMIN_KEY; }
+
+// Egress proxy agent — same logic as the chat OpenAI client in server.js.
+// On a locked-down corporate network api.openai.com is often proxy-only.
+// Resolved once (lazily) and cached. null = direct connection.
+let _agent;
+function getAgent() {
+    if (_agent !== undefined) return _agent;
+    const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+    if (proxy) {
+        try {
+            const { HttpsProxyAgent } = require('https-proxy-agent');
+            _agent = new HttpsProxyAgent(proxy);
+        } catch (_) { _agent = null; }
+    } else {
+        _agent = null;
+    }
+    return _agent;
+}
+
+// Low-level HTTPS JSON request over Node's https stack (NOT global fetch/undici).
+// We deliberately avoid global fetch here: on some Windows/corporate networks
+// undici "fetch failed" while Node's https (what the OpenAI SDK uses) connects
+// fine — so admin calls now share the chat client's working egress path.
+function request(method, urlStr, headers, bodyObj) {
+    return new Promise((resolve, reject) => {
+        const u = new URL(urlStr);
+        const data = bodyObj ? JSON.stringify(bodyObj) : null;
+        const opts = {
+            method,
+            hostname: u.hostname,
+            port: u.port || 443,
+            path: u.pathname + u.search,
+            headers: { ...headers },
+            timeout: 30000,
+        };
+        const ag = getAgent();
+        if (ag) opts.agent = ag;
+        if (data) opts.headers['Content-Length'] = Buffer.byteLength(data);
+
+        const req = https.request(opts, (res) => {
+            let buf = '';
+            res.setEncoding('utf8');
+            res.on('data', (c) => { buf += c; });
+            res.on('end', () => {
+                let json = null;
+                try { json = buf ? JSON.parse(buf) : null; } catch (_) { /* non-JSON body */ }
+                resolve({ status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, json });
+            });
+        });
+        req.on('timeout', () => { req.destroy(new Error('request timeout after 30s')); });
+        req.on('error', reject);
+        if (data) req.write(data);
+        req.end();
+    });
+}
 
 async function call(method, path, body) {
     if (!ADMIN_KEY) {
@@ -32,20 +90,14 @@ async function call(method, path, body) {
         err.status = 500;
         throw err;
     }
-    const res = await fetch(BASE + path, {
-        method,
-        headers: {
-            Authorization: 'Bearer ' + ADMIN_KEY,
-            'Content-Type': 'application/json',
-        },
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    let json = null;
-    try { json = await res.json(); } catch (_) { /* empty body */ }
-    if (!res.ok) {
-        const msg = json?.error?.message || `HTTP ${res.status}`;
+    const { status, ok, json } = await request(method, BASE + path, {
+        Authorization: 'Bearer ' + ADMIN_KEY,
+        'Content-Type': 'application/json',
+    }, body);
+    if (!ok) {
+        const msg = json?.error?.message || `HTTP ${status}`;
         const err = new Error(`OpenAI Admin: ${method} ${path} → ${msg}`);
-        err.status = res.status;
+        err.status = status;
         err.openai = json?.error || json;
         throw err;
     }
@@ -140,15 +192,16 @@ async function fetchUsageCompletions({ startTime, endTime } = {}) {
         qs.append('group_by', 'project_id');
         qs.append('group_by', 'model');
         if (page) qs.set('page', page);
-        const r = await fetch(BASE + '/v1/organization/usage/completions?' + qs.toString(), {
-            headers: { Authorization: 'Bearer ' + ADMIN_KEY },
-        });
-        let json = null;
-        try { json = await r.json(); } catch (_) { /* empty body */ }
-        if (!r.ok) {
-            const msg = json?.error?.message || `HTTP ${r.status}`;
+        const { status, ok, json } = await request(
+            'GET',
+            BASE + '/v1/organization/usage/completions?' + qs.toString(),
+            { Authorization: 'Bearer ' + ADMIN_KEY },
+            null
+        );
+        if (!ok) {
+            const msg = json?.error?.message || `HTTP ${status}`;
             const err = new Error(`OpenAI Usage: ${msg}`);
-            err.status = r.status;
+            err.status = status;
             err.openai = json?.error || json;
             throw err;
         }
