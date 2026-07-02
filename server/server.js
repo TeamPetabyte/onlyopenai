@@ -4629,6 +4629,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // (oai resolved above — shared between router + main chat call)
 
         const MAX_TOOL_TURNS = 3;
+        let lastFinishReason = null;
         for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
             if (clientAborted) break;
             const streamArgs = {
@@ -4705,6 +4706,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             } finally {
                 currentOpenAIStream = null;
             }
+            lastFinishReason = finishReason;
 
             // User stopped mid-stream → don't loop into another tool turn
             if (clientAborted) break;
@@ -4727,6 +4729,56 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                 const args   = JSON.parse(tc.function.arguments || '{}');
                 const result = await executeTool(tc.function.name, args);
                 messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+            }
+        }
+
+        // ครบ MAX_TOOL_TURNS แล้ว AI ยังอยากเรียก tool ต่อ (finishReason ยังเป็น
+        // tool_calls) แต่ยังไม่เคยส่งข้อความตอบกลับเลย → บังคับยิงอีกครั้งแบบปิด
+        // tool (tool_choice:'none') ให้ AI สรุปคำตอบจากข้อมูลที่ค้นมาได้แล้ว
+        // แทนที่จะปล่อยให้ผู้ใช้เจอหน้าว่างเปล่า (ไม่มี fullText, 0 output tokens)
+        if (!clientAborted && fullText.length === 0 && lastFinishReason === 'tool_calls') {
+            console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
+            const finalArgs = {
+                model: MODEL, stream: true, max_completion_tokens: 2000,
+                messages,
+                tools:       chatTools,
+                tool_choice: 'none',
+            };
+            if (OAI_TEMPERATURE !== null && !_tempUnsupported) {
+                finalArgs.temperature = OAI_TEMPERATURE;
+            }
+            try {
+                let finalStream;
+                try {
+                    finalStream = await oai.chat.completions.create(finalArgs);
+                } catch (e) {
+                    if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in finalArgs)) {
+                        _tempUnsupported = true;
+                        delete finalArgs.temperature;
+                        finalStream = await oai.chat.completions.create(finalArgs);
+                    } else {
+                        throw e;
+                    }
+                }
+                currentOpenAIStream = finalStream;
+                for await (const chunk of finalStream) {
+                    if (clientAborted) break;
+                    const delta = chunk.choices[0]?.delta;
+                    if (delta?.content) {
+                        fullText += delta.content;
+                        sendEvent({ type: 'chunk', text: delta.content });
+                    }
+                    if (chunk.usage) {
+                        inputTokens     += chunk.usage.prompt_tokens     || 0;
+                        outputTokens    += chunk.usage.completion_tokens || 0;
+                        cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
+                        reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
+                    }
+                }
+            } catch (finalErr) {
+                if (!clientAborted) console.error('[chat] forced final-turn call failed:', finalErr.message);
+            } finally {
+                currentOpenAIStream = null;
             }
         }
 
