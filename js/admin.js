@@ -390,10 +390,10 @@ var admin = {
       // existing selectProject() handler still works via getElementById.
       var selectHtml;
       if (projects.length === 0) {
-        selectHtml = '<div style="color:var(--text-3);font-size:0.85rem;padding:12px 0">ยังไม่มี Project</div>';
+        selectHtml = '<div style="color:var(--text-3);font-size:0.85rem;padding:12px 0">' + t('empty.noProjectShort', 'ยังไม่มี Project') + '</div>';
       } else {
         var savedProj = projects.find(function (x) { return String(x.id) === String(saved); });
-        var label = savedProj ? ('📂 ' + savedProj.name) : '— เลือก Project —';
+        var label = savedProj ? ('📂 ' + savedProj.name) : t('dd.selectProject', '— เลือก Project —');
         selectHtml =
             '<input type="hidden" id="project-selector" value="' + escapeHtml(String(saved || '')) + '" />'
           + '<button type="button" class="dd-trigger" id="overview-project-trigger" '
@@ -542,7 +542,7 @@ var admin = {
         setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 1000);
       })
       .catch(function (e) {
-        alert('Export ไม่สำเร็จ: ' + e.message);
+        alert(t('err.exportFailedPrefix', 'Export ไม่สำเร็จ: ') + e.message);
       });
   },
 
@@ -585,6 +585,8 @@ var admin = {
            + '&groupBy=' + this._txMode;
     if (projectId) qs += '&projectId=' + encodeURIComponent(projectId);
 
+    this._txPage = 1;   // reset to page 1 on every fresh load (date/mode/project change)
+
     fetch(BASE + '/api/transactions' + qs, { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -597,11 +599,23 @@ var admin = {
           wrap.innerHTML = '<div class="tx-empty">📭 ไม่มี transaction ในช่วงนี้</div>';
           return;
         }
+        self._txLastData = d;
         wrap.innerHTML = self._renderTxTable(d);
       })
       .catch(function (e) {
         wrap.innerHTML = '<div class="tx-empty">⚠ ' + escapeHtml(e.message) + '</div>';
       });
+  },
+
+  // Phase 26: Day-mode pagination — 20 rows/page (Month mode is already a
+  // small rollup, so it's never paginated). Re-renders from the cached
+  // last-fetched payload — no refetch needed when just turning pages.
+  _txPage: 1,
+  setTxPage: function (page) {
+    if (!this._txLastData) return;
+    this._txPage = page;
+    var wrap = document.getElementById('tx-table-wrap');
+    if (wrap) wrap.innerHTML = this._renderTxTable(this._txLastData);
   },
 
   // Build the table HTML for either day mode or month mode.
@@ -615,7 +629,14 @@ var admin = {
         : TTx('tx.subDay', 'ประวัติการเติม credit และการใช้งาน');
     }
 
-    var rows = d.rows.map(function (r) {
+    var PAGE_SIZE = 20;
+    var totalRows = d.rows.length;
+    var totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+    var page = isMonth ? 1 : Math.min(Math.max(this._txPage || 1, 1), totalPages);
+    this._txPage = page;
+    var pageRows = isMonth ? d.rows : d.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    var rows = pageRows.map(function (r) {
       var typeClass = String(r.type || '').toLowerCase();
       var sign = (r.type === 'usage' || r.type === 'adjustment' && (r.amount_signed || 0) < 0) ? 'out' : 'in';
       var amountStr = '฿' + Number(r.amount || 0).toFixed(2);
@@ -654,13 +675,23 @@ var admin = {
     }).join('');
 
     var headers = isMonth
-      ? ['Month', 'User', 'Type', 'Events', 'Amount']
-      : ['Date',  'User', 'Type', 'Source', 'Amount'];
+      ? ['Month', 'User', 'Type', 'Request', 'Amount']
+      : ['Date',  'User', 'Type', 'Request', 'Amount'];
     var ths = headers.map(function (h, i) {
       var align = (i === headers.length - 1) ? ' style="text-align:right"'
                 : (i === 3 && isMonth)        ? ' style="text-align:center"' : '';
       return '<th' + align + '>' + h + '</th>';
     }).join('');
+
+    var paginationHtml = '';
+    if (!isMonth && totalPages > 1) {
+      var btns = [];
+      for (var i = 1; i <= totalPages; i++) {
+        btns.push('<button class="tx-page-btn' + (i === page ? ' active' : '')
+          + '" onclick="admin.setTxPage(' + i + ')">' + i + '</button>');
+      }
+      paginationHtml = '<div class="tx-pagination">' + btns.join('') + '</div>';
+    }
 
     return '<table class="tx-table">'
       + '<thead><tr>' + ths + '</tr></thead>'
@@ -669,7 +700,8 @@ var admin = {
       + '<div class="tx-footer">'
       +   '<span>' + d.count + ' rows · ' + escapeHtml(d.from) + ' → ' + escapeHtml(d.to) + '</span>'
       +   '<span>' + (isMonth ? 'Monthly rollup' : 'Per-event detail') + '</span>'
-      + '</div>';
+      + '</div>'
+      + paginationHtml;
   },
 
   // Phase 16.19: redesigned project detail view.
@@ -823,7 +855,7 @@ var admin = {
     if (users.length === 0) {
       membersBody = '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.82rem;'
         + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-        + '👥 ยังไม่มี member ใน project นี้</div>';
+        + '👥 ' + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>';
     } else {
       // Phase 21.11 (Concept B): read-only member rows from DB credits data.
       // Columns: Tokens (lifetime) · Spend (lifetime) · Daily Cap · Used today.
@@ -902,7 +934,7 @@ var admin = {
     var pid = projectId || (projects[0] && projects[0].id) || '';
     document.getElementById('tu-proj-id').value = pid;
     var p = projects.find(function (x) { return String(x.id) === String(pid); });
-    document.getElementById('tu-proj-label').textContent = p ? ('📂 ' + p.name) : '— Select Project —';
+    document.getElementById('tu-proj-label').textContent = p ? ('📂 ' + p.name) : t('dd.selectProject', '— Select Project —');
 
     document.getElementById('tu-amount').value = '';
     var noteEl = document.getElementById('tu-note'); if (noteEl) noteEl.value = '';
@@ -918,11 +950,11 @@ var admin = {
       items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
       selected: document.getElementById('tu-proj-id').value || '',
       searchable: true,
-      placeholder: '🔎 ค้นหา project...',
+      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
       onPick: function (value, item) {
         document.getElementById('tu-proj-id').value = value || '';
         document.getElementById('tu-proj-label').textContent =
-          item ? ('📂 ' + item.label) : '— Select Project —';
+          item ? ('📂 ' + item.label) : t('dd.selectProject', '— Select Project —');
       },
     });
   },
@@ -933,7 +965,7 @@ var admin = {
     var noteEl = document.getElementById('tu-note');
     var note   = noteEl ? noteEl.value.trim() : '';
     var errEl  = document.getElementById('tu-error');
-    if (isNaN(amount) || amount <= 0) { errEl.textContent = '❌ กรุณาใส่จำนวนเงินที่ถูกต้อง'; return; }
+    if (isNaN(amount) || amount <= 0) { errEl.textContent = '❌ ' + t('err.invalidAmount', 'กรุณาใส่จำนวนเงินที่ถูกต้อง'); return; }
     var self = this;
     // Phase 16.1 / 21.2: send optional note (server stores it in tbl_topup_project.note)
     var body = { amount: amount };
@@ -945,11 +977,11 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ DB ปฏิเสธ: ' + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         // Mirror to localStorage for legacy code paths
         Auth.topupProject(projectId, amount);
         hideModal('modal-topup');
-        flash('✅ เติมเงิน ' + formatTHB(amount) + ' เข้า project แล้ว (DB total ' + formatTHB(parseFloat(d.newBalance)) + ')');
+        flash('✅ ' + tf('msg.topupSuccess', { amt: formatTHB(amount), total: formatTHB(parseFloat(d.newBalance)) }, 'เติมเงิน {amt} เข้า project แล้ว (DB total {total})'));
         // Refresh from DB across all relevant views
         self.fetchProjectsFromDB().then(function () {
           // Always refresh whichever view we're on. Cheap; no state lost.
@@ -959,7 +991,7 @@ var admin = {
           else                                      self.renderOverview();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ Network error: ' + e.message; });
+      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
   // ── BALANCE & TOP-UP (Phase 16.1) ──────────────────────
@@ -973,7 +1005,7 @@ var admin = {
     var healthEl = document.getElementById('sync-health');
     var projEl   = document.getElementById('sync-projects');
     if (healthEl) healthEl.innerHTML =
-      '<div style="padding:24px;text-align:center;color:var(--text-3)">⏳ กำลังโหลด...</div>';
+      '<div style="padding:24px;text-align:center;color:var(--text-3)">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     if (projEl)   projEl.innerHTML = '';
 
     fetch(BASE + '/api/sync-status', { headers: Auth.authHeaders() })
@@ -1050,7 +1082,7 @@ var admin = {
     var el = document.getElementById('sync-projects');
     if (!el) return;
     if (!rows.length) {
-      el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:.85rem">ยังไม่มี project ในระบบ</div>';
+      el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:.85rem">' + t('empty.noProjectsSystem', 'ยังไม่มี project ในระบบ') + '</div>';
       return;
     }
     var headerStrip =
@@ -1100,7 +1132,7 @@ var admin = {
     var err = document.getElementById('sn-error');
     if (err) err.textContent = '';
     var btn = document.getElementById('sn-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'เริ่ม sync'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('m.syncNow.btn', 'เริ่ม sync'); }
     showModal('modal-confirm-sync-now');
   },
   cancelSyncNow: function () { hideModal('modal-confirm-sync-now'); },
@@ -1108,27 +1140,27 @@ var admin = {
     var self = this;
     var err = document.getElementById('sn-error');
     var btn = document.getElementById('sn-confirm-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลัง sync...'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.syncingEllipsis', 'กำลัง sync...'); }
     if (err) err.textContent = '';
     var healthEl = document.getElementById('sync-health');
     if (healthEl) healthEl.innerHTML =
-      '<div style="padding:24px;text-align:center;color:var(--text-3)">⚡ กำลัง sync...</div>';
+      '<div style="padding:24px;text-align:center;color:var(--text-3)">⚡ ' + t('btn.syncingEllipsis', 'กำลัง sync...') + '</div>';
     fetch(BASE + '/api/sync-now', {
       method: 'POST', headers: Auth.authHeaders(),
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         hideModal('modal-confirm-sync-now');
-        if (!d.ok) { flash('❌ Sync failed: ' + (d.error || 'unknown'), 'error'); }
+        if (!d.ok) { flash('❌ ' + t('msg.syncFailedPrefix', 'Sync failed: ') + (d.error || 'unknown'), 'error'); }
         else if (d.skipped) { flash('⏭ ' + d.reason); }
         else {
-          flash('✅ Sync เสร็จ · ' + (d.rowsInserted || 0) + ' rows · ' + (d.durationMs || 0) + ' ms');
+          flash('✅ ' + tf('msg.syncDone', { rows: d.rowsInserted || 0, ms: d.durationMs || 0 }, 'Sync เสร็จ · {rows} rows · {ms} ms'));
         }
         self.renderSync();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ Network error: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'เริ่ม sync'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('m.syncNow.btn', 'เริ่ม sync'); }
         self.renderSync();
       });
   },
@@ -1141,7 +1173,7 @@ var admin = {
     var self = this;
     var statusEl = document.getElementById('skills-status');
     var listEl   = document.getElementById('skills-list');
-    if (statusEl) statusEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3)">⏳ กำลังโหลด...</div>';
+    if (statusEl) statusEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3)">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     if (listEl)   listEl.innerHTML = '';
 
     fetch(BASE + '/api/skills', { headers: Auth.authHeaders() })
@@ -1203,7 +1235,7 @@ var admin = {
     if (!el) return;
     if (!skills || skills.length === 0) {
       el.innerHTML = '<div class="glass-card" style="padding:32px;text-align:center;color:var(--text-3)">'
-        + '🧩 ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b></div>';
+        + t('empty.noSkillsYetHtml', '🧩 ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b>') + '</div>';
       return;
     }
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
@@ -1252,15 +1284,15 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ Reload failed: ' + (d.error || 'unknown'), 'error'); return; }
+        if (!d.ok) { flash('❌ ' + t('msg.reloadFailedPrefix', 'Reload failed: ') + (d.error || 'unknown'), 'error'); return; }
         if (d.status && d.status.error) {
-          flash('⚠ Reloaded แต่มี error: ' + d.status.error, 'error');
+          flash('⚠ ' + t('msg.reloadedWithErrorPrefix', 'Reloaded แต่มี error: ') + d.status.error, 'error');
         } else {
-          flash('✅ Reload เรียบร้อย · ' + (d.status?.count || 0) + ' skills');
+          flash('✅ ' + tf('msg.reloadSuccess', { count: (d.status && d.status.count) || 0 }, 'Reload เรียบร้อย · {count} skills'));
         }
         self.renderSkills();
       })
-      .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });
+      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
   // ── Phase 22: add / edit / delete skill prompts from the UI ──────
@@ -1282,7 +1314,7 @@ var admin = {
   },
 
   openAddSkill: function () {
-    document.getElementById('es-title').textContent = '➕ เพิ่ม Skill ใหม่';
+    document.getElementById('es-title').textContent = t('modal.addSkill.title', '➕ เพิ่ม Skill ใหม่');
     document.getElementById('es-mode').value = 'add';
     document.getElementById('es-id').readOnly = false;
     this._fillSkillModal({});
@@ -1297,8 +1329,8 @@ var admin = {
     fetch(BASE + '/api/skills/' + encodeURIComponent(id), { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ โหลด skill ไม่สำเร็จ: ' + (d.error || 'unknown'), 'error'); return; }
-        document.getElementById('es-title').textContent = '✏️ แก้ไข Skill';
+        if (!d.ok) { flash('❌ ' + t('msg.loadSkillFailedPrefix', 'โหลด skill ไม่สำเร็จ: ') + (d.error || 'unknown'), 'error'); return; }
+        document.getElementById('es-title').textContent = t('modal.editSkill.title', '✏️ แก้ไข Skill');
         document.getElementById('es-mode').value = 'edit';
         document.getElementById('es-id').readOnly = true;  // id is the key — fixed on edit
         self._fillSkillModal(d.skill);
@@ -1306,7 +1338,7 @@ var admin = {
         var ec = document.getElementById('es-content');
         if (ec && !ec._cc) { ec._cc = true; ec.addEventListener('input', self._updateSkillCharCount); }
       })
-      .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });
+      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
   submitEditSkill: function () {
@@ -1320,8 +1352,8 @@ var admin = {
       openaiPromptId: (g('es-openai').value || '').trim(),
       content:        g('es-content').value || '',
     };
-    if (!payload.id)               { errEl.textContent = 'กรุณากรอก Skill ID'; return; }
-    if (!payload.content.trim())   { errEl.textContent = 'กรุณากรอก Content (system prompt)'; return; }
+    if (!payload.id)               { errEl.textContent = t('err.enterSkillId', 'กรุณากรอก Skill ID'); return; }
+    if (!payload.content.trim())   { errEl.textContent = t('err.enterContent', 'กรุณากรอก Content (system prompt)'); return; }
     errEl.textContent = '';
 
     var btn = document.querySelector('#modal-edit-skill .btn-modal-submit');
@@ -1334,28 +1366,28 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = d.error || 'บันทึกไม่สำเร็จ'; return; }
+        if (!d.ok) { errEl.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); return; }
         hideModal('modal-edit-skill');
-        flash(d.created ? '✅ เพิ่ม skill เรียบร้อย (มีผลทันที)' : '✅ บันทึก skill เรียบร้อย (มีผลทันที)');
+        flash(d.created ? '✅ ' + t('msg.skillAdded', 'เพิ่ม skill เรียบร้อย (มีผลทันที)') : '✅ ' + t('msg.skillSaved', 'บันทึก skill เรียบร้อย (มีผลทันที)'));
         self.renderSkills();
       })
-      .catch(function (e) { errEl.textContent = 'Network error: ' + e.message; })
+      .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
       .finally(function () { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } });
   },
 
   deleteSkillPrompt: function (id) {
     var self = this;
-    if (!confirm('ลบ skill "' + id + '" ออกจาก registry?\n(ไฟล์บนเครื่องนี้จะถูกแก้ทันที)')) return;
+    if (!confirm(tf('confirm.deleteSkill', { id: id }, 'ลบ skill "{id}" ออกจาก registry?\n(ไฟล์บนเครื่องนี้จะถูกแก้ทันที)'))) return;
     fetch(BASE + '/api/skills/' + encodeURIComponent(id), {
       method: 'DELETE', headers: Auth.authHeaders(),
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ ลบไม่สำเร็จ: ' + (d.error || 'unknown'), 'error'); return; }
-        flash('🗑 ลบ skill "' + id + '" เรียบร้อย');
+        if (!d.ok) { flash('❌ ' + t('msg.deleteSkillFailedPrefix', 'ลบไม่สำเร็จ: ') + (d.error || 'unknown'), 'error'); return; }
+        flash(tf('msg.skillDeleted', { id: id }, '🗑 ลบ skill "{id}" เรียบร้อย'));
         self.renderSkills();
       })
-      .catch(function (e) { flash('❌ Network error: ' + e.message, 'error'); });
+      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
   //   1) If we have any cached projects (from init() or a prior page visit),
@@ -1407,7 +1439,7 @@ var admin = {
     var el = document.getElementById('balance-table');
     if (!el) return;
     if (!projects.length) {
-      el.innerHTML = '<tbody><tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:24px">ยังไม่มี project</td></tr></tbody>';
+      el.innerHTML = '<tbody><tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noProjectsTable', 'ยังไม่มี project') + '</td></tr></tbody>';
       return;
     }
     var self = this;
@@ -1436,7 +1468,7 @@ var admin = {
     var el = document.getElementById('topup-history-table');
     if (!el) return;
     if (!history.length) {
-      el.innerHTML = '<tbody><tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:24px">ยังไม่มีประวัติการเติมเงิน</td></tr></tbody>';
+      el.innerHTML = '<tbody><tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noTopupHistory', 'ยังไม่มีประวัติการเติมเงิน') + '</td></tr></tbody>';
       return;
     }
     var self = this;
@@ -1524,13 +1556,13 @@ var admin = {
     if (!tableEl) return;
     // silent=true (poll refresh): keep current rows on screen, no spinner flicker.
     if (!silent) {
-      tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">⏳ กำลังโหลด...</td></tr></tbody>';
+      tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('common.loading', '⏳ กำลังโหลด...') + '</td></tr></tbody>';
     }
     fetch(BASE + '/api/credits', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.credits)) {
-          tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">⚠️ ไม่พบข้อมูล</td></tr></tbody>';
+          tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noDataFound', '⚠️ ไม่พบข้อมูล') + '</td></tr></tbody>';
           return;
         }
         self._cachedCredits = d.credits;
@@ -1548,8 +1580,8 @@ var admin = {
     var el = document.getElementById('credit-table');
     if (!el) return;
     if (!rows.length) {
-      el.innerHTML = '<thead><tr><th>Username</th><th>Project</th><th>Project Pool</th><th>Daily Cap</th><th>ใช้วันนี้ / Cap</th><th></th></tr></thead>'
-        + '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">ยังไม่มี user</td></tr></tbody>';
+      el.innerHTML = '<thead><tr><th>' + t('col.username', 'Username') + '</th><th>' + t('col.project', 'Project') + '</th><th>' + t('col.projectPool', 'Project Pool') + '</th><th>' + t('col.dailyCap', 'Daily Cap') + '</th><th>' + t('col.usedTodayCap', 'ใช้วันนี้ / Cap') + '</th><th></th></tr></thead>'
+        + '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noUsersShort', 'ยังไม่มี user') + '</td></tr></tbody>';
       return;
     }
     var fmt = function (n) {
@@ -1603,7 +1635,7 @@ var admin = {
         + '<td class="val">' + capCell + '</td>'
         + '<td>' + (noProject ? '—' : usedCell) + '</td>'
         + '<td style="text-align:right">'
-            + '<button class="btn-icon-edit" title="ตั้ง Daily Cap" ' + (noProject ? 'disabled style="opacity:.4;cursor:not-allowed"' : '')
+            + '<button class="btn-icon-edit" title="' + escapeHtml(t('tt.setDailyCap', 'ตั้ง Daily Cap')) + '" ' + (noProject ? 'disabled style="opacity:.4;cursor:not-allowed"' : '')
             + ' onclick="admin.openEditCap(' + r.userId + ')">'
             + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
             + '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
@@ -1625,8 +1657,8 @@ var admin = {
   // Phase 21.10 (Concept B) — open the Daily Cap editor for a user.
   openEditCap: function (userId) {
     var row = (this._cachedCredits || []).find(function (x) { return x.userId === userId; });
-    if (!row) { flash('❌ ไม่พบ user', 'error'); return; }
-    if (!row.projectId) { flash('❌ user ยังไม่มี project', 'error'); return; }
+    if (!row) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
+    if (!row.projectId) { flash('❌ ' + t('err.userNoProject', 'user ยังไม่มี project'), 'error'); return; }
     document.getElementById('ec-user-id').value = userId;
     document.getElementById('ec-user-display').textContent = (row.displayName || row.username) + '  @' + row.username;
     document.getElementById('ec-project-name').textContent = row.projectName || '—';
@@ -1654,7 +1686,7 @@ var admin = {
     } else {
       dailyCap = Number(capRaw);
       if (!isFinite(dailyCap) || dailyCap < 0) {
-        errEl.textContent = '❌ Daily Cap ต้องเป็นตัวเลข ≥ 0 (หรือเลือก "ไม่จำกัด")';
+        errEl.textContent = '❌ ' + t('err.dailyCapInvalid', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 (หรือเลือก "ไม่จำกัด")');
         return;
       }
     }
@@ -1671,12 +1703,12 @@ var admin = {
         if (!d.ok) { errEl.textContent = '❌ ' + (d.error || 'failed'); btn.disabled = false; return; }
         hideModal('modal-edit-credit');
         flash(dailyCap === null
-          ? '✅ ลบ Daily Cap แล้ว (ไม่จำกัด)'
-          : '✅ ตั้ง Daily Cap = ฿' + dailyCap + '/วัน เรียบร้อย');
+          ? '✅ ' + t('msg.dailyCapRemoved', 'ลบ Daily Cap แล้ว (ไม่จำกัด)')
+          : '✅ ' + tf('msg.dailyCapSet', { cap: dailyCap }, 'ตั้ง Daily Cap = ฿{cap}/วัน เรียบร้อย'));
         self.renderCreditManagement();
       })
       .catch(function (e) {
-        errEl.textContent = '❌ Network error: ' + e.message;
+        errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         btn.disabled = false;
       });
   },
@@ -1726,7 +1758,9 @@ var admin = {
         +     '<span class="dd-trigger-chevron">' + filterChevron + '</span>'
         +   '</span>'
         +   '<span style="color:var(--text-3);font-size:.78rem">'
-        +     '· แสดง ' + users.length + (hasActive ? ' จาก ' + totalUsers : '/' + totalUsers) + ' users'
+        +     (hasActive
+                ? tf('lbl.showingUsersFiltered', { shown: users.length, total: totalUsers }, '· แสดง {shown} จาก {total} users')
+                : tf('lbl.showingUsersTotal', { shown: users.length, total: totalUsers }, '· แสดง {shown}/{total} users'))
         +   '</span>'
         + '</div>';
 
@@ -1734,7 +1768,7 @@ var admin = {
         if (tableEl) tableEl.innerHTML = filterBar
           + '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.85rem;'
           + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-          + '👤 ' + (hasActive ? 'ไม่พบ user ที่ตรงกับตัวกรอง' : 'ยังไม่มี user ในระบบ')
+          + '👤 ' + (hasActive ? t('empty.noUsersMatchFilter', 'ไม่พบ user ที่ตรงกับตัวกรอง') : t('empty.noUsersSystem', 'ยังไม่มี user ในระบบ'))
           + '</div>';
         return;
       }
@@ -1828,8 +1862,8 @@ var admin = {
     };
     var c = colors[s] || colors.inactive;
     var titleAttr = s === 'locked'
-      ? 'title="ถูก lock จาก failed login — เปิด Edit User เพื่อปลดล็อก"'
-      : 'title="คลิกเพื่อ ' + (s === 'active' ? 'ปิด' : 'เปิด') + 'การใช้งาน"';
+      ? 'title="' + escapeHtml(t('tt.lockedUser', 'ถูก lock จาก failed login — เปิด Edit User เพื่อปลดล็อก')) + '"'
+      : 'title="' + escapeHtml(s === 'active' ? t('tt.clickToDisable', 'คลิกเพื่อปิดการใช้งาน') : t('tt.clickToEnable', 'คลิกเพื่อเปิดการใช้งาน')) + '"';
     var onclick = username
       ? 'onclick="admin.toggleUserStatus(\'' + escapeHtml(username) + '\', event)"'
       : '';
@@ -1851,7 +1885,7 @@ var admin = {
   toggleUserStatus: function (username, ev) {
     if (ev) ev.stopPropagation();
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { flash('❌ ไม่พบ user', 'error'); return; }
+    if (!u) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
     var current = String(u.accStatus || 'active').toLowerCase();
 
     // Decide next state + theme. Toggling TO 'locked' manually is intentionally
@@ -1861,24 +1895,24 @@ var admin = {
     if (current === 'active') {
       theme = 'warning';
       next = 'inactive'; nextId = 2;
-      title = '⏸ ปิดการใช้งาน User';
-      explain = 'ผู้ใช้จะ login ไม่ได้จนกว่าจะถูกเปิดอีกครั้ง<br>Session ที่กำลังเปิดอยู่จะยังคงใช้งานได้จนกว่าจะหมดอายุ';
+      title = t('modal.disableUser.title', '⏸ ปิดการใช้งาน User');
+      explain = t('modal.disableUser.body', 'ผู้ใช้จะ login ไม่ได้จนกว่าจะถูกเปิดอีกครั้ง<br>Session ที่กำลังเปิดอยู่จะยังคงใช้งานได้จนกว่าจะหมดอายุ');
       btnClass = 'btn-modal-warning';
-      btnText = 'ปิดการใช้งาน';
+      btnText = t('btn.disableAction', 'ปิดการใช้งาน');
     } else if (current === 'inactive') {
       theme = 'success';
       next = 'active'; nextId = 1;
-      title = '▶ เปิดใช้งาน User';
-      explain = 'ผู้ใช้จะกลับมา login ได้ตามปกติ';
+      title = t('modal.enableUser.title', '▶ เปิดใช้งาน User');
+      explain = t('modal.enableUser.body', 'ผู้ใช้จะกลับมา login ได้ตามปกติ');
       btnClass = 'btn-modal-success';
-      btnText = 'เปิดใช้งาน';
+      btnText = t('btn.enableAction', 'เปิดใช้งาน');
     } else if (current === 'locked') {
       theme = 'info';
       next = 'active'; nextId = 1;
-      title = '🔓 ปลดล็อก User';
-      explain = 'บัญชีนี้ถูก lock จาก failed login attempts<br>การยืนยันจะเคลียร์ failed-attempt counter และเปิดใช้งานต่อ';
+      title = t('modal.unlockUser.title', '🔓 ปลดล็อก User');
+      explain = t('modal.unlockUser.body', 'บัญชีนี้ถูก lock จาก failed login attempts<br>การยืนยันจะเคลียร์ failed-attempt counter และเปิดใช้งานต่อ');
       btnClass = 'btn-modal-info';
-      btnText = 'ปลดล็อก';
+      btnText = t('btn.unlockAction', 'ปลดล็อก');
     } else {
       flash('❌ unknown status: ' + current, 'error'); return;
     }
@@ -1937,12 +1971,12 @@ var admin = {
         p.user.accStatus = p.next;
         p.user.accStatusId = p.nextId;
         hideModal('modal-confirm-status-toggle');
-        flash('✅ @' + p.user.username + ' → ' + p.next);
+        flash('✅ ' + tf('msg.statusChanged', { username: p.user.username, status: p.next }, '@{username} → {status}'));
         self._pendingStatusToggle = null;
         self.renderUsers();
       })
       .catch(function (e) {
-        errEl.textContent = '❌ Network error: ' + e.message;
+        errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         btn.disabled = false;
       });
   },
@@ -2114,7 +2148,7 @@ var admin = {
   //   project assignment, balance, daily cap, account status, reset password, delete.
   openEditUser: function (username) {
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { flash('❌ ไม่พบ user', 'error'); return; }
+    if (!u) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
 
     // Identity card
     document.getElementById('eu-username').value = username;
@@ -2134,7 +2168,7 @@ var admin = {
     document.getElementById('eu-project').value = projectId;
     var projObj = projects.find(function (p) { return String(p.id) === projectId; });
     document.getElementById('eu-project-label').textContent =
-      projObj ? ('📂 ' + projObj.name) : '— No project —';
+      projObj ? ('📂 ' + projObj.name) : t('dd.noProjectAssigned', '— ไม่มี Project —');
 
     var status = String(u.accStatus || 'active').toLowerCase();
     document.getElementById('eu-status').value = status;
@@ -2157,12 +2191,12 @@ var admin = {
       items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
       selected: document.getElementById('eu-project').value || '',
       searchable: true,
-      placeholder: '🔎 ค้นหา project...',
-      allowEmpty: { label: '— No project —' },
+      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      allowEmpty: { label: t('dd.noProjectAssigned', '— ไม่มี Project —') },
       onPick: function (value, item) {
         document.getElementById('eu-project').value = value || '';
         document.getElementById('eu-project-label').textContent =
-          item && !item._all ? ('📂 ' + item.label) : '— No project —';
+          item && !item._all ? ('📂 ' + item.label) : t('dd.noProjectAssigned', '— ไม่มี Project —');
       },
     });
   },
@@ -2189,7 +2223,7 @@ var admin = {
     var self = this;
     var username = document.getElementById('eu-username').value;
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { document.getElementById('eu-error').textContent = '❌ user not found'; return; }
+    if (!u) { document.getElementById('eu-error').textContent = '❌ ' + t('err.userNotFound', 'ไม่พบ user'); return; }
 
     // Phase 21.5: identity-only updates (name, surname, project, status).
     // Credit + dailyCap removed — they're handled in Credit Management.
@@ -2200,10 +2234,10 @@ var admin = {
     var errEl     = document.getElementById('eu-error');
     errEl.textContent = '';
 
-    if (!name)    { errEl.textContent = '❌ กรุณากรอกชื่อ';     return; }
-    if (!surname) { errEl.textContent = '❌ กรุณากรอกนามสกุล';  return; }
-    if (name.length    > 50) { errEl.textContent = '❌ ชื่อยาวเกินไป (สูงสุด 50)';    return; }
-    if (surname.length > 50) { errEl.textContent = '❌ นามสกุลยาวเกินไป (สูงสุด 50)'; return; }
+    if (!name)    { errEl.textContent = '❌ ' + t('err.enterFirstname', 'กรุณากรอกชื่อ');     return; }
+    if (!surname) { errEl.textContent = '❌ ' + t('err.enterLastname', 'กรุณากรอกนามสกุล');  return; }
+    if (name.length    > 50) { errEl.textContent = '❌ ' + t('err.firstnameTooLong', 'ชื่อยาวเกินไป (สูงสุด 50)');    return; }
+    if (surname.length > 50) { errEl.textContent = '❌ ' + t('err.lastnameTooLong', 'นามสกุลยาวเกินไป (สูงสุด 50)'); return; }
 
     var statusIdMap = { active: 1, inactive: 2, locked: 3 };
     var accStatusId = statusIdMap[status] || 1;
@@ -2221,7 +2255,7 @@ var admin = {
       .then(function (d) {
         if (!d.ok) throw new Error(d.error || 'PUT user failed');
         hideModal('modal-edit-user');
-        flash('✅ บันทึก user @' + username + ' เรียบร้อย');
+        flash('✅ ' + tf('msg.userSaved', { username: username }, 'บันทึก user @{username} เรียบร้อย'));
         self.renderUsers();
       })
       .catch(function (e) { errEl.textContent = '❌ ' + (e.message || 'error'); });
@@ -2244,7 +2278,7 @@ var admin = {
     var err = document.getElementById('cak-error');
     if (err) err.textContent = '';
     var btn = document.getElementById('cak-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'ลบ API key'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('m.clearKey.btn', 'ลบ API key'); }
     showModal('modal-confirm-clear-apikey');
   },
   cancelClearApiKey: function () {
@@ -2257,7 +2291,7 @@ var admin = {
     var self = this;
     var btn = document.getElementById('cak-confirm-btn');
     var err = document.getElementById('cak-error');
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังลบ...'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.deletingEllipsis', 'กำลังลบ...'); }
     if (err) err.textContent = '';
     fetch(BASE + '/api/projects/' + encodeURIComponent(projectId), {
       method: 'PUT',
@@ -2268,12 +2302,12 @@ var admin = {
       .then(function (d) {
         if (!d.ok) {
           if (err) err.textContent = '❌ ' + (d.error || 'clear failed');
-          if (btn) { btn.disabled = false; btn.textContent = 'ลบ API key'; }
+          if (btn) { btn.disabled = false; btn.textContent = t('m.clearKey.btn', 'ลบ API key'); }
           return;
         }
         hideModal('modal-confirm-clear-apikey');
         self._pendingClearApiKey = null;
-        flash('✅ ลบ API key เรียบร้อย');
+        flash('✅ ' + t('msg.apiKeyDeleted', 'ลบ API key เรียบร้อย'));
         self.fetchProjectsFromDB().then(function () {
           if (self.currentView === 'projects') self.renderProjects();
           var openModal = document.getElementById('modal-edit-project');
@@ -2283,8 +2317,8 @@ var admin = {
         });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ Network error: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'ลบ API key'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('m.clearKey.btn', 'ลบ API key'); }
       });
   },
 
@@ -2324,7 +2358,7 @@ var admin = {
   resetPassword: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ไม่พบ user_id (DB row)', 'error'); return; }
+    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
 
     this._pendingResetPw = {
       username: u.username,
@@ -2347,7 +2381,7 @@ var admin = {
     var err = document.getElementById('rp-error');
     if (err) err.textContent = '';
     var btn = document.getElementById('rp-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
 
     showModal('modal-reset-password');
     setTimeout(function () { if (inp) inp.focus(); }, 50);
@@ -2375,11 +2409,11 @@ var admin = {
 
   // Mirrors server policy in validatePasswordStrength() — keep in sync.
   _validatePw: function (pw) {
-    if (!pw || typeof pw !== 'string') return 'ต้องกรอกรหัสผ่าน';
-    if (pw.length < 8)   return 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';
-    if (pw.length > 128) return 'รหัสผ่านต้องไม่เกิน 128 ตัวอักษร';
-    if (!/[A-Za-z]/.test(pw)) return 'ต้องมีตัวอักษรอย่างน้อย 1 ตัว';
-    if (!/[0-9]/.test(pw))    return 'ต้องมีตัวเลขอย่างน้อย 1 ตัว';
+    if (!pw || typeof pw !== 'string') return t('err.pwRequired', 'ต้องกรอกรหัสผ่าน');
+    if (pw.length < 8)   return t('err.pwMin8Chars', 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร');
+    if (pw.length > 128) return t('err.pwMax128', 'รหัสผ่านต้องไม่เกิน 128 ตัวอักษร');
+    if (!/[A-Za-z]/.test(pw)) return t('err.pwNeedLetter', 'ต้องมีตัวอักษรอย่างน้อย 1 ตัว');
+    if (!/[0-9]/.test(pw))    return t('err.pwNeedNumber', 'ต้องมีตัวเลขอย่างน้อย 1 ตัว');
     return null;
   },
 
@@ -2395,7 +2429,7 @@ var admin = {
     if (msg) { if (err) err.textContent = '❌ ' + msg; return; }
 
     if (err) err.textContent = '';
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.savingEllipsis', 'กำลังบันทึก...'); }
 
     // Reuse the user-update endpoint. We MUST send the other fields the
     // server expects (displayName, role, plan, balance, projectId) — fetch
@@ -2404,8 +2438,8 @@ var admin = {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.id === pending.id; });
     if (!u) {
-      if (err) err.textContent = '❌ ไม่พบ user (โปรด refresh แล้วลองใหม่)';
-      if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
+      if (err) err.textContent = '❌ ' + t('err.userNotFoundRefresh', 'ไม่พบ user (โปรด refresh แล้วลองใหม่)');
+      if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
       return;
     }
 
@@ -2425,17 +2459,17 @@ var admin = {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          if (err) err.textContent = '❌ ' + (d.error || 'DB ปฏิเสธ');
-          if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
+          if (err) err.textContent = '❌ ' + (d.error || t('err.dbRejectedShort', 'DB ปฏิเสธ'));
+          if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
           return;
         }
         hideModal('modal-reset-password');
         self._pendingResetPw = null;
-        flash('✅ รีเซ็ตรหัสผ่านของ @' + pending.username + ' เรียบร้อย');
+        flash('✅ ' + tf('msg.pwReset', { username: pending.username }, 'รีเซ็ตรหัสผ่านของ @{username} เรียบร้อย'));
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ Network error: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'บันทึก'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
       });
   },
 
@@ -2454,7 +2488,7 @@ var admin = {
   deleteUser: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ไม่พบ user_id (DB row)', 'error'); return; }
+    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
 
     this._pendingDelete = {
       username: u.username,
@@ -2474,7 +2508,7 @@ var admin = {
     var err = document.getElementById('cd-error');
     if (err) err.textContent = '';
     var btn = document.getElementById('cd-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
 
     showModal('modal-confirm-delete-user');
   },
@@ -2492,7 +2526,7 @@ var admin = {
     var btn = document.getElementById('cd-confirm-btn');
     var err = document.getElementById('cd-error');
     if (err) err.textContent = '';
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังลบ…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.deletingEllipsis', 'กำลังลบ...'); }
 
     fetch(BASE + '/api/users/' + p.id, {
       method: 'DELETE',
@@ -2503,14 +2537,14 @@ var admin = {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
           if (err) err.textContent = '❌ ' + msg;
-          if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+          if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
           return;
         }
         // Mirror to legacy localStorage store so any non-DB code path stays in sync
         try { Auth.deleteUser(p.username); } catch (_) {}
         self._pendingDelete = null;
         hideModal('modal-confirm-delete-user');
-        flash('✅ ลบ @' + p.username + ' แล้ว');
+        flash('✅ ' + tf('msg.userDeleted', { username: p.username }, 'ลบ @{username} แล้ว'));
         // Real-time refresh: re-fetch users from DB and re-render table.
         // renderUsers() already calls fetchUsersFromDB() internally, so the
         // soft-deleted row (is_deleted=TRUE) is filtered out server-side.
@@ -2520,8 +2554,8 @@ var admin = {
         if (self.currentView === 'overview') self.renderOverview();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ เครือข่ายขัดข้อง: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
       });
   },
 
@@ -2534,13 +2568,13 @@ var admin = {
     var cap = document.getElementById('au-dailycap');
     if (cap) cap.value = '50';   // sensible default daily cap; clear for unlimited
     var hint = document.getElementById('au-pw-hint');
-    if (hint) { hint.style.color = '#555'; hint.textContent = 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)'; }
+    if (hint) { hint.style.color = '#555'; hint.textContent = t('hint.pwPolicy', 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)'); }
     document.getElementById('au-error').textContent = '';
     // Phase 16.14: reset hidden project input + label (custom dropdown)
     var pf = document.getElementById('au-project');
     if (pf) pf.value = '';
     var pl = document.getElementById('au-project-label');
-    if (pl) pl.textContent = '— Select Project —';
+    if (pl) pl.textContent = t('dd.selectProject', '— เลือก Project —');
     showModal('modal-add-user');
   },
 
@@ -2552,12 +2586,12 @@ var admin = {
       items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
       selected: document.getElementById('au-project').value || '',
       searchable: true,
-      placeholder: '🔎 ค้นหา project...',
-      allowEmpty: { label: '— Select Project —' },
+      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      allowEmpty: { label: t('dd.selectProject', '— เลือก Project —') },
       onPick: function (value, item) {
         document.getElementById('au-project').value = value || '';
         document.getElementById('au-project-label').textContent =
-          item && !item._all ? ('📂 ' + item.label) : '— Select Project —';
+          item && !item._all ? ('📂 ' + item.label) : t('dd.selectProject', '— เลือก Project —');
       },
     });
   },
@@ -2573,14 +2607,15 @@ var admin = {
     var dailyCap = capRaw === '' ? null : parseFloat(capRaw);   // blank = no cap (unlimited)
     var errEl = document.getElementById('au-error');
 
-    if (!username) { errEl.textContent = '❌ กรุณากรอก Username'; return; }
-    if (!firstname || !lastname) { errEl.textContent = '❌ กรุณากรอก Name และ Surname'; return; }
-    if (password.length < 8) { errEl.textContent = '❌ Password ต้องมีอย่างน้อย 8 ตัว'; return; }
-    if (!/[A-Z]/.test(password)) { errEl.textContent = '❌ Password ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว'; return; }
-    if (!/[0-9]/.test(password)) { errEl.textContent = '❌ Password ต้องมีตัวเลขอย่างน้อย 1 ตัว'; return; }
-    if (password !== confirm) { errEl.textContent = '❌ Password ไม่ตรงกัน'; return; }
+    if (!username) { errEl.textContent = '❌ ' + t('err.enterUsername', 'กรุณากรอก Username'); return; }
+    if (!firstname || !lastname) { errEl.textContent = '❌ ' + t('err.enterNameSurname', 'กรุณากรอก Name และ Surname'); return; }
+    if (!projectId) { errEl.textContent = '❌ ' + t('err.selectProject', 'กรุณาเลือก Project'); return; }
+    if (password.length < 8) { errEl.textContent = '❌ ' + t('err.pwMin8', 'Password ต้องมีอย่างน้อย 8 ตัว'); return; }
+    if (!/[A-Z]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwUpper', 'Password ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว'); return; }
+    if (!/[0-9]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwNumber', 'Password ต้องมีตัวเลขอย่างน้อย 1 ตัว'); return; }
+    if (password !== confirm) { errEl.textContent = '❌ ' + t('err.pwMismatch', 'Password ไม่ตรงกัน'); return; }
     if (dailyCap !== null && (!isFinite(dailyCap) || dailyCap < 0)) {
-      errEl.textContent = '❌ Daily Cap ต้องเป็นตัวเลข ≥ 0 หรือเว้นว่าง (= ไม่จำกัด)'; return;
+      errEl.textContent = '❌ ' + t('err.dailyCapInvalid2', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 หรือเว้นว่าง (= ไม่จำกัด)'); return;
     }
 
     var self = this;
@@ -2604,9 +2639,9 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!data.ok) { errEl.textContent = '❌ ' + (data.error || 'ไม่สามารถสร้าง user ได้'); return; }
+        if (!data.ok) { errEl.textContent = '❌ ' + (data.error || t('err.createUserFailed', 'ไม่สามารถสร้าง user ได้')); return; }
         hideModal('modal-add-user');
-        flash('✅ สร้าง user "' + displayName + '" (@' + safeUsername + ') เรียบร้อย');
+        flash('✅ ' + tf('msg.userCreated', { name: displayName, username: safeUsername }, 'สร้าง user "{name}" (@{username}) เรียบร้อย'));
         self.renderUsers();
         self.refreshProjectSelects();
       })
@@ -2658,13 +2693,13 @@ var admin = {
     if (!hint) return;
     if (pw.length === 0) {
       hint.style.color = '#555';
-      hint.textContent = 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)';
+      hint.textContent = t('hint.pwPolicy', 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)');
     } else if (pw.length < 8 || !/[A-Z]/.test(pw) || !/[0-9]/.test(pw)) {
       hint.style.color = '#e05555';
-      hint.textContent = '❌ ' + (pw.length < 8 ? 'ต้องมีอย่างน้อย 8 ตัว' : !/[A-Z]/.test(pw) ? 'ต้องมีตัวพิมพ์ใหญ่' : 'ต้องมีตัวเลข');
+      hint.textContent = '❌ ' + (pw.length < 8 ? t('pw.needMin8', 'ต้องมีอย่างน้อย 8 ตัว') : !/[A-Z]/.test(pw) ? t('pw.needUpper', 'ต้องมีตัวพิมพ์ใหญ่') : t('pw.needNumber', 'ต้องมีตัวเลข'));
     } else {
       hint.style.color = '#4ade80';
-      hint.textContent = '✅ Password strength: Good';
+      hint.textContent = t('pw.strengthGood', '✅ Password strength: Good');
     }
   },
 
@@ -2673,12 +2708,12 @@ var admin = {
     if (!inp || !inp.value) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(inp.value)
-        .then(function () { flash('📋 Copied to clipboard'); })
-        .catch(function () { flash('❌ ไม่สามารถ copy ได้'); });
+        .then(function () { flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); })
+        .catch(function () { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); });
     } else {
       inp.type = 'text';
       inp.select();
-      try { document.execCommand('copy'); flash('📋 Copied to clipboard'); } catch (e) { flash('❌ Copy ไม่สำเร็จ'); }
+      try { document.execCommand('copy'); flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); } catch (e) { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); }
     }
   },
 
@@ -2692,7 +2727,7 @@ var admin = {
   renderProjects: function () {
     var self = this;
     var container = document.getElementById('project-list');
-    if (container) container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:.85rem">⏳ กำลังโหลด projects จาก DB...</div>';
+    if (container) container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:.85rem">' + t('common.loadingProjectsDb', '⏳ กำลังโหลด projects จาก DB...') + '</div>';
     // Always pull fresh from DB so create/edit/delete reflect immediately
     this.fetchProjectsFromDB().then(function (projects) {
       self._renderProjectsHtml(projects, container);
@@ -2706,7 +2741,7 @@ var admin = {
     if (projects.length === 0) {
       container.innerHTML = '<div class="glass-card" style="text-align:center;padding:48px 24px">'
         + '<div style="font-size:2.5rem;margin-bottom:12px">📂</div>'
-        + '<div style="color:var(--text-3);font-size:0.9rem">ยังไม่มี Project<br>กดปุ่ม <strong style="color:var(--text-3)">+ Add Project</strong> เพื่อสร้างใหม่</div>'
+        + '<div style="color:var(--text-3);font-size:0.9rem">' + t('empty.noProjectsHtml', 'ยังไม่มี Project<br>กดปุ่ม <strong style="color:var(--text-3)">+ Add Project</strong> เพื่อสร้างใหม่') + '</div>'
         + '</div>';
       return;
     }
@@ -2760,7 +2795,7 @@ var admin = {
         +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
         +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
         // Click-to-copy project_id pill (matches Overview redesign)
-        +       '<span title="คลิกเพื่อ copy" '
+        +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
         +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escapeHtml(p.id) + '\').then(()=>flash(\'✓ Copied: ' + escapeHtml(p.id) + '\'))" '
         +         'style="font-family:JetBrains Mono,monospace;font-size:.7rem;padding:3px 9px;'
         +         'background:var(--accent-soft-bg);color:var(--accent);'
@@ -2771,7 +2806,7 @@ var admin = {
         +         'border-radius:20px">👥 ' + members.length + ' member' + (members.length === 1 ? '' : 's') + '</span>'
         +     '</div>'
         +     '<div style="font-size:.84rem;color:var(--text-3);line-height:1.5;margin-bottom:10px">'
-        +       (p.desc ? escapeHtml(p.desc) : '<span style="font-style:italic;opacity:.6">No description</span>')
+        +       (p.desc ? escapeHtml(p.desc) : '<span style="font-style:italic;opacity:.6">' + escapeHtml(t('lbl.noDescription', 'No description')) + '</span>')
         +     '</div>'
         +     '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
@@ -2784,10 +2819,10 @@ var admin = {
         // monotone-increasing accumulator) and current balance (decreases on
         // spend). Lifetime is the headline for tier evaluation.
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="ยอดสะสมที่ลูกค้าเคยเติม (ไม่ลดลง)">'
+        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.lifetimeTopupHint', 'ยอดสะสมที่ลูกค้าเคยเติม (ไม่ลดลง)')) + '">'
         +         '💰 Lifetime <b>฿' + (p.lifetimeAmount || 0).toFixed(2) + '</b></span>'
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="ยอดคงเหลือใช้ได้ตอนนี้">'
+        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.usableNowHint', 'ยอดคงเหลือใช้ได้ตอนนี้')) + '">'
         +         '🏦 Balance <b>฿' + (p.balance || 0).toFixed(2) + '</b></span>'
         +       (p.creditLimit ? ('<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
                                   + 'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
@@ -2796,17 +2831,17 @@ var admin = {
         +   '</div>'
         // Icon-only Edit + Delete buttons
         +   '<div style="display:flex;gap:8px">'
-        +     '<button class="btn-icon-action btn-icon-edit-large" title="แก้ไข Project" '
+        +     '<button class="btn-icon-action btn-icon-edit-large" title="' + escapeHtml(t('tt.editProject', 'แก้ไข Project')) + '" '
         +       'onclick="admin.openEditProject(\'' + p.id + '\')">'
         +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
         +       '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
-        +       '<span style="margin-left:6px;font-size:.78rem">แก้ไข</span>'
+        +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.edit', 'แก้ไข')) + '</span>'
         +     '</button>'
-        +     '<button class="btn-icon-action btn-icon-danger-large" title="ลบ Project" '
+        +     '<button class="btn-icon-action btn-icon-danger-large" title="' + escapeHtml(t('tt.deleteProject', 'ลบ Project')) + '" '
         +       'onclick="admin.deleteProject(\'' + p.id + '\')">'
         +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
         +       '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-        +       '<span style="margin-left:6px;font-size:.78rem">ลบ</span>'
+        +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.deletePlain', 'ลบ')) + '</span>'
         +     '</button>'
         +   '</div>'
         + '</div>';
@@ -2851,7 +2886,7 @@ var admin = {
       // and `apiKeyPreview` (e.g. "sk-svcac…XXXX") for display.
       var realKey = !!p.hasApiKey;
       statusEl.innerHTML = realKey
-        ? '<span style="color:#5cb85c">✓</span> มี API key อยู่แล้ว'
+        ? '<span style="color:#5cb85c">✓</span> ' + escapeHtml(t('lbl.hasApiKey', 'มี API key อยู่แล้ว'))
             + ' <span style="color:var(--text-3);font-family:monospace">'
             + escapeHtml(p.apiKeyPreview || '') + '</span>'
             + ' <button type="button" onclick="admin.clearProjectApiKey(\''
@@ -2859,7 +2894,7 @@ var admin = {
             + 'font-size:.7rem;background:transparent;color:#d04545;'
             + 'border:1px solid rgba(208,69,69,0.3);border-radius:4px;cursor:pointer">'
             + '🗑️ Clear</button>'
-        : '<span style="color:#d09a3e">⚠</span> ยังไม่มี API key — chat router จะ fallback ไปใช้ global key';
+        : '<span style="color:#d09a3e">⚠</span> ' + escapeHtml(t('lbl.noApiKeyWarn', 'ยังไม่มี API key — chat router จะ fallback ไปใช้ global key'));
       statusEl.style.background = realKey
         ? 'rgba(92,184,92,0.08)' : 'rgba(208,154,62,0.10)';
       statusEl.style.border = realKey
@@ -2881,15 +2916,15 @@ var admin = {
     var apiKeyNew = apiKeyEl ? apiKeyEl.value.trim() : '';
     var errEl = document.getElementById('ep-error');
 
-    if (!name) { errEl.textContent = '❌ กรุณาใส่ชื่อ Project'; return; }
-    if (isNaN(inputRate) || isNaN(outputRate)) { errEl.textContent = '❌ ค่า Rate ไม่ถูกต้อง'; return; }
+    if (!name) { errEl.textContent = '❌ ' + t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
+    if (isNaN(inputRate) || isNaN(outputRate)) { errEl.textContent = '❌ ' + t('err.invalidRate', 'ค่า Rate ไม่ถูกต้อง'); return; }
     // Light client-side sanity — backend caps length at 256 (real OpenAI
     // service-account keys are ~167 chars, project keys similar)
     if (apiKeyNew && apiKeyNew.length > 256) {
-      errEl.textContent = '❌ API key ยาวเกินกำหนด (max 256 chars)'; return;
+      errEl.textContent = '❌ ' + t('err.apiKeyTooLong', 'API key ยาวเกินกำหนด (max 256 chars)'); return;
     }
     if (apiKeyNew && !/^sk-/.test(apiKeyNew)) {
-      errEl.textContent = '⚠ API key ปกติขึ้นต้นด้วย "sk-" — กรุณาตรวจสอบ'; return;
+      errEl.textContent = '⚠ ' + t('warn.apiKeyFormat', 'API key ปกติขึ้นต้นด้วย "sk-" — กรุณาตรวจสอบ'); return;
     }
 
     var self = this;
@@ -2908,15 +2943,15 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ DB ปฏิเสธ: ' + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         hideModal('modal-edit-project');
-        flash('✅ อัปเดต Project "' + name + '" เรียบร้อย (saved to DB)');
+        flash('✅ ' + tf('msg.projectUpdated', { name: name }, 'อัปเดต Project "{name}" เรียบร้อย (saved to DB)'));
         self.fetchProjectsFromDB().then(function () {
           self.renderProjects();
           self.refreshProjectSelects();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ Network error: ' + e.message; });
+      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
   // ── REMOVE USER FROM PROJECT (Phase 14.1: modal + DB call + refresh) ──
@@ -2929,7 +2964,7 @@ var admin = {
   removeFromProject: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ไม่พบ user_id (DB row)', 'error'); return; }
+    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
     var proj = u.projectId ? Auth.getProjectById(u.projectId) : null;
 
     this._pendingRemoveFromProject = { username: u.username, id: u.id };
@@ -2937,11 +2972,11 @@ var admin = {
     var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
     set('cru-username',    '@' + u.username);
     set('cru-displayname', u.displayName || '—');
-    set('cru-project',     proj ? proj.name : '— (ไม่มี)');
+    set('cru-project',     proj ? proj.name : t('empty.none', '— (ไม่มี)'));
 
     var err = document.getElementById('cru-error'); if (err) err.textContent = '';
     var btn = document.getElementById('cru-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'ยืนยันย้ายออก'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
 
     showModal('modal-confirm-remove-user-from-project');
   },
@@ -2959,7 +2994,7 @@ var admin = {
     var btn = document.getElementById('cru-confirm-btn');
     var err = document.getElementById('cru-error');
     if (err) err.textContent = '';
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังย้าย…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.movingEllipsis', 'กำลังย้าย…'); }
 
     // projectId:null = unassign. updateUser schema accepts nullable.
     fetch(BASE + '/api/users/' + p.id, {
@@ -2972,14 +3007,14 @@ var admin = {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
           if (err) err.textContent = '❌ ' + msg;
-          if (btn) { btn.disabled = false; btn.textContent = 'ยืนยันย้ายออก'; }
+          if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
           return;
         }
         // Mirror to localStorage
         try { Auth.setUserProject(p.username, null); } catch (_) {}
         self._pendingRemoveFromProject = null;
         hideModal('modal-confirm-remove-user-from-project');
-        flash('✅ ย้าย @' + p.username + ' ออกจาก project แล้ว');
+        flash('✅ ' + tf('msg.ownerMoved', { username: p.username }, 'ย้าย @{username} ออกจาก project แล้ว'));
         // Re-fetch users so project member lists are accurate
         self.fetchUsersFromDB().then(function (users) {
           self._cachedDBUsers = users;
@@ -2987,8 +3022,8 @@ var admin = {
         });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ เครือข่ายขัดข้อง: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'ยืนยันย้ายออก'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
       });
   },
 
@@ -3001,7 +3036,7 @@ var admin = {
 
   deleteProject: function (projectId) {
     var p = Auth.getProjectById(projectId);
-    if (!p) { flash('❌ ไม่พบ project', 'error'); return; }
+    if (!p) { flash('❌ ' + t('err.projectNotFound', 'ไม่พบ project'), 'error'); return; }
 
     // Count DB members for the summary — cache falls back gracefully.
     var members = (this._cachedDBUsers || []).filter(function (u) { return u.projectId === projectId; });
@@ -3020,13 +3055,13 @@ var admin = {
     var warn = document.getElementById('cdp-warning');
     if (warn) {
       warn.innerHTML = members.length > 0
-        ? '⚠ มีสมาชิก ' + members.length + ' คนใน project นี้ — ทุกคนจะถูกย้ายออก (ไม่ได้ถูกลบ)<br>Balance ของ project จะถูกล้าง'
-        : 'Project จะถูก soft-delete — Balance ของ project จะถูกล้าง';
+        ? '⚠ ' + tf('confirm.removeMembersWarn', { n: members.length }, 'มีสมาชิก {n} คนใน project นี้ — ทุกคนจะถูกย้ายออก (ไม่ได้ถูกลบ)<br>Balance ของ project จะถูกล้าง')
+        : t('confirm.deleteProjectPlain', 'Project จะถูก soft-delete — Balance ของ project จะถูกล้าง');
     }
 
     var err = document.getElementById('cdp-error'); if (err) err.textContent = '';
     var btn = document.getElementById('cdp-confirm-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
 
     showModal('modal-confirm-delete-project');
   },
@@ -3044,7 +3079,7 @@ var admin = {
     var btn = document.getElementById('cdp-confirm-btn');
     var err = document.getElementById('cdp-error');
     if (err) err.textContent = '';
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังลบ…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.deletingEllipsis', 'กำลังลบ...'); }
 
     fetch(BASE + '/api/projects/' + encodeURIComponent(p.id), {
       method: 'DELETE',
@@ -3055,13 +3090,13 @@ var admin = {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
           if (err) err.textContent = '❌ ' + msg;
-          if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+          if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
           return;
         }
         try { Auth.deleteProject(p.id); } catch (_) {}
         self._pendingDeleteProject = null;
         hideModal('modal-confirm-delete-project');
-        flash('✅ ลบ Project "' + p.name + '" แล้ว');
+        flash('✅ ' + tf('msg.projectDeleted', { name: p.name }, 'ลบ Project "{name}" แล้ว'));
         // Real-time refresh: fetch projects + users (members now unassigned)
         Promise.all([self.fetchProjectsFromDB(), self.fetchUsersFromDB()])
           .then(function (results) {
@@ -3071,8 +3106,8 @@ var admin = {
           });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ เครือข่ายขัดข้อง: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'ลบถาวร'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
       });
   },
 
@@ -3094,7 +3129,7 @@ var admin = {
     var desc = document.getElementById('ap-desc').value.trim();
     var errEl = document.getElementById('ap-error');
 
-    if (!name) { errEl.textContent = '❌ กรุณาใส่ชื่อ Project'; return; }
+    if (!name) { errEl.textContent = '❌ ' + t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
 
     var self = this;
     fetch(BASE + '/api/projects', {
@@ -3104,16 +3139,15 @@ var admin = {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ DB ปฏิเสธ: ' + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         hideModal('modal-add-project');
         // Surface the OpenAI linking result. The project row always lands in the
         // DB; but if the OpenAI Admin API call failed, openai_project_id is null
         // and usage/quota won't sync until it's linked — warn instead of a silent ✅.
         if (d.openai && d.openai.synced === false) {
-          flash('⚠ สร้าง Project "' + name + '" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: '
-            + (d.openai.error || 'unknown') + ' — ยังไม่มี OpenAI project id', 'error');
+          flash('⚠ ' + tf('msg.projectCreatedOpenAiFail', { name: name, err: d.openai.error || 'unknown' }, 'สร้าง Project "{name}" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: {err} — ยังไม่มี OpenAI project id'), 'error');
         } else {
-          flash('✅ สร้าง Project "' + name + '" เรียบร้อย'
+          flash('✅ ' + tf('msg.projectCreated', { name: name }, 'สร้าง Project "{name}" เรียบร้อย')
             + (d.openai && d.openai.project_id ? ' · OpenAI: ' + d.openai.project_id : ''));
         }
         self.fetchProjectsFromDB().then(function () {
@@ -3121,7 +3155,7 @@ var admin = {
           self.refreshProjectSelects();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ Network error: ' + e.message; });
+      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
   refreshProjectSelects: function () {
@@ -3133,7 +3167,7 @@ var admin = {
   // ── ACTIVITY LOG ──────────────────────────────────────
   renderActivity: function () {
     var container = document.getElementById('activity-log');
-    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem">⏳ กำลังโหลดข้อมูลจาก DB...</div>';
+    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem">' + t('common.loadingFromDbData', '⏳ กำลังโหลดข้อมูลจาก DB...') + '</div>';
     this.fetchUsersFromDB().then(function (users) {
       var allLogs = [];
       users.forEach(function (u) {
@@ -3144,7 +3178,7 @@ var admin = {
       allLogs.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
 
       if (allLogs.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>ยังไม่มี activity ใดๆ</p></div>';
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>' + t('empty.noActivity', 'ยังไม่มี activity ใดๆ') + '</p></div>';
         return;
       }
       // Phase 19.3: escape every untrusted string (displayName, username,
@@ -3165,7 +3199,7 @@ var admin = {
           + '</div>';
       }).join('');
     }).catch(function () {
-      container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่</p></div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>' + t('empty.loadFailedServer', 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่') + '</p></div>';
     });
   },
 
@@ -3206,16 +3240,16 @@ var admin = {
   renderAuditLog: function () {
     var body = document.getElementById('audit-log-body');
     if (!body) return;
-    body.innerHTML = '<tr><td colspan="5" class="audit-empty">⏳ กำลังโหลดจาก DB...</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('common.loadingFromDb', '⏳ กำลังโหลดจาก DB...') + '</td></tr>';
     fetch(BASE + '/api/audit-log?event=login_ok', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">⚠️ ไม่พบข้อมูล audit log</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noAuditData', '⚠️ ไม่พบข้อมูล audit log') + '</td></tr>';
           return;
         }
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">📋 ยังไม่มีประวัติการเข้าออกระบบ</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noLoginHistory', '📋 ยังไม่มีประวัติการเข้าออกระบบ') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
@@ -3244,14 +3278,14 @@ var admin = {
           return '<tr>' +
             '<td data-label="User"><span class="audit-name">' + safeName + '</span></td>' +
             '<td data-label="Username"><span class="audit-username">@' + safeUname + '</span></td>' +
-            '<td data-label="เข้าสู่ระบบ">' + inFmt + '</td>' +
-            '<td data-label="ออกจากระบบ">' + outFmt + '</td>' +
-            '<td data-label="ระยะเวลา"><span class="audit-duration">' + dur + '</span></td>' +
+            '<td data-label="' + escapeHtml(t('col.login', 'เข้าสู่ระบบ')) + '">' + inFmt + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.logout', 'ออกจากระบบ')) + '">' + outFmt + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.duration', 'ระยะเวลา')) + '"><span class="audit-duration">' + dur + '</span></td>' +
             '</tr>';
         }).join('');
       })
       .catch(function () {
-        body.innerHTML = '<tr><td colspan="5" class="audit-empty">⚠️ ไม่สามารถเชื่อมต่อ server ได้</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', '⚠️ ไม่สามารถเชื่อมต่อ server ได้') + '</td></tr>';
       });
   },
 
@@ -3316,7 +3350,8 @@ var admin = {
   },
 
   _fieldName: function (k) {
-    return this._fieldLabels[k] || k;
+    var fallback = this._fieldLabels[k] || k;
+    return t('field.' + k, fallback);
   },
 
   // Build the "รายละเอียด" cell content from change_json.
@@ -3324,7 +3359,7 @@ var admin = {
   // and a collapsed <details> with the raw JSON for forensics.
   _renderDiff: function (cj) {
     if (!cj || typeof cj !== 'object') {
-      return '<span class="diff-none">— ไม่มีรายละเอียด —</span>';
+      return '<span class="diff-none">' + t('diff.noDetail', '— ไม่มีรายละเอียด —') + '</span>';
     }
     var self = this;
     var before = cj.before || {};
@@ -3368,11 +3403,11 @@ var admin = {
 
     var main = rows.length > 0
       ? rows.join(' ')
-      : (extraHtml ? '' : '<span class="diff-none">— ไม่มีฟิลด์เปลี่ยนแปลง —</span>');
+      : (extraHtml ? '' : '<span class="diff-none">' + t('diff.noFieldChanges', '— ไม่มีฟิลด์เปลี่ยนแปลง —') + '</span>');
 
     // Raw JSON pane — always available for forensic drill-down
     var rawJson = JSON.stringify(cj, null, 2);
-    var rawPane = '<details class="diff-raw"><summary>ดู raw JSON</summary>' +
+    var rawPane = '<details class="diff-raw"><summary>' + escapeHtml(t('diff.viewRawJson', 'ดู raw JSON')) + '</summary>' +
                   '<pre>' + this._esc(rawJson) + '</pre></details>';
 
     return '<div class="diff-summary">' + main + extraHtml + rawPane + '</div>';
@@ -3408,7 +3443,7 @@ var admin = {
     var self = this;
     var body = document.getElementById('action-log-body');
     if (!body) return;
-    body.innerHTML = '<tr><td colspan="5" class="audit-empty">⏳ กำลังโหลดจาก DB...</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('common.loadingFromDb', '⏳ กำลังโหลดจาก DB...') + '</td></tr>';
 
     // Phase 16.14: filters are hidden inputs now (custom dropdowns above)
     var actionVal = (document.getElementById('action-log-filter-type') || {}).value || '';
@@ -3424,13 +3459,13 @@ var admin = {
       .then(function (d) {
         var countEl = document.getElementById('action-log-count');
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">⚠️ ไม่พบข้อมูล action log</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogData', '⚠️ ไม่พบข้อมูล action log') + '</td></tr>';
           if (countEl) countEl.textContent = '';
           return;
         }
         if (countEl) countEl.textContent = d.logs.length + ' record' + (d.logs.length === 1 ? '' : 's');
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">📋 ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogFiltered', '📋 ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
@@ -3441,8 +3476,9 @@ var admin = {
 
           // Action cell (pill with icon)
           var meta = self._actionLabels[l.action_type] || { icon: '•', text: l.action_type || 'unknown', variant: '' };
+          var actionText = t('action.' + l.action_type, meta.text);
           var actionHtml = '<span class="action-label ' + meta.variant + '">' +
-                           meta.icon + ' ' + self._esc(meta.text) + '</span>';
+                           meta.icon + ' ' + self._esc(actionText) + '</span>';
 
           // Target cell
           var targetHtml = self._renderTarget(l);
@@ -3454,13 +3490,13 @@ var admin = {
             '<td data-label="Admin">' + adminHtml + '</td>' +
             '<td data-label="Action">' + actionHtml + '</td>' +
             '<td data-label="Target">' + targetHtml + '</td>' +
-            '<td data-label="รายละเอียด">' + diffHtml + '</td>' +
-            '<td data-label="วันที่/เวลา">' + dt + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.detailShort', 'รายละเอียด')) + '">' + diffHtml + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.datetime', 'วันที่/เวลา')) + '">' + dt + '</td>' +
             '</tr>';
         }).join('');
       })
       .catch(function (e) {
-        body.innerHTML = '<tr><td colspan="5" class="audit-empty">⚠️ ไม่สามารถเชื่อมต่อ server ได้ (' + self._esc(e.message) + ')</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', '⚠️ ไม่สามารถเชื่อมต่อ server ได้') + ' (' + self._esc(e.message) + ')</td></tr>';
       });
   },
 
@@ -3473,7 +3509,7 @@ var admin = {
     var err = document.getElementById('ch-error');
     if (err) err.textContent = '';
     var btn = document.getElementById('ch-confirm-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'ลบทั้งหมด'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.deleteAll', 'ลบทั้งหมด'); }
     showModal('modal-confirm-clear-history');
     setTimeout(function () { if (inp) inp.focus(); }, 50);
   },
@@ -3489,10 +3525,10 @@ var admin = {
     var err = document.getElementById('ch-error');
     var btn = document.getElementById('ch-confirm-btn');
     if (!inp || (inp.value || '').trim() !== 'DELETE') {
-      if (err) err.textContent = '❌ พิมพ์ DELETE เพื่อยืนยัน';
+      if (err) err.textContent = '❌ ' + t('err.typeDeleteConfirm', 'พิมพ์ DELETE เพื่อยืนยัน');
       return;
     }
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังลบ...'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('btn.deletingEllipsis', 'กำลังลบ...'); }
     if (err) err.textContent = '';
     var self = this;
     fetch(BASE + '/api/history', { method: 'DELETE', headers: Auth.authHeaders() })
@@ -3500,16 +3536,16 @@ var admin = {
       .then(function (d) {
         if (!d.ok) {
           if (err) err.textContent = '❌ ' + (d.error || 'unknown');
-          if (btn) { btn.disabled = false; btn.textContent = 'ลบทั้งหมด'; }
+          if (btn) { btn.disabled = false; btn.textContent = t('btn.deleteAll', 'ลบทั้งหมด'); }
           return;
         }
         hideModal('modal-confirm-clear-history');
-        flash('✅ ล้าง Activity Log ทั้งหมดแล้ว');
+        flash('✅ ' + t('msg.activityLogCleared', 'ล้าง Activity Log ทั้งหมดแล้ว'));
         self.renderActivity();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ Network error: ' + e.message;
-        if (btn) { btn.disabled = false; btn.textContent = 'ลบทั้งหมด'; }
+        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (btn) { btn.disabled = false; btn.textContent = t('btn.deleteAll', 'ลบทั้งหมด'); }
       });
   },
 
@@ -3592,7 +3628,7 @@ var admin = {
       var combined = allEntry ? [allEntry].concat(rendered) : rendered;
 
       if (combined.length === 0) {
-        listEl.innerHTML = '<div class="dd-empty">ไม่พบรายการ</div>';
+        listEl.innerHTML = '<div class="dd-empty">' + escapeHtml(t('dd.noResults', 'ไม่พบรายการ')) + '</div>';
         return;
       }
       listEl.innerHTML = combined.map(function (it, idx) {
@@ -3685,15 +3721,17 @@ var admin = {
     if (ev) ev.stopPropagation();
     var self = this;
     this.openDropdown('action-log-filter-type-trigger', {
-      items: this._actionFilterTypeItems,
+      items: this._actionFilterTypeItems.map(function (it) {
+        return Object.assign({}, it, { label: t('action.' + it.value, it.label) });
+      }),
       selected: document.getElementById('action-log-filter-type').value || '',
       searchable: true,
-      placeholder: '🔎 ค้นหา action...',
-      allowEmpty: { label: '🔎 ทุก Action' },
+      placeholder: t('dd.searchAction', '🔎 ค้นหา action...'),
+      allowEmpty: { label: t('filter.allAction', '🔎 ทุก Action') },
       onPick: function (value, item) {
         document.getElementById('action-log-filter-type').value = value || '';
         document.getElementById('action-log-filter-type-label').textContent =
-          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : '🔎 ทุก Action';
+          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : t('filter.allAction', '🔎 ทุก Action');
         self.renderActionLog();
       },
     });
@@ -3705,11 +3743,11 @@ var admin = {
     this.openDropdown('action-log-filter-target-trigger', {
       items: this._actionFilterTargetItems,
       selected: document.getElementById('action-log-filter-target').value || '',
-      allowEmpty: { label: 'ทุก Target' },
+      allowEmpty: { label: t('filter.allTarget', 'ทุก Target') },
       onPick: function (value, item) {
         document.getElementById('action-log-filter-target').value = value || '';
         document.getElementById('action-log-filter-target-label').textContent =
-          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : 'ทุก Target';
+          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : t('filter.allTarget', 'ทุก Target');
         self.renderActionLog();
       },
     });
@@ -3725,12 +3763,12 @@ var admin = {
       items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
       selected: this._selectedProject || (projects[0] && projects[0].id) || '',
       searchable: true,
-      placeholder: '🔎 ค้นหา project...',
+      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
       onPick: function (value, item) {
         var hidden = document.getElementById('project-selector');
         if (hidden) hidden.value = value || '';
         var label = document.getElementById('overview-project-label');
-        if (label) label.textContent = item ? ('📂 ' + item.label) : '— เลือก Project —';
+        if (label) label.textContent = item ? ('📂 ' + item.label) : t('dd.selectProject', '— เลือก Project —');
         self.selectProject(value);
       },
     });
@@ -3746,8 +3784,8 @@ var admin = {
       items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
       selected:    this._usageProjectFilter || '',
       searchable:  true,
-      placeholder: '🔎 ค้นหา project...',
-      allowEmpty:  { label: '— ทุก Project —' },
+      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      allowEmpty:  { label: t('filter.allProject', '— ทุก Project —') },
       onPick: function (value) { self.setUsageProjectFilter(value || ''); },
     });
   },
@@ -3759,7 +3797,7 @@ var admin = {
     var listTitle = document.getElementById('usage-user-list-title');
     var banner = document.getElementById('usage-project-banner');
     var metaEl = document.getElementById('usage-filter-meta');
-    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-3);font-size:.85rem">⏳ กำลังโหลด...</div>';
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-3);font-size:.85rem">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     if (list) list.innerHTML = '';
     this.fetchUsersFromDB().then(function (users) {
       // ไม่แสดง admin ใน Usage Analytics
@@ -3771,9 +3809,9 @@ var admin = {
       if (labelEl) {
         if (self._usageProjectFilter) {
           var p = projects.find(function (x) { return String(x.id) === String(self._usageProjectFilter); });
-          labelEl.textContent = p ? '📂 ' + p.name : '— ทุก Project —';
+          labelEl.textContent = p ? '📂 ' + p.name : t('filter.allProject', '— ทุก Project —');
         } else {
-          labelEl.textContent = '— ทุก Project —';
+          labelEl.textContent = t('filter.allProject', '— ทุก Project —');
         }
       }
 
@@ -3838,15 +3876,15 @@ var admin = {
       // Meta caption next to the filter dropdown
       if (metaEl) {
         metaEl.textContent = selectedProjId
-          ? '· แสดง ' + users.length + ' user ใน project นี้'
-          : '· แสดง ' + users.length + '/' + allUsersInSystem + ' users ทั้งหมด';
+          ? tf('lbl.usersInProjectMeta', { n: users.length }, '· แสดง {n} user ใน project นี้')
+          : tf('lbl.usersAllMeta', { shown: users.length, total: allUsersInSystem }, '· แสดง {shown}/{total} users ทั้งหมด');
       }
 
       // Section title morphs based on filter
       if (listTitle) {
         listTitle.textContent = selectedProj
-          ? 'การใช้งานรายผู้ใช้ใน ' + selectedProj.name
-          : 'การใช้งานรายผู้ใช้';
+          ? tf('lbl.usageByUserInProject', { project: selectedProj.name }, 'การใช้งานรายผู้ใช้ใน {project}')
+          : t('usage.perUser', 'การใช้งานรายผู้ใช้');
       }
 
       // Aggregate totals
@@ -3862,7 +3900,7 @@ var admin = {
         grid.innerHTML =
           '<div class="mini-card"><div class="mini-card-label">📡 Total Requests</div>' +
           '<div class="mini-card-value">' + totalRequests.toLocaleString() + '</div>' +
-          '<div class="mini-card-sub">' + (selectedProj ? 'ใน ' + selectedProj.name : 'ทุก users รวมกัน') + '</div></div>' +
+          '<div class="mini-card-sub">' + (selectedProj ? tf('lbl.inProject', { project: selectedProj.name }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน')) + '</div></div>' +
 
           '<div class="mini-card"><div class="mini-card-label">🔢 Total Tokens</div>' +
           '<div class="mini-card-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
@@ -3870,19 +3908,19 @@ var admin = {
 
           '<div class="mini-card"><div class="mini-card-label">💸 Total Spent</div>' +
           '<div class="mini-card-value" style="color:var(--accent)">' + formatTHB(totalCost) + '</div>' +
-          '<div class="mini-card-sub">เงินที่ถูกหักไปแล้ว</div></div>' +
+          '<div class="mini-card-sub">' + t('lbl.spentAlready', 'เงินที่ถูกหักไปแล้ว') + '</div></div>' +
 
           '<div class="mini-card"><div class="mini-card-label">👥 Active Users</div>' +
           '<div class="mini-card-value">' + users.filter(function (u) { return u.history.length > 0; }).length + ' / ' + users.length + '</div>' +
-          '<div class="mini-card-sub">มีประวัติการใช้งาน</div></div>';
+          '<div class="mini-card-sub">' + t('lbl.hasUsageHistory', 'มีประวัติการใช้งาน') + '</div></div>';
       }
 
       if (!list) return;
       if (users.length === 0) {
         // Phase 16.13: differentiate "no users at all" vs "no users in filter".
         var msg = selectedProj
-          ? 'ไม่มี user ใน project นี้'
-          : 'ยังไม่มี User ในระบบ';
+          ? t('empty.noUsersInProject', 'ไม่มี user ใน project นี้')
+          : t('empty.noUsersSystem', 'ยังไม่มี User ในระบบ');
         list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3)">' + msg + '</div>';
         return;
       }
@@ -3912,16 +3950,18 @@ var admin = {
         // typed by the end user — without escaping a user could plant
         // `<img src=x onerror=...>` in any chat and pop XSS in admin view.
         var histRows = last20.length === 0
-          ? '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:16px">ยังไม่มีประวัติการใช้งาน</td></tr>'
-          : last20.map(function (h) {
+          ? '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:16px">' + t('empty.noUsageHistoryRow', 'ยังไม่มีประวัติการใช้งาน') + '</td></tr>'
+          : last20.map(function (h, hIdx) {
             var skill  = escapeHtml(h.skillName || '—');
             var emoji  = escapeHtml(h.skillEmoji || '🤖');
             var prompt = escapeHtml(h.prompt || '—');
-            return '<tr>' +
+            // Phase 26: whole row opens the full prompt+response modal — the
+            // truncated cell here is just a preview, not the audit trail.
+            return '<tr style="cursor:pointer" title="' + escapeHtml(t('vt.clickToView', 'คลิกเพื่อดูข้อความเต็ม')) + '" onclick="admin.openViewTurn(' + idx + ',' + hIdx + ')">' +
               '<td>' + emoji + ' ' + skill + '</td>' +
               '<td class="val">' + (h.inputTokens || 0) + ' / ' + (h.outputTokens || 0) + '</td>' +
               '<td class="val">' + formatTHB(h.cost || 0) + '</td>' +
-              '<td title="' + prompt + '" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)">' + prompt + '</td>' +
+              '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)">' + prompt + '</td>' +
               '<td style="color:var(--text-3);white-space:nowrap">' + formatDate(h.timestamp) + '</td>' +
               '</tr>';
           }).join('');
@@ -3953,17 +3993,40 @@ var admin = {
 
           '<div class="usage-detail-section" id="udetail-' + idx + '">' +
           '<table class="usage-history-table">' +
-          '<thead><tr><th>Skill</th><th>Tokens (In/Out)</th><th>ค่าใช้จ่าย</th><th>Prompt</th><th>เวลา</th></tr></thead>' +
+          '<thead><tr><th>Skill</th><th>Tokens (In/Out)</th><th>' + t('col.cost', 'ค่าใช้จ่าย') + '</th><th>Prompt</th><th>' + t('col.time', 'เวลา') + '</th></tr></thead>' +
           '<tbody>' + histRows + '</tbody>' +
           '</table>' +
-          (u.history.length > 20 ? '<div style="text-align:center;color:var(--text-3);font-size:.75rem;padding:8px">แสดง 20 รายการล่าสุด (ทั้งหมด ' + u.history.length + ' รายการ)</div>' : '') +
+          (u.history.length > 20 ? '<div style="text-align:center;color:var(--text-3);font-size:.75rem;padding:8px">' + tf('lbl.showingRecent', { n: u.history.length }, 'แสดง 20 รายการล่าสุด (ทั้งหมด {n} รายการ)') + '</div>' : '') +
           '</div>' +
           '</div>';
       });
       list.innerHTML = html;
+      // Phase 26: keep the rendered user list around so row clicks can look
+      // up the full prompt/response without re-fetching or re-escaping huge
+      // text through an onclick attribute.
+      self._usageRenderedUsers = users;
     }).catch(function () {
-      if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3)">⚠️ ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่</div>';
+      if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3)">⚠️ ' + t('empty.loadFailedServer', 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่') + '</div>';
     });
+  },
+
+  // Phase 26: full prompt + response viewer for one chat turn — lets admin
+  // reconstruct exactly what a user typed and what the AI answered, e.g.
+  // when investigating unexpected charges or odd behaviour.
+  openViewTurn: function (uIdx, hIdx) {
+    var u = (this._usageRenderedUsers || [])[uIdx];
+    var h = u && u.history && u.history[hIdx];
+    if (!h) return;
+    var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+    set('vt-user', u.displayName || u.username || '—');
+    set('vt-username', '@' + (u.username || ''));
+    set('vt-time', formatDate(h.timestamp));
+    set('vt-skill', (h.skillEmoji || '🤖') + ' ' + (h.skillName || '—'));
+    set('vt-tokens', tf('vt.tokensInOut', { in: h.inputTokens || 0, out: h.outputTokens || 0 }, 'Tokens {in}/{out}'));
+    set('vt-cost', formatTHB(h.cost || 0));
+    set('vt-prompt', h.prompt || '—');
+    set('vt-response', h.response || '—');
+    showModal('modal-view-turn');
   },
 
   toggleUsageDetail: function (idx) {
@@ -3982,7 +4045,7 @@ var admin = {
     var self = this;
     var wrap = document.getElementById('qr-list-wrap');
     if (!wrap) return;
-    wrap.innerHTML = '<div class="qr-loading">⏳ กำลังโหลด…</div>';
+    wrap.innerHTML = '<div class="qr-loading">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     fetch(BASE + '/api/quota-requests?limit=50', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -3998,7 +4061,7 @@ var admin = {
           badge.style.display = pending > 0 ? 'inline-flex' : 'none';
         }
         if (rows.length === 0) {
-          wrap.innerHTML = '<div class="qr-empty">📭 ยังไม่มีคำขอเพิ่มโควต้า</div>';
+          wrap.innerHTML = '<div class="qr-empty">' + t('empty.noQuotaRequests', '📭 ยังไม่มีคำขอเพิ่มโควต้า') + '</div>';
           return;
         }
         self._cachedQuota = rows;   // so the resolve modal can read details
@@ -4020,7 +4083,7 @@ var admin = {
         '<button class="qr-btn approve" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'approve\')">✓ Approve</button>' +
         '<button class="qr-btn deny"    onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'deny\')">✗ Deny</button>';
     } else {
-      var resolver = r.resolved_by_display ? ' โดย ' + escapeHtml(r.resolved_by_display) : '';
+      var resolver = r.resolved_by_display ? t('lbl.resolvedByPrefix', ' โดย ') + escapeHtml(r.resolved_by_display) : '';
       actions = '<span class="' + statusClass + '">' + r.status + '</span>' +
                 '<span class="qr-meta" style="margin-left:10px">' + resolver + '</span>';
     }
@@ -4030,11 +4093,11 @@ var admin = {
       +     '<div class="qr-line1">'
       +       (r.status === 'pending' ? '<span class="qr-status-badge pending">pending</span>' : '')
       +       '<strong>' + escapeHtml(r.user_display) + '</strong>'
-      +       '<span style="color:var(--text-3);font-size:.82rem">ขอเพิ่ม</span>'
+      +       '<span style="color:var(--text-3);font-size:.82rem">' + escapeHtml(t('lbl.requestedIncrease', 'ขอเพิ่ม')) + '</span>'
       +       '<span class="qr-amount">฿' + Number(r.requested_extra).toFixed(2) + '</span>'
-      +       '<span style="color:var(--text-3);font-size:.82rem">วันนี้</span>'
+      +       '<span style="color:var(--text-3);font-size:.82rem">' + escapeHtml(t('lbl.today', 'วันนี้')) + '</span>'
       +     '</div>'
-      +     (r.reason ? '<div class="qr-reason" title="' + escapeHtml(r.reason) + '">เหตุผล: ' + escapeHtml(r.reason) + '</div>' : '')
+      +     (r.reason ? '<div class="qr-reason" title="' + escapeHtml(r.reason) + '">' + escapeHtml(t('lbl.reasonPrefix', 'เหตุผล: ')) + escapeHtml(r.reason) + '</div>' : '')
       +     '<div class="qr-meta">'
       +       '<span>📅 ' + dtStr + '</span>'
       +       (r.project_name ? '<span>📦 ' + escapeHtml(r.project_name) + '</span>' : '')
@@ -4097,7 +4160,7 @@ var admin = {
         btn.disabled = false;
         if (!d.ok) { errEl.textContent = '❌ ' + (d.message || d.error || 'unknown'); return; }
         hideModal('modal-quota-resolve');
-        flash(action === 'approve' ? '✅ อนุมัติคำขอแล้ว' : '✅ ปฏิเสธคำขอแล้ว');
+        flash('✅ ' + (action === 'approve' ? t('msg.quotaApproved', 'อนุมัติคำขอแล้ว') : t('msg.quotaDenied', 'ปฏิเสธคำขอแล้ว')));
         self.renderQuotaRequests();
       })
       .catch(function (e) { btn.disabled = false; errEl.textContent = '❌ ' + e.message; });

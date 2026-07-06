@@ -600,6 +600,34 @@
             color: var(--text-3);
         }
 
+        .tx-pagination {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            padding: 10px 14px;
+            background: var(--surface-2);
+            border-top: 1px solid var(--border-subtle);
+        }
+        .tx-page-btn {
+            min-width: 30px;
+            height: 30px;
+            padding: 0 8px;
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            background: var(--surface-3);
+            color: var(--text-2);
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .12s, color .12s;
+        }
+        .tx-page-btn:hover { background: rgba(37, 99, 235, .08); }
+        .tx-page-btn.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: transparent;
+        }
+
         @media (max-width: 720px) {
             .tx-controls { width: 100%; }
             .tx-range, .tx-toggle { flex: 1 0 auto; }
@@ -1086,6 +1114,10 @@
         .usage-history-table td.val {
             color: var(--text-2);
             font-family: 'JetBrains Mono', monospace;
+        }
+
+        .usage-history-table tbody tr:hover td {
+            background: rgba(37, 99, 235, .06);
         }
 
         .usage-detail-section {
@@ -1727,7 +1759,7 @@
                 <div>
                     <h2 class="page-title">Skill Prompts</h2>
                     <p class="page-subtitle"><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span>
-                        · เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</p>
+                        · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span></p>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
@@ -2544,6 +2576,33 @@
                     data-i18n="btn.cancel">Cancel</button>
                 <button class="btn-modal-submit" id="qr-resolve-confirm"
                     onclick="admin.submitQuotaResolve()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 26: view a single chat turn (full prompt + response) — lets
+         admin see exactly what a user typed and what the AI answered, for
+         incident investigation (unexpected charges, weird behaviour, etc). -->
+    <div class="modal-overlay" id="modal-view-turn">
+        <div class="modal-box" style="max-width:640px">
+            <div class="modal-title" data-i18n="vt.title">💬 รายละเอียดการสนทนา</div>
+            <div class="confirm-target" style="background:var(--surface-3);border-color:var(--border-default);display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.8rem">
+                <span><b id="vt-user">—</b> <span style="color:var(--text-3)" id="vt-username"></span></span>
+                <span style="color:var(--text-3)" id="vt-time">—</span>
+                <span style="color:var(--text-3)" id="vt-skill">—</span>
+                <span style="color:var(--text-3)" id="vt-tokens">—</span>
+                <span style="color:var(--accent);font-weight:700" id="vt-cost">—</span>
+            </div>
+            <div class="modal-field">
+                <label class="modal-label" data-i18n="vt.prompt">สิ่งที่ user พิมพ์</label>
+                <pre id="vt-prompt" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+            </div>
+            <div class="modal-field">
+                <label class="modal-label" data-i18n="vt.response">คำตอบของ AI</label>
+                <pre id="vt-response" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="hideModal('modal-view-turn')" data-i18n="btn.cancelTh">ยกเลิก</button>
             </div>
         </div>
     </div>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8" />
@@ -264,16 +264,16 @@
             <form id="login-form" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label class="form-label" for="username">Username</label>
-                    <input class="form-input" id="username" type="text" placeholder="กรอก username..."
+                    <input class="form-input" id="username" type="text" placeholder="Enter your username..."
                         autocomplete="username" required />
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="password">Password</label>
-                    <input class="form-input" id="password" type="password" placeholder="กรอก password..."
+                    <input class="form-input" id="password" type="password" placeholder="Enter your password..."
                         autocomplete="current-password" required />
                 </div>
 
-                <button class="btn-login" type="submit" id="login-btn">เข้าสู่ระบบ</button>
+                <button class="btn-login" type="submit" id="login-btn">Log in</button>
             </form>
         </div>
 
@@ -310,7 +310,7 @@
                 if (q.get('expired') === '1') {
                     const el = document.getElementById('error-msg');
                     if (el) {
-                        el.textContent = '⏱ Session หมดอายุ — กรุณาเข้าสู่ระบบใหม่';
+                        el.textContent = '⏱ Your session expired — please log in again';
                         el.classList.add('show');
                     }
                 } else if (q.get('loggedout') === '1') {
@@ -318,7 +318,7 @@
                     if (el) {
                         // Soften the styling for "successful logout" — same
                         // element, neutral text, no scary red.
-                        el.textContent = '✓ ออกจากระบบเรียบร้อยแล้ว';
+                        el.textContent = '✓ Logged out';
                         el.classList.add('show');
                         el.style.background = 'rgba(34, 197, 94, 0.10)';
                         el.style.borderColor = 'rgba(34, 197, 94, 0.30)';
@@ -346,7 +346,7 @@
             const btn = document.getElementById('login-btn');
 
             btn.disabled = true;
-            btn.textContent = 'กำลังตรวจสอบ...';
+            btn.textContent = 'Signing in...';
 
             try {
                 const result = await Auth.login(username, password);
@@ -356,7 +356,7 @@
                         ? '🔒 ' + (result.error || 'Account locked')
                         : (result.error || 'Invalid credentials'));
                     btn.disabled = false;
-                    btn.textContent = 'เข้าสู่ระบบ';
+                    btn.textContent = 'Log in';
                     return;
                 }
                 // Phase 8: forced password change → go to dedicated page first
@@ -366,9 +366,9 @@
                 }
                 window.location.href = result.session.role === 'admin' ? 'admin.html' : 'index.html';
             } catch (e) {
-                showError('เกิดข้อผิดพลาด กรุณาลองใหม่');
+                showError('Something went wrong. Please try again.');
                 btn.disabled = false;
-                btn.textContent = 'เข้าสู่ระบบ';
+                btn.textContent = 'Log in';
             }
         }
 
