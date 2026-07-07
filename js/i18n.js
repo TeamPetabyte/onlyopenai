@@ -870,7 +870,7 @@
       'u.history.emptyTitle': 'No chat history yet',
       'u.history.emptySub': 'Ask anything about SAP / ABAP — chats will show up here',
       'u.history.startFirst': '+ Start first chat',
-      'u.cap.todayUsage': "Today's Usage",
+      'u.cap.todayUsage': 'Today Usage',
       'u.cap.noLimit': 'No limit',
       'u.balance.projectCredit': 'Project Credit',
       'u.theme.toggleAria': 'Toggle light/dark mode',
