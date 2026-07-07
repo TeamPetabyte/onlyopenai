@@ -2814,20 +2814,13 @@ app.get('/api/cost-by-day', requireAdmin, async (req, res) => {
                        COALESCE(SUM(r.input_tokens),         0)                    AS input_tokens,
                        COALESCE(SUM(r.input_cached_tokens),  0)                    AS cached_tokens,
                        COALESCE(SUM(r.output_tokens),        0)                    AS output_tokens,
-                       -- Phase 16.9: cached portion is billed at cached_input_rate
-                       -- (default = input_rate × 0.5). Cost = nonCached × inRate
-                       --                                   + cached    × cachedRate
-                       --                                   + output    × outRate.
-                       COALESCE(SUM(
-                           (GREATEST(r.input_tokens - COALESCE(r.input_cached_tokens,0), 0) / 1000.0)
-                               * COALESCE(p.input_rate, 0.50) +
-                           (COALESCE(r.input_cached_tokens, 0) / 1000.0)
-                               * COALESCE(p.cached_input_rate, COALESCE(p.input_rate,0.50)*0.5) +
-                           (r.output_tokens / 1000.0)
-                               * COALESCE(p.output_rate, 1.50)
-                       ), 0)                                                        AS cost
+                       -- Phase 30: price from tbl_pricing (was tbl_project.input_rate/
+                       -- output_rate — the legacy per-project columns, which could
+                       -- disagree with tbl_daily_usage / what was actually charged).
+                       ROUND(COALESCE(SUM(${PRICING_PRICE_EXPR_RAW}), 0)::numeric, 2) AS cost
                 FROM tbl_response r
                 JOIN tbl_project  p ON p.project_id = r.project_id
+                ${PRICING_LATERAL_JOIN}
                 WHERE r.created_at::date >= CURRENT_DATE - ($1::int - 1)
                   ${filter}
                 GROUP BY r.created_at::date
@@ -3366,21 +3359,47 @@ app.get('/api/quota-status', requireAuth, async (req, res) => {
 // GET /api/history?userId=1
 // Phase 6 fix: was joining r.project_id = u.project_id, which leaked history across
 // users sharing a project. Now joins on r.user_id directly.
+// Phase 30: shared LATERAL join that finds the tbl_pricing row active at
+// r.created_at for r.model — same rate-resolution logic as
+// fn_build_daily_usage() (the function that feeds tbl_daily_usage /
+// spentToday(), i.e. the numbers actually deducted from the pool). Every
+// endpoint that displays a cost to users now joins through this instead of
+// the legacy tbl_project.input_rate/output_rate columns, so the numbers
+// agree everywhere instead of drifting between two rate sources.
+const PRICING_LATERAL_JOIN = `
+    LEFT JOIN LATERAL (
+        SELECT pr2.*
+        FROM tbl_pricing pr2
+        WHERE pr2.model = r.model
+        ORDER BY
+            (CASE WHEN pr2.effective_from <= (r.created_at AT TIME ZONE 'Asia/Bangkok')
+                   AND (pr2.effective_to IS NULL OR pr2.effective_to > (r.created_at AT TIME ZONE 'Asia/Bangkok'))
+                  THEN 0 ELSE 1 END),
+            ABS(EXTRACT(EPOCH FROM (pr2.effective_from - (r.created_at AT TIME ZONE 'Asia/Bangkok'))))
+        LIMIT 1
+    ) pr ON TRUE`;
+// Raw (unrounded) per-row price — for SUM(...) aggregates, round the total
+// once at the end (matches fn_build_daily_usage's ROUND(SUM(...), n)
+// pattern) rather than rounding each row first and compounding drift.
+const PRICING_PRICE_EXPR_RAW = `
+    (
+        (GREATEST(r.input_tokens - COALESCE(r.input_cached_tokens, 0), 0) / 1000.0)
+            * COALESCE(pr.input_price, 0.50)
+      + (COALESCE(r.input_cached_tokens, 0) / 1000.0)
+            * COALESCE(pr.cached_price, COALESCE(pr.input_price, 0.50) * 0.5)
+      + (r.output_tokens / 1000.0)
+            * COALESCE(pr.output_price, 1.50)
+    )`;
+// Per-row display value (e.g. one line in a history table) — rounded to 2dp.
+const PRICING_COST_EXPR = `ROUND((${PRICING_PRICE_EXPR_RAW})::numeric, 2)`;
+
 app.get('/api/history', requireAuth, async (req, res) => {
     // Phase 16.9: aliases so the legacy frontend (which reads h.prompt /
     // h.response / h.cost) keeps working despite tbl_response naming the
     // columns input_param / output_param and not storing cost at all.
-    // Cost is COMPUTED here from token counts × project rates, with the
-    // cached portion discounted by cached_input_rate.
-    const costExpr = `
-        (
-            (GREATEST(r.input_tokens - COALESCE(r.input_cached_tokens, 0), 0) / 1000.0)
-                * COALESCE(p.input_rate, 0.50)
-          + (COALESCE(r.input_cached_tokens, 0) / 1000.0)
-                * COALESCE(p.cached_input_rate, COALESCE(p.input_rate, 0.50) * 0.5)
-          + (r.output_tokens / 1000.0)
-                * COALESCE(p.output_rate, 1.50)
-        )`;
+    // Cost is COMPUTED here from token counts × tbl_pricing (Phase 30 —
+    // was tbl_project.input_rate/output_rate, which could disagree with
+    // what was actually charged).
     try {
         const { userId } = req.query;
         let r;
@@ -3391,11 +3410,12 @@ app.get('/api/history', requireAuth, async (req, res) => {
                        r.output_param AS response,
                        r.input_cached_tokens     AS cached_tokens,
                        r.output_reasoning_tokens AS reasoning_tokens,
-                       ${costExpr} AS cost,
+                       ${PRICING_COST_EXPR} AS cost,
                        u.username, (u.name||' '||u.surname) AS display_name
                 FROM tbl_response r
                 LEFT JOIN tbl_user    u ON r.user_id    = u.user_id
                 LEFT JOIN tbl_project p ON r.project_id = p.project_id
+                ${PRICING_LATERAL_JOIN}
                 WHERE r.user_id = $1
                 ORDER BY r.created_at DESC LIMIT 100`, [userId]);
         } else {
@@ -3405,11 +3425,12 @@ app.get('/api/history', requireAuth, async (req, res) => {
                        r.output_param AS response,
                        r.input_cached_tokens     AS cached_tokens,
                        r.output_reasoning_tokens AS reasoning_tokens,
-                       ${costExpr} AS cost,
+                       ${PRICING_COST_EXPR} AS cost,
                        u.username, (u.name||' '||u.surname) AS display_name
                 FROM tbl_response r
                 JOIN tbl_project p ON r.project_id = p.project_id
                 LEFT JOIN tbl_user u ON r.user_id = u.user_id
+                ${PRICING_LATERAL_JOIN}
                 ORDER BY r.created_at DESC LIMIT 200`);
         }
         res.json({ ok: true, history: r.rows });

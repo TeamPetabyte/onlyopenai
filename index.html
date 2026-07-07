@@ -2913,7 +2913,11 @@
                 },
                 async result => {
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
-                    const cost = result.cost != null ? result.cost : (result.inputTokens / 1000) * rates.inputRate + (result.outputTokens / 1000) * rates.outputRate;
+                    // Phase 30: trust the server's cost (tbl_pricing-based, same
+                    // source tbl_daily_usage/spentToday uses) — no more local
+                    // recompute off the legacy tbl_project rates, which could
+                    // disagree with what was actually charged.
+                    const cost = result.cost != null ? result.cost : 0;
 
                     // Finalize bubble: render markdown, highlight code, attach copy/regenerate
                     if (responseMsgEl && streamBubble) {
