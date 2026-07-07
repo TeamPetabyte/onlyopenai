@@ -48,8 +48,16 @@
 
     const API_BASE = resolveBase();
 
+    // Single source of truth for the version shown in the UI (sidebar
+    // footer on index.html / admin.html). Bump this alongside the git tag
+    // whenever a release ships — e.g. `git tag -a v1.1.0` → APP_VERSION here
+    // should read 'v1.1.0' too, so what the tag says matches what the app
+    // shows on screen.
+    const APP_VERSION = 'v1.0.0';
+
     window.AppConfig = {
         API_BASE: API_BASE,
+        VERSION: APP_VERSION,
         api: function (path) {
             if (!path) return API_BASE;
             return API_BASE + (path.charAt(0) === '/' ? path : '/' + path);

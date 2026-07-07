@@ -95,6 +95,11 @@ var admin = {
   init: function () {
     Auth.initDefaults();
     var self = this;
+    // Show the app version in the sidebar footer (single source of truth:
+    // js/config.js AppConfig.VERSION — bump it alongside the git tag when
+    // a release ships).
+    var verEl = document.getElementById('app-version');
+    if (verEl) verEl.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
     // Load projects from DB first so project dropdowns / lookups work everywhere
     this.fetchProjectsFromDB().then(function () {
       // Phase 19.4: restore the last-visited view from the URL hash so a

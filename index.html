@@ -223,6 +223,13 @@
             gap: 8px;
             margin-top: 10px;
         }
+        .app-version {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 0.68rem;
+            color: var(--text-3);
+            user-select: none;
+        }
         .theme-toggle-btn {
             flex: 1;
             display: inline-flex;
@@ -1866,6 +1873,7 @@
                     <span id="lang-toggle-label">TH</span>
                 </button>
             </div>
+            <div class="app-version" id="app-version"></div>
         </div>
     </aside>
 
@@ -2066,6 +2074,14 @@
         // BASE comes from js/config.js (window.BASE) — loaded before this script.
         // Fallback to localhost only if config.js failed to load.
         if (typeof BASE === 'undefined') { var BASE = (window.AppConfig && window.AppConfig.API_BASE) || 'http://localhost:3001'; }
+
+        // Show the app version in the sidebar footer (single source of
+        // truth: js/config.js AppConfig.VERSION — bump it alongside the
+        // git tag when a release ships).
+        (function () {
+            const el = document.getElementById('app-version');
+            if (el) el.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
+        })();
 
         // Phase 12: new API shape.
         //   list    → GET    /api/chat/sessions           → { sessions: [...] }
