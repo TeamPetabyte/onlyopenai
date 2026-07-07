@@ -8,6 +8,7 @@
  *        data-i18n-html="key"   → sets element.innerHTML (use sparingly)
  *        data-i18n-ph="key"     → sets the `placeholder` attribute
  *        data-i18n-title="key"  → sets the `title` attribute
+ *        data-i18n-aria="key"   → sets the `aria-label` attribute
  *  - JS code can translate on the fly with  I18N.t('key')  (falls back to the
  *    key text or a provided default if missing).
  *  - The chosen language is persisted in localStorage ('agenthub_lang') and
@@ -15,7 +16,8 @@
  *  - Switching fires a window 'i18n:change' event so render code can refresh
  *    any strings it produced imperatively.
  *
- * Default language = 'th' (the UI was authored in Thai).
+ * Default language = 'th' (the UI was authored in Thai), except pages that
+ * set window.I18N_DEFAULT_LANG = 'en' before this script loads (index.html).
  */
 (function (global) {
   var STORAGE_KEY = 'agenthub_lang';
@@ -411,6 +413,90 @@
       'empty.noUsersMatchFilter': 'ไม่พบ user ที่ตรงกับตัวกรอง',
       'lbl.showingUsersFiltered': '· แสดง {shown} จาก {total} users',
       'lbl.showingUsersTotal': '· แสดง {shown}/{total} users',
+
+      // Phase 27: user chat page (index.html) i18n
+      'u.search.ph': 'ค้นหา (Ctrl+K)',
+      'u.search.clear': 'ล้าง',
+      'u.history.emptyTitle': 'ยังไม่มีประวัติแชท',
+      'u.history.emptySub': 'เริ่มถามอะไรเกี่ยวกับ SAP / ABAP — แชทจะมาเก็บอยู่ตรงนี้',
+      'u.history.startFirst': '+ เริ่มแชทแรก',
+      'u.balance.projectCredit': 'เครดิตโครงการ',
+      'u.theme.toggleAria': 'สลับโหมดสว่าง/มืด',
+      'u.menu.openAria': 'เปิดเมนู',
+      'u.chat.welcomeTitle': 'สวัสดี! PipekAI พร้อมช่วยแล้ว',
+      'u.chat.welcomeSub': 'ถามอะไรเกี่ยวกับ SAP / ABAP ก็ได้ — วาง code, error message, หรือถามทั่วไป แล้ว AI จะวิเคราะห์ให้อัตโนมัติ',
+      'u.chat.newRoomTitle': 'เริ่มแชทใหม่ในห้องนี้',
+      'u.chat.newRoomSub': 'พิมพ์คำถามด้านล่างเพื่อเริ่มสนทนา',
+      'u.chat.inputPh': 'พิมพ์คำถามของคุณ...',
+      'u.quota.nearLimit': 'ใช้โควต้าวันนี้ใกล้ครบแล้ว',
+      'u.quota.requestMore': '📨 ขอเพิ่มโควต้า',
+      'u.usage.title': 'สรุปการใช้งาน',
+      'u.usage.creditLeft': 'เครดิตคงเหลือ',
+      'u.usage.cost': 'ค่าใช้จ่าย',
+      'btn.close': 'ปิด',
+      'u.pw.title': 'เปลี่ยนรหัสผ่าน',
+      'u.pw.newLabel': 'รหัสผ่านใหม่',
+      'u.pw.newPh': 'กรอกรหัสผ่านใหม่...',
+      'u.pw.confirmLabel': 'ยืนยันรหัสผ่าน',
+      'u.pw.confirmPh': 'กรอกรหัสผ่านซ้ำ...',
+      'u.delChat.title': 'ลบประวัติแชทนี้?',
+      'u.delChat.body': 'จะถูกลบถาวร — <b>ข้อความและคำตอบทั้งหมดจะหายไป</b> และกู้คืนไม่ได้',
+      'u.sess.rename': 'เปลี่ยนชื่อ',
+      'u.sess.exportMd': 'บันทึกเป็น .md',
+      'u.sess.unfavorite': 'เลิกปักหมุด',
+      'u.sess.favorite': 'ปักหมุด (Favorite)',
+      'u.sess.titleAriaLabel': 'ชื่อแชท',
+      'u.sess.renameSuccess': 'เปลี่ยนชื่อเรียบร้อย',
+      'u.sess.renameFailed': 'เปลี่ยนชื่อไม่สำเร็จ',
+      'u.sess.exportFailed': 'Export ไม่สำเร็จ',
+      'u.sess.pinned': '⭐ ปักหมุดแชทแล้ว',
+      'u.sess.unpinned': '☆ ยกเลิกการปักหมุด',
+      'u.sess.pinFailedPrefix': 'ปักหมุดไม่สำเร็จ: ',
+      'u.sess.deleteFailedHttp': 'ลบไม่สำเร็จ (HTTP {code})',
+      'u.sess.deleted': 'ลบแชทเรียบร้อย',
+      'u.sess.searchNoResultsTitle': 'ไม่พบผลลัพธ์',
+      'u.sess.searchNoResultsSub': 'ลองคำค้นอื่น หรือเช็คการสะกด',
+      'u.sess.searchResultsCount': 'ผลการค้นหา ({n})',
+      'date.today': 'วันนี้',
+      'date.yesterday': 'เมื่อวาน',
+      'date.last7days': '7 วันที่ผ่านมา',
+      'date.thisMonth': 'เดือนนี้',
+      'date.older': 'เก่ากว่านี้',
+      'u.err.loadPartialFailed': 'โหลดข้อมูลบางส่วนไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ',
+      'u.err.pleaseWait': 'กรุณารอให้ AI ตอบเสร็จก่อน',
+      'u.err.sessionNotFound': 'ไม่พบ session นี้',
+      'u.err.enterMessage': 'กรุณาใส่ข้อความก่อน',
+      'u.err.creditDepletedContactAdmin': '⛔ เครดิตหมด — ติดต่อ admin เพื่อเติมเครดิต',
+      'u.send.ariaLabel': 'ส่ง',
+      'u.stop.ariaLabel': 'หยุด',
+      'u.stop.stoppedGenerating': '⏹ หยุดการสร้างแล้ว',
+      'u.done': '✅ เสร็จแล้ว',
+      'u.block.poolEmptyTitle': '⛔ เครดิตโครงการหมด',
+      'u.block.poolEmptyBody': 'กรุณาติดต่อผู้ดูแลระบบเพื่อเติมเงินเข้าโครงการ',
+      'u.block.capHitTitle': '⛔ ใช้ครบโควต้ารายวันแล้ว',
+      'u.block.capHitBody': 'วันนี้ใช้ไป ฿{spent} / ฿{cap} — reset อัตโนมัติเที่ยงคืน',
+      'u.block.sendFailedTitle': '⚠ ส่งข้อความไม่สำเร็จ',
+      'u.block.tryAgain': 'ลองอีกครั้ง',
+      'u.quota.promptAmount': 'ขอเพิ่มโควต้าเท่าไหร่ (บาท)?',
+      'u.quota.invalidAmount': 'จำนวนไม่ถูกต้อง',
+      'u.quota.promptReason': 'เหตุผล (optional):',
+      'u.quota.requestFailed': 'ส่งคำขอไม่สำเร็จ',
+      'u.quota.requestSent': '✅ ส่งคำขอแล้ว — รอ admin อนุมัติ',
+      'u.balance.lowWarn': '⚠ เครดิตใกล้หมด (เหลือ ฿{v})',
+      'u.quota.capReachedFull': '⛔ ใช้ครบโควต้ารายวันแล้ว (฿{spent} / ฿{cap}) — ส่งข้อความใหม่จะถูกบล็อก',
+      'u.quota.usedPercent': '⚠ ใช้โควต้าวันนี้ {pct}% แล้ว (฿{spent} / ฿{cap}) — เหลือ ฿{remaining}',
+      'u.file.chooseFiles': 'เลือกไฟล์ (.txt)',
+      'u.file.tooLarge': 'ไฟล์ใหญ่เกินไป ({kb} KB) — สูงสุด 256 KB',
+      'u.file.readFailed': 'อ่านไฟล์ไม่สำเร็จ',
+      'u.newMessage': '↓ ข้อความใหม่',
+      'u.regen.ariaLabel': 'สร้างคำตอบใหม่',
+      'u.regen.noPrevQuestion': 'ไม่มีคำถามเดิมให้สร้างใหม่',
+      'u.pw.enterNew': 'กรุณาใส่ password ใหม่',
+      'u.pw.changeFailedPrefix': 'เปลี่ยน password ไม่สำเร็จ: ',
+      'u.err.somethingWrong': 'เกิดข้อผิดพลาด',
+      'u.pw.changed': 'เปลี่ยน Password เรียบร้อย',
+      'u.theme.switchToLight': 'สลับเป็น Light mode',
+      'u.theme.switchToDark': 'สลับเป็น Dark mode',
     },
     en: {
       'nav.dashboard': 'Dashboard',
@@ -775,6 +861,90 @@
       'empty.noUsersMatchFilter': 'No users match the filter',
       'lbl.showingUsersFiltered': '· Showing {shown} of {total} users',
       'lbl.showingUsersTotal': '· Showing {shown}/{total} users',
+
+      // Phase 27: user chat page (index.html) i18n
+      'u.search.ph': 'Search (Ctrl+K)',
+      'u.search.clear': 'Clear',
+      'u.history.emptyTitle': 'No chat history yet',
+      'u.history.emptySub': 'Ask anything about SAP / ABAP — chats will show up here',
+      'u.history.startFirst': '+ Start first chat',
+      'u.balance.projectCredit': 'Project Credit',
+      'u.theme.toggleAria': 'Toggle light/dark mode',
+      'u.menu.openAria': 'Open menu',
+      'u.chat.welcomeTitle': 'Hi! PipekAI is ready to help',
+      'u.chat.welcomeSub': 'Ask anything about SAP / ABAP — paste code, an error message, or ask a general question and the AI will analyze it automatically',
+      'u.chat.newRoomTitle': 'Start a new chat',
+      'u.chat.newRoomSub': 'Type your question below to start the conversation',
+      'u.chat.inputPh': 'Enter your question',
+      'u.quota.nearLimit': "You're close to today's quota limit",
+      'u.quota.requestMore': '📨 Request more quota',
+      'u.usage.title': 'Usage Summary',
+      'u.usage.creditLeft': 'Remaining Credit',
+      'u.usage.cost': 'Cost',
+      'btn.close': 'Close',
+      'u.pw.title': 'Change Password',
+      'u.pw.newLabel': 'New Password',
+      'u.pw.newPh': 'Enter new password...',
+      'u.pw.confirmLabel': 'Confirm Password',
+      'u.pw.confirmPh': 'Re-enter password...',
+      'u.delChat.title': 'Delete this chat?',
+      'u.delChat.body': 'will be permanently deleted — <b>all messages and responses will be lost</b> and cannot be recovered',
+      'u.sess.rename': 'Rename',
+      'u.sess.exportMd': 'Save as .md',
+      'u.sess.unfavorite': 'Unpin',
+      'u.sess.favorite': 'Pin (Favorite)',
+      'u.sess.titleAriaLabel': 'Chat name',
+      'u.sess.renameSuccess': 'Renamed',
+      'u.sess.renameFailed': 'Rename failed',
+      'u.sess.exportFailed': 'Export failed',
+      'u.sess.pinned': '⭐ Chat pinned',
+      'u.sess.unpinned': '☆ Unpinned',
+      'u.sess.pinFailedPrefix': 'Pin failed: ',
+      'u.sess.deleteFailedHttp': 'Delete failed (HTTP {code})',
+      'u.sess.deleted': 'Chat deleted',
+      'u.sess.searchNoResultsTitle': 'No results found',
+      'u.sess.searchNoResultsSub': 'Try a different search term or check spelling',
+      'u.sess.searchResultsCount': 'Search results ({n})',
+      'date.today': 'Today',
+      'date.yesterday': 'Yesterday',
+      'date.last7days': 'Last 7 days',
+      'date.thisMonth': 'This month',
+      'date.older': 'Older',
+      'u.err.loadPartialFailed': 'Some data failed to load — check your connection',
+      'u.err.pleaseWait': 'Please wait for the AI to finish answering',
+      'u.err.sessionNotFound': 'Session not found',
+      'u.err.enterMessage': 'Please enter a message first',
+      'u.err.creditDepletedContactAdmin': '⛔ Out of credit — contact admin to top up',
+      'u.send.ariaLabel': 'Send',
+      'u.stop.ariaLabel': 'Stop',
+      'u.stop.stoppedGenerating': '⏹ Stopped generating',
+      'u.done': '✅ Done',
+      'u.block.poolEmptyTitle': '⛔ Project credit depleted',
+      'u.block.poolEmptyBody': 'Please contact the administrator to top up the project',
+      'u.block.capHitTitle': '⛔ Daily quota reached',
+      'u.block.capHitBody': 'Used ฿{spent} / ฿{cap} today — resets automatically at midnight',
+      'u.block.sendFailedTitle': '⚠ Message failed to send',
+      'u.block.tryAgain': 'Try again',
+      'u.quota.promptAmount': 'How much extra quota do you need (THB)?',
+      'u.quota.invalidAmount': 'Invalid amount',
+      'u.quota.promptReason': 'Reason (optional):',
+      'u.quota.requestFailed': 'Request failed',
+      'u.quota.requestSent': '✅ Request sent — waiting for admin approval',
+      'u.balance.lowWarn': '⚠ Low credit (฿{v} left)',
+      'u.quota.capReachedFull': '⛔ Daily quota reached (฿{spent} / ฿{cap}) — new messages will be blocked',
+      'u.quota.usedPercent': "⚠ Used {pct}% of today's quota (฿{spent} / ฿{cap}) — ฿{remaining} left",
+      'u.file.chooseFiles': 'Choose Files (.txt)',
+      'u.file.tooLarge': 'File too large ({kb} KB) — max 256 KB',
+      'u.file.readFailed': 'Failed to read file',
+      'u.newMessage': '↓ New message',
+      'u.regen.ariaLabel': 'Regenerate answer',
+      'u.regen.noPrevQuestion': 'No previous question to regenerate',
+      'u.pw.enterNew': 'Please enter a new password',
+      'u.pw.changeFailedPrefix': 'Password change failed: ',
+      'u.err.somethingWrong': 'Something went wrong',
+      'u.pw.changed': 'Password changed',
+      'u.theme.switchToLight': 'Switch to Light mode',
+      'u.theme.switchToDark': 'Switch to Dark mode',
     },
   };
 
@@ -784,7 +954,12 @@
     init: function () {
       var saved = null;
       try { saved = localStorage.getItem(STORAGE_KEY); } catch (_) {}
-      this.lang = (saved === 'en' || saved === 'th') ? saved : 'th';
+      // Phase 27: pages can request a different fallback (when nothing is
+      // saved yet) by setting window.I18N_DEFAULT_LANG before this script
+      // loads. index.html sets 'en'; admin.html leaves it unset → 'th'.
+      var fallback = (global.I18N_DEFAULT_LANG === 'en' || global.I18N_DEFAULT_LANG === 'th')
+          ? global.I18N_DEFAULT_LANG : 'th';
+      this.lang = (saved === 'en' || saved === 'th') ? saved : fallback;
       return this.lang;
     },
 
@@ -823,6 +998,11 @@
       });
       scope.querySelectorAll('[data-i18n-title]').forEach(function (el) {
         el.setAttribute('title', self.t(el.getAttribute('data-i18n-title')));
+      });
+      // Phase 27: data-i18n-aria — sets aria-label (buttons/icons with no
+      // visible text still need a translated accessible name).
+      scope.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
+        el.setAttribute('aria-label', self.t(el.getAttribute('data-i18n-aria')));
       });
       // reflect on <html lang="">
       try { document.documentElement.setAttribute('lang', this.lang); } catch (_) {}

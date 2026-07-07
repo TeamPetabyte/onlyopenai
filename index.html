@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8" />
@@ -1569,32 +1569,55 @@
             font-size: 1rem;
             font-weight: 600;
             margin-bottom: 18px;
-            color: #1a1a1a;
+            color: var(--pb-text-1);
+        }
+
+        .usage-hero {
+            background: linear-gradient(135deg, var(--pb-accent-soft) 0%, var(--pb-surface-2) 100%);
+            border: 1px solid var(--pb-accent-line);
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 10px;
+        }
+
+        .usage-hero-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-3);
+            margin-bottom: 6px;
+        }
+
+        .usage-hero-value {
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: var(--pb-accent);
+            letter-spacing: -0.01em;
         }
 
         .usage-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
             margin-bottom: 18px;
         }
 
         .usage-card {
-            background: #f5f5f5;
+            background: var(--pb-surface-2);
             border-radius: 9px;
-            padding: 13px;
+            padding: 12px 8px;
+            text-align: center;
         }
 
         .usage-card-label {
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             color: var(--text-3);
             margin-bottom: 4px;
         }
 
         .usage-card-value {
-            font-size: 1.15rem;
+            font-size: 1rem;
             font-weight: 700;
-            color: #1a1a1a;
+            color: var(--pb-text-1);
         }
 
         .form-group {
@@ -1793,22 +1816,22 @@
                 <circle cx="11" cy="11" r="7" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input type="text" id="history-search" class="history-search" placeholder="ค้นหา (Ctrl+K)" oninput="onSearchInput(this.value)" onkeydown="onSearchKey(event)" autocomplete="off" spellcheck="false" />
-            <button type="button" id="history-search-clear" class="history-search-clear" onclick="clearSearch()" title="ล้าง" aria-label="ล้าง" style="display:none">×</button>
+            <input type="text" id="history-search" class="history-search" data-i18n-ph="u.search.ph" placeholder="Search (Ctrl+K)" oninput="onSearchInput(this.value)" onkeydown="onSearchKey(event)" autocomplete="off" spellcheck="false" />
+            <button type="button" id="history-search-clear" class="history-search-clear" onclick="clearSearch()" data-i18n-title="u.search.clear" data-i18n-aria="u.search.clear" title="Clear" aria-label="Clear" style="display:none">×</button>
         </div>
         <div class="history-list" id="history-list">
             <!-- Phase 19.8: nicer first-load empty state -->
             <div class="history-empty">
                 <div class="he-icon">💬</div>
-                <div class="he-title">ยังไม่มีประวัติแชท</div>
-                <div class="he-sub">เริ่มถามอะไรเกี่ยวกับ SAP / ABAP — แชทจะมาเก็บอยู่ตรงนี้</div>
-                <button type="button" class="he-cta" onclick="newChat()">+ เริ่มแชทแรก</button>
+                <div class="he-title" data-i18n="u.history.emptyTitle">No chat history yet</div>
+                <div class="he-sub" data-i18n="u.history.emptySub">Ask anything about SAP / ABAP — chats will show up here</div>
+                <button type="button" class="he-cta" onclick="newChat()" data-i18n="u.history.startFirst">+ Start first chat</button>
             </div>
         </div>
 
         <div class="sidebar-bottom">
             <div class="balance-card" id="balance-card">
-                <div class="balance-label">เครดิตโครงการ</div>
+                <div class="balance-label" data-i18n="u.balance.projectCredit">Project Credit</div>
                 <div class="balance-amount" id="sidebar-balance">฿—</div>
                 <div class="balance-project" id="sidebar-project-label">—</div>
                 <!-- Phase 19.8: low-balance warning row (hidden by default) -->
@@ -1818,7 +1841,7 @@
             <div class="theme-toggle-row">
                 <button type="button" class="theme-toggle-btn" id="theme-toggle-btn"
                         onclick="toggleTheme()"
-                        aria-label="สลับโหมดสว่าง/มืด" aria-pressed="false">
+                        data-i18n-aria="u.theme.toggleAria" aria-label="Toggle light/dark mode" aria-pressed="false">
                     <svg id="theme-icon-moon" width="14" height="14" viewBox="0 0 24 24"
                          fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
@@ -1829,7 +1852,18 @@
                         <circle cx="12" cy="12" r="4.5" />
                         <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
                     </svg>
-                    <span id="theme-toggle-label">Dark Mode</span>
+                    <span id="theme-toggle-label" data-i18n="theme.dark">Dark Mode</span>
+                </button>
+            </div>
+            <!-- Phase 27: language toggle (EN ⇄ TH) -->
+            <div class="theme-toggle-row">
+                <button type="button" class="theme-toggle-btn" id="lang-toggle-btn"
+                        onclick="I18N.toggle()" aria-label="Toggle language">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    <span id="lang-toggle-label">TH</span>
                 </button>
             </div>
         </div>
@@ -1841,7 +1875,7 @@
     <div class="main">
         <div class="topbar">
             <!-- Phase 19.3: hamburger toggles sidebar drawer on mobile -->
-            <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="เปิดเมนู">
+            <button class="mobile-menu-btn" onclick="toggleSidebar()" data-i18n-aria="u.menu.openAria" aria-label="Open menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                     <line x1="3" y1="6" x2="21" y2="6"/>
                     <line x1="3" y1="12" x2="21" y2="12"/>
@@ -1868,8 +1902,8 @@
         <div class="chat-area" id="chat-area">
             <div class="chat-empty" id="chat-empty">
                 <img class="chat-empty-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
-                <div class="chat-empty-title">สวัสดี! PipekAI พร้อมช่วยแล้ว</div>
-                <div class="chat-empty-sub">ถามอะไรเกี่ยวกับ SAP / ABAP ก็ได้ — วาง code, error message, หรือถามทั่วไป แล้ว AI จะวิเคราะห์ให้อัตโนมัติ</div>
+                <div class="chat-empty-title" data-i18n="u.chat.welcomeTitle">Hi! PipekAI is ready to help</div>
+                <div class="chat-empty-sub" data-i18n="u.chat.welcomeSub">Ask anything about SAP / ABAP — paste code, an error message, or ask a general question and the AI will analyze it automatically</div>
             </div>
         </div>
 
@@ -1877,9 +1911,9 @@
             <!-- Phase 21.10: quota warning banner (shown when used ≥ 80% of cap) -->
             <div id="quota-warn-banner" class="quota-warn-banner">
                 <span>⚠</span>
-                <span id="quota-warn-text" style="flex:1">ใช้โควต้าวันนี้ใกล้ครบแล้ว</span>
+                <span id="quota-warn-text" style="flex:1" data-i18n="u.quota.nearLimit">You're close to today's quota limit</span>
                 <button type="button" id="quota-warn-btn" class="quota-warn-req-btn"
-                    onclick="openQuotaRequestModal()">📨 ขอเพิ่มโควต้า</button>
+                    onclick="openQuotaRequestModal()" data-i18n="u.quota.requestMore">📨 Request more quota</button>
             </div>
             <div class="input-top">
                 <button class="file-btn" onclick="document.getElementById('file-input').click()">
@@ -1888,15 +1922,15 @@
                         <path
                             d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
                     </svg>
-                    Choose Files (.txt)
+                    <span data-i18n="u.file.chooseFiles">Choose Files (.txt)</span>
                 </button>
                 <div id="attached-file-display"></div>
             </div>
             <input type="file" id="file-input" accept=".txt" style="display:none" onchange="handleFileSelect(event)" />
             <div class="input-row">
-                <textarea class="chat-input" id="chat-input" placeholder="Enter your question" rows="1"
+                <textarea class="chat-input" id="chat-input" data-i18n-ph="u.chat.inputPh" placeholder="Enter your question" rows="1"
                     onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
-                <button class="send-btn" id="send-btn" onclick="onSendBtnClick()" aria-label="Send">
+                <button class="send-btn" id="send-btn" onclick="onSendBtnClick()" data-i18n-aria="u.send.ariaLabel" aria-label="Send">
                     <svg class="btn-send-ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
                         <line x1="22" y1="2" x2="11" y2="13" />
                         <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -1914,39 +1948,39 @@
     <!-- Usage Modal -->
     <div class="overlay" id="usage-modal" onclick="overlayClick(event,'usage-modal')">
         <div class="modal">
-            <div class="modal-title">Usage Summary</div>
+            <div class="modal-title" data-i18n="u.usage.title">Usage Summary</div>
+            <div class="usage-hero">
+                <div class="usage-hero-label" data-i18n="u.usage.creditLeft">Remaining Credit</div>
+                <div class="usage-hero-value" id="usage-balance">฿ —</div>
+            </div>
             <div class="usage-grid">
                 <div class="usage-card">
-                    <div class="usage-card-label">เครดิตคงเหลือ</div>
-                    <div class="usage-card-value" id="usage-balance">฿—</div>
-                </div>
-                <div class="usage-card">
-                    <div class="usage-card-label">Requests ทั้งหมด</div>
+                    <div class="usage-card-label">Requests</div>
                     <div class="usage-card-value" id="usage-requests">0</div>
                 </div>
                 <div class="usage-card">
-                    <div class="usage-card-label">Tokens ทั้งหมด</div>
+                    <div class="usage-card-label">Tokens</div>
                     <div class="usage-card-value" id="usage-tokens">0</div>
                 </div>
                 <div class="usage-card">
-                    <div class="usage-card-label">ค่าใช้จ่ายทั้งหมด</div>
-                    <div class="usage-card-value" id="usage-cost">฿0.00</div>
+                    <div class="usage-card-label" data-i18n="u.usage.cost">Cost</div>
+                    <div class="usage-card-value" id="usage-cost">฿ 0.00</div>
                 </div>
             </div>
-            <button class="btn-secondary" onclick="closeOverlay('usage-modal')">ปิด</button>
+            <button class="btn-secondary" onclick="closeOverlay('usage-modal')" data-i18n="btn.close">Close</button>
         </div>
     </div>
 
     <!-- Change Password Modal -->
     <div class="overlay" id="password-modal" onclick="overlayClick(event,'password-modal')">
         <div class="modal">
-            <div class="modal-title">Change Password</div>
-            <div class="form-group"><label class="form-label">Password ใหม่</label><input class="form-input"
-                    type="password" id="new-password" placeholder="กรอก password ใหม่..." /></div>
-            <div class="form-group"><label class="form-label">ยืนยัน Password</label><input class="form-input"
-                    type="password" id="confirm-password" placeholder="กรอกซ้ำ..." /></div>
-            <button class="btn-primary" onclick="changePassword()">บันทึก</button>
-            <button class="btn-secondary" onclick="closeOverlay('password-modal')">ยกเลิก</button>
+            <div class="modal-title" data-i18n="u.pw.title">Change Password</div>
+            <div class="form-group"><label class="form-label" data-i18n="u.pw.newLabel">New Password</label><input class="form-input"
+                    type="password" id="new-password" data-i18n-ph="u.pw.newPh" placeholder="Enter new password..." /></div>
+            <div class="form-group"><label class="form-label" data-i18n="u.pw.confirmLabel">Confirm Password</label><input class="form-input"
+                    type="password" id="confirm-password" data-i18n-ph="u.pw.confirmPh" placeholder="Re-enter password..." /></div>
+            <button class="btn-primary" onclick="changePassword()" data-i18n="btn.savePlain">Save</button>
+            <button class="btn-secondary" onclick="closeOverlay('password-modal')" data-i18n="btn.cancelTh">Cancel</button>
         </div>
     </div>
 
@@ -1958,20 +1992,25 @@
         onclick="cancelDeleteChat(event)"
         role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title">
         <div class="confirm-box" onclick="event.stopPropagation()">
-            <h3 class="confirm-title" id="confirm-delete-title">ลบประวัติแชทนี้?</h3>
+            <h3 class="confirm-title" id="confirm-delete-title" data-i18n="u.delChat.title">Delete this chat?</h3>
             <p class="confirm-desc">
                 <span id="confirm-delete-target" class="confirm-target-inline">—</span>
-                จะถูกลบถาวร — <b>ข้อความและคำตอบทั้งหมดจะหายไป</b> และกู้คืนไม่ได้
+                <span data-i18n-html="u.delChat.body">will be permanently deleted — <b>all messages and responses will be lost</b> and cannot be recovered</span>
             </p>
             <div class="confirm-actions">
-                <button class="btn-confirm-cancel" type="button" onclick="cancelDeleteChat()">Cancel</button>
-                <button class="btn-confirm-delete" type="button" id="confirm-delete-btn" onclick="confirmDeleteChat()">Delete</button>
+                <button class="btn-confirm-cancel" type="button" onclick="cancelDeleteChat()" data-i18n="btn.cancelTh">Cancel</button>
+                <button class="btn-confirm-delete" type="button" id="confirm-delete-btn" onclick="confirmDeleteChat()" data-i18n="btn.deletePlain">Delete</button>
             </div>
         </div>
     </div>
 
     <div class="toast-container" id="toast-container"></div>
 
+    <!-- Phase 27: default to English on this page until the user toggles
+         (must be set before i18n.js loads/reads it). admin.html leaves this
+         unset so it keeps defaulting to Thai. -->
+    <script>window.I18N_DEFAULT_LANG = 'en';</script>
+    <script src="js/i18n.js?v=phase27"></script>
     <!-- Chat UX polish: markdown rendering + XSS sanitization + syntax highlight -->
     <script src="js/vendor/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
@@ -2170,7 +2209,7 @@
             // Phase 19.3: tell the user once if any init fetch failed —
             // beats balance / history silently stuck at empty.
             if (initHadError) {
-                showToast('โหลดข้อมูลบางส่วนไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ', 'error');
+                showToast(t('u.err.loadPartialFailed'), 'error');
             }
 
             // Phase 19.4: restore the chat session from URL hash on refresh
@@ -2223,8 +2262,8 @@
             area.innerHTML = `
         <div class="chat-empty" id="chat-empty">
             <img class="chat-empty-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
-            <div class="chat-empty-title">สวัสดี! PipekAI พร้อมช่วยแล้ว</div>
-            <div class="chat-empty-sub">ถามอะไรเกี่ยวกับ SAP / ABAP ก็ได้ — วาง code, error message, หรือถามทั่วไป แล้ว AI จะวิเคราะห์ให้อัตโนมัติ</div>
+            <div class="chat-empty-title">${esc(t('u.chat.welcomeTitle'))}</div>
+            <div class="chat-empty-sub">${esc(t('u.chat.welcomeSub'))}</div>
         </div>`;
             renderSessionList();
             document.getElementById('chat-input').focus();
@@ -2245,11 +2284,11 @@
         }
 
         async function loadSession(sessionId) {
-            if (State.isRunning) { showToast('กรุณารอให้ AI ตอบเสร็จก่อน', 'error'); return; }
+            if (State.isRunning) { showToast(t('u.err.pleaseWait'), 'error'); return; }
             // Phase 19.3: close mobile drawer on session pick
             toggleSidebar(false);
             const res = await apiGetSession(sessionId);
-            if (!res) { showToast('ไม่พบ session นี้', 'error'); return; }
+            if (!res) { showToast(t('u.err.sessionNotFound'), 'error'); return; }
 
             // Phase 19.7.1: server returns BIGINT as string — coerce so the
             // active-highlight check `s.id === State.currentSessionId` matches
@@ -2299,8 +2338,8 @@
                 area.innerHTML = `
             <div class="chat-empty" id="chat-empty">
                 <div class="chat-empty-icon">💬</div>
-                <div class="chat-empty-title">เริ่มแชทใหม่ในห้องนี้</div>
-                <div class="chat-empty-sub">พิมพ์คำถามด้านล่างเพื่อเริ่มสนทนา</div>
+                <div class="chat-empty-title">${esc(t('u.chat.newRoomTitle'))}</div>
+                <div class="chat-empty-sub">${esc(t('u.chat.newRoomSub'))}</div>
             </div>`;
                 return;
             }
@@ -2348,8 +2387,9 @@
         function _renderSessionRow(s) {
             const active = s.id === State.currentSessionId ? 'active' : '';
             const isFav  = (s.isFavorite || s.is_favorite) ? 'is-favorite' : '';
-            const favLabel = (s.isFavorite || s.is_favorite) ? 'เลิกปักหมุด' : 'ปักหมุด (Favorite)';
+            const favLabel = (s.isFavorite || s.is_favorite) ? t('u.sess.unfavorite') : t('u.sess.favorite');
             const favIcon  = (s.isFavorite || s.is_favorite) ? '★' : '☆';
+            const renameLabel = t('u.sess.rename'), exportLabel = t('u.sess.exportMd'), delLabel = t('btn.deletePlain');
             return `<div class="session-item ${active} ${isFav}" data-sid="${s.id}"
                 onclick="loadSession(${s.id})"
                 onkeydown="handleSessionKey(event,${s.id})"
@@ -2358,9 +2398,9 @@
                 <span class="session-title" title="${esc(s.title)}" ondblclick="enterRenameMode(event,${s.id})">${esc(s.title)}</span>
                 <div class="session-actions">
                     <button class="session-act-btn session-fav" onclick="toggleFavorite(event,${s.id})" title="${favLabel}" aria-label="${favLabel}" aria-pressed="${!!(s.isFavorite || s.is_favorite)}">${favIcon}</button>
-                    <button class="session-act-btn" onclick="enterRenameMode(event,${s.id})" title="เปลี่ยนชื่อ" aria-label="เปลี่ยนชื่อ">✎</button>
-                    <button class="session-act-btn" onclick="exportSession(event,${s.id})" title="บันทึกเป็น .md" aria-label="Export">⬇</button>
-                    <button class="session-act-btn session-del" onclick="deleteSession(event,${s.id})" title="ลบ" aria-label="ลบ">×</button>
+                    <button class="session-act-btn" onclick="enterRenameMode(event,${s.id})" title="${renameLabel}" aria-label="${renameLabel}">✎</button>
+                    <button class="session-act-btn" onclick="exportSession(event,${s.id})" title="${exportLabel}" aria-label="Export">⬇</button>
+                    <button class="session-act-btn session-del" onclick="deleteSession(event,${s.id})" title="${delLabel}" aria-label="${delLabel}">×</button>
                 </div>
             </div>`;
         }
@@ -2375,16 +2415,16 @@
                     list.innerHTML =
                         '<div class="history-empty no-result">' +
                             '<div class="he-icon">🔍</div>' +
-                            '<div class="he-title">ไม่พบผลลัพธ์</div>' +
-                            '<div class="he-sub">ลองคำค้นอื่น หรือเช็คการสะกด</div>' +
+                            '<div class="he-title">' + esc(t('u.sess.searchNoResultsTitle')) + '</div>' +
+                            '<div class="he-sub">' + esc(t('u.sess.searchNoResultsSub')) + '</div>' +
                         '</div>';
                 } else {
                     list.innerHTML =
                         '<div class="history-empty">' +
                             '<div class="he-icon">💬</div>' +
-                            '<div class="he-title">ยังไม่มีประวัติแชท</div>' +
-                            '<div class="he-sub">เริ่มถามอะไรเกี่ยวกับ SAP / ABAP — แชทจะมาเก็บอยู่ตรงนี้</div>' +
-                            '<button type="button" class="he-cta" onclick="newChat()">+ เริ่มแชทแรก</button>' +
+                            '<div class="he-title">' + esc(t('u.history.emptyTitle')) + '</div>' +
+                            '<div class="he-sub">' + esc(t('u.history.emptySub')) + '</div>' +
+                            '<button type="button" class="he-cta" onclick="newChat()">' + esc(t('u.history.startFirst')) + '</button>' +
                         '</div>';
                 }
                 return;
@@ -2393,7 +2433,7 @@
             // While searching, skip grouping — show flat list of matches
             // (server already sorted favorites first, then by updatedAt DESC).
             if (searching) {
-                let sh = '<div class="date-group-label">ผลการค้นหา (' + State.sessions.length + ')</div>';
+                let sh = '<div class="date-group-label">' + esc(tf('u.sess.searchResultsCount', { n: State.sessions.length })) + '</div>';
                 State.sessions.forEach(s => { sh += _renderSessionRow(s); });
                 list.innerHTML = sh;
                 return;
@@ -2405,27 +2445,30 @@
             const others = State.sessions.filter(s => !(s.isFavorite || s.is_favorite));
 
             // Group the non-favorite sessions by date (buckets relative to
-            // today's local-midnight).
+            // today's local-midnight). Keys stay language-agnostic; the
+            // display label is looked up separately so the language toggle
+            // doesn't need to touch the grouping logic.
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             const yesterdayStart = todayStart - 86400000;
             const weekStart = todayStart - 7 * 86400000;
             const monthStart = todayStart - 30 * 86400000;
 
-            const groups = { 'วันนี้': [], 'เมื่อวาน': [], '7 วันที่ผ่านมา': [], 'เดือนนี้': [], 'เก่ากว่านี้': [] };
+            const groups = { today: [], yesterday: [], week: [], month: [], older: [] };
             others.forEach(s => {
                 // Server returns camelCase `updatedAt`; legacy code used
                 // `updated_at`. Accept either for forwards-compat.
                 const when = s.updatedAt || s.updated_at;
-                const t = new Date(when).getTime();
+                const ts = new Date(when).getTime();
                 const d = new Date(when);
                 const dayT = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-                if (dayT >= todayStart) groups['วันนี้'].push(s);
-                else if (dayT >= yesterdayStart) groups['เมื่อวาน'].push(s);
-                else if (t >= weekStart) groups['7 วันที่ผ่านมา'].push(s);
-                else if (t >= monthStart) groups['เดือนนี้'].push(s);
-                else groups['เก่ากว่านี้'].push(s);
+                if (dayT >= todayStart) groups.today.push(s);
+                else if (dayT >= yesterdayStart) groups.yesterday.push(s);
+                else if (ts >= weekStart) groups.week.push(s);
+                else if (ts >= monthStart) groups.month.push(s);
+                else groups.older.push(s);
             });
+            const groupLabelKeys = { today: 'date.today', yesterday: 'date.yesterday', week: 'date.last7days', month: 'date.thisMonth', older: 'date.older' };
 
             let html = '';
             // Favorites group at the top (only when there are any)
@@ -2434,9 +2477,9 @@
                 favs.forEach(s => { html += _renderSessionRow(s); });
             }
             // Date-bucketed history below
-            for (const [label, items] of Object.entries(groups)) {
+            for (const [key, items] of Object.entries(groups)) {
                 if (items.length === 0) continue;
-                html += '<div class="date-group-label">' + esc(label) + '</div>';
+                html += '<div class="date-group-label">' + esc(t(groupLabelKeys[key])) + '</div>';
                 items.forEach(s => { html += _renderSessionRow(s); });
             }
             list.innerHTML = html;
@@ -2467,7 +2510,7 @@
             input.className = 'session-title-input';
             input.value = current;
             input.maxLength = 200;
-            input.setAttribute('aria-label', 'ชื่อแชท');
+            input.setAttribute('aria-label', t('u.sess.titleAriaLabel'));
             // Prevent parent row's onclick (loadSession) from firing
             const stop = (ev) => ev.stopPropagation();
             input.addEventListener('mousedown', stop);
@@ -2498,12 +2541,12 @@
                 const ok = await apiRenameSession(sessionId, finalTitle);
                 if (ok) {
                     if (sess) sess.title = finalTitle;
-                    showToast('เปลี่ยนชื่อเรียบร้อย');
+                    showToast(t('u.sess.renameSuccess'));
                 } else {
                     // Roll back title text on failure
                     if (sess) sess.title = current;
                     renderSessionList();
-                    showToast('เปลี่ยนชื่อไม่สำเร็จ', 'error');
+                    showToast(t('u.sess.renameFailed'), 'error');
                 }
             };
 
@@ -2532,7 +2575,7 @@
         async function exportSession(e, sessionId) {
             e.stopPropagation();
             const blob = await apiExportSessionUrl(sessionId);
-            if (!blob) { showToast('Export ไม่สำเร็จ', 'error'); return; }
+            if (!blob) { showToast(t('u.sess.exportFailed'), 'error'); return; }
             const url = URL.createObjectURL(blob);
             const sess = State.sessions.find(s => s.id === sessionId);
             const safe = (sess?.title || 'chat').replace(/[^\w\-]+/g, '_').slice(0, 60) || 'chat';
@@ -2565,13 +2608,13 @@
                     body: JSON.stringify({ favorite: nowFav }),
                 });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                showToast(nowFav ? '⭐ ปักหมุดแชทแล้ว' : '☆ ยกเลิกการปักหมุด', 'success');
+                showToast(nowFav ? t('u.sess.pinned') : t('u.sess.unpinned'), 'success');
             } catch (err) {
                 // Roll back optimistic change
                 sess.isFavorite = wasFav;
                 sess.is_favorite = wasFav;
                 renderSessionList();
-                showToast('ปักหมุดไม่สำเร็จ: ' + err.message, 'error');
+                showToast(t('u.sess.pinFailedPrefix') + err.message, 'error');
             }
         }
 
@@ -2637,7 +2680,7 @@
                 });
                 const ok = r.ok;
                 if (!ok) {
-                    showToast('ลบไม่สำเร็จ (HTTP ' + r.status + ')', 'error');
+                    showToast(tf('u.sess.deleteFailedHttp', { code: r.status }), 'error');
                     if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
                     return;
                 }
@@ -2660,7 +2703,7 @@
             // 4) Close the modal + toast
             _pendingDeleteSessionId = null;
             document.getElementById('confirm-delete-chat').classList.remove('open');
-            showToast('ลบแชทเรียบร้อย');
+            showToast(t('u.sess.deleted'));
         }
 
         // Esc-to-close for the confirm modal
@@ -2696,10 +2739,10 @@
             if (State.isRunning) return;
             const inputEl = document.getElementById('chat-input');
             let userText = inputEl.value.trim();
-            if (!userText && !State.attachedFile) { showToast('กรุณาใส่ข้อความก่อน', 'error'); return; }
+            if (!userText && !State.attachedFile) { showToast(t('u.err.enterMessage'), 'error'); return; }
             // Phase 19.8: align with the in-sidebar warning copy + emoji
             if (State.balance <= 0) {
-                showToast('⛔ เครดิตหมด — ติดต่อ admin เพื่อเติมเครดิต', 'error');
+                showToast(t('u.err.creditDepletedContactAdmin'), 'error');
                 return;
             }
             // Default to 'auto' skill if nothing selected
@@ -2726,8 +2769,8 @@
             State.isRunning = true;
             const sendBtn = document.getElementById('send-btn');
             sendBtn.classList.add('is-stop');
-            sendBtn.setAttribute('aria-label', 'หยุด');
-            sendBtn.title = 'หยุด (Esc)';
+            sendBtn.setAttribute('aria-label', t('u.stop.ariaLabel'));
+            sendBtn.title = t('u.stop.ariaLabel') + ' (Esc)';
 
             // Typing indicator
             const typingDiv = document.createElement('div'); typingDiv.className = 'chat-msg assistant'; typingDiv.id = 'typing-el';
@@ -2745,7 +2788,7 @@
             // or 429 (daily cap). Show a clear in-chat block bubble with the
             // right action (top-up vs request more).
             const onChatBlocked = (info) => {
-                const t = document.getElementById('typing-el'); if (t) t.remove();
+                const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
                 showBlockBubble(area, info);
             };
 
@@ -2753,7 +2796,7 @@
                 // onChunk
                 chunk => {
                     accumulated += chunk;
-                    const t = document.getElementById('typing-el'); if (t) t.remove();
+                    const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
                     if (!responseMsgEl) {
                         responseMsgEl = document.createElement('div');
                         responseMsgEl.className = 'chat-msg assistant';
@@ -2768,7 +2811,7 @@
                     scrollToBottom(area);
                 },
                 async result => {
-                    const t = document.getElementById('typing-el'); if (t) t.remove();
+                    const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
                     const cost = result.cost != null ? result.cost : (result.inputTokens / 1000) * rates.inputRate + (result.outputTokens / 1000) * rates.outputRate;
 
                     // Finalize bubble: render markdown, highlight code, attach copy/regenerate
@@ -2821,9 +2864,9 @@
 
                     updateBalanceDisplay();
                     if (result.stopped) {
-                        showToast('⏹ หยุดการสร้างแล้ว', 'success');
+                        showToast(t('u.stop.stoppedGenerating'), 'success');
                     } else {
-                        showToast('✅ เสร็จแล้ว', 'success');
+                        showToast(t('u.done'), 'success');
                     }
                     State.isRunning = false;
                     const sb = document.getElementById('send-btn');
@@ -2848,19 +2891,19 @@
             const isPoolEmpty = info && info.error === 'project_pool_empty';
             let title, body, action = '';
             if (isPoolEmpty) {
-                title = '⛔ เครดิตโครงการหมด';
-                body  = 'กรุณาติดต่อผู้ดูแลระบบเพื่อเติมเงินเข้าโครงการ';
+                title = t('u.block.poolEmptyTitle');
+                body  = t('u.block.poolEmptyBody');
             } else if (isCapHit) {
-                title = '⛔ ใช้ครบโควต้ารายวันแล้ว';
+                title = t('u.block.capHitTitle');
                 const spent = (info.spentToday || 0).toFixed(2);
                 const cap   = (info.effective || info.dailyCap || 0).toFixed(2);
-                body  = 'วันนี้ใช้ไป ฿' + spent + ' / ฿' + cap + ' — reset อัตโนมัติเที่ยงคืน';
+                body  = tf('u.block.capHitBody', { spent, cap });
                 if (info.canRequestMore) {
-                    action = '<button type="button" class="block-action-btn" onclick="openQuotaRequestModal()">📨 ขอเพิ่มโควต้า</button>';
+                    action = '<button type="button" class="block-action-btn" onclick="openQuotaRequestModal()">' + esc(t('u.quota.requestMore')) + '</button>';
                 }
             } else {
-                title = '⚠ ส่งข้อความไม่สำเร็จ';
-                body  = (info && info.message) || (info && info.error) || 'ลองอีกครั้ง';
+                title = t('u.block.sendFailedTitle');
+                body  = (info && info.message) || (info && info.error) || t('u.block.tryAgain');
             }
             div.innerHTML =
                 '<div class="msg-bubble block-bubble">'
@@ -2873,16 +2916,16 @@
             // Also reset the send button state in case the caller relied on onDone.
             State.isRunning = false;
             const sb = document.getElementById('send-btn');
-            if (sb) { sb.classList.remove('is-stop'); sb.disabled = false; sb.setAttribute('aria-label','Send'); sb.title = ''; }
+            if (sb) { sb.classList.remove('is-stop'); sb.disabled = false; sb.setAttribute('aria-label', t('u.send.ariaLabel')); sb.title = ''; }
         }
 
         // Phase 21.10 — Quota request modal (asks server to grant a today-only bonus)
         function openQuotaRequestModal() {
-            const amountStr = prompt('ขอเพิ่มโควต้าเท่าไหร่ (บาท)?', '50');
+            const amountStr = prompt(t('u.quota.promptAmount'), '50');
             if (amountStr === null) return;
             const amt = parseFloat(amountStr);
-            if (!Number.isFinite(amt) || amt <= 0) { showToast('จำนวนไม่ถูกต้อง', 'error'); return; }
-            const reason = prompt('เหตุผล (optional):', '') || '';
+            if (!Number.isFinite(amt) || amt <= 0) { showToast(t('u.quota.invalidAmount'), 'error'); return; }
+            const reason = prompt(t('u.quota.promptReason'), '') || '';
             fetch(BASE + '/api/quota-requests', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
@@ -2890,8 +2933,8 @@
             })
             .then(r => r.json())
             .then(d => {
-                if (!d.ok) { showToast(d.message || d.error || 'ส่งคำขอไม่สำเร็จ', 'error'); return; }
-                showToast('✅ ส่งคำขอแล้ว — รอ admin อนุมัติ', 'success');
+                if (!d.ok) { showToast(d.message || d.error || t('u.quota.requestFailed'), 'error'); return; }
+                showToast(t('u.quota.requestSent'), 'success');
             })
             .catch(e => showToast('Error: ' + e.message, 'error'));
         }
@@ -2919,12 +2962,12 @@
             if (v <= 0) {
                 card.classList.add('is-empty');
                 warn.classList.add('critical');
-                warn.textContent = '⛔ เครดิตหมด — ติดต่อ admin เพื่อเติมเครดิต';
+                warn.textContent = t('u.err.creditDepletedContactAdmin');
                 warn.style.display = '';
             } else if (v < BALANCE_WARN_THRESHOLD) {
                 card.classList.add('is-low');
                 warn.classList.add('warn');
-                warn.textContent = '⚠ เครดิตใกล้หมด (เหลือ ฿' + v.toFixed(2) + ')';
+                warn.textContent = tf('u.balance.lowWarn', { v: v.toFixed(2) });
                 warn.style.display = '';
             } else {
                 warn.style.display = 'none';
@@ -2945,13 +2988,16 @@
                 if (!banner || !text) return;
                 if (d.capExceeded) {
                     banner.classList.add('visible');
-                    text.textContent = '⛔ ใช้ครบโควต้ารายวันแล้ว (฿' + Number(d.spentToday).toFixed(2) +
-                        ' / ฿' + Number(d.effectiveCap).toFixed(2) + ') — ส่งข้อความใหม่จะถูกบล็อก';
+                    text.textContent = tf('u.quota.capReachedFull', {
+                        spent: Number(d.spentToday).toFixed(2), cap: Number(d.effectiveCap).toFixed(2)
+                    });
                 } else if (d.warning80) {
                     banner.classList.add('visible');
                     const pct = Math.round((d.usageRatio || 0) * 100);
-                    text.textContent = '⚠ ใช้โควต้าวันนี้ ' + pct + '% แล้ว (฿' + Number(d.spentToday).toFixed(2) +
-                        ' / ฿' + Number(d.effectiveCap).toFixed(2) + ') — เหลือ ฿' + Number(d.remaining).toFixed(2);
+                    text.textContent = tf('u.quota.usedPercent', {
+                        pct, spent: Number(d.spentToday).toFixed(2),
+                        cap: Number(d.effectiveCap).toFixed(2), remaining: Number(d.remaining).toFixed(2)
+                    });
                 } else {
                     banner.classList.remove('visible');
                 }
@@ -2965,6 +3011,23 @@
         function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
         function toggleUserMenu() { document.getElementById('user-dropdown').classList.toggle('open'); }
         document.addEventListener('click', e => { if (!document.getElementById('user-area').contains(e.target)) document.getElementById('user-dropdown').classList.remove('open'); });
+
+        // Phase 27: when the language switches, re-apply static labels and
+        // re-render whatever is JS-built (session list, quota banner) so
+        // those strings pick up the new language too — mirrors admin.js.
+        window.addEventListener('i18n:change', () => {
+            if (typeof I18N !== 'undefined') I18N.apply();
+            try { renderSessionList(); } catch (_) {}
+            try { refreshQuotaWarning(); } catch (_) {}
+            // Re-render whichever empty state (if any) is currently showing —
+            // leaves an in-progress conversation's history untouched.
+            if (document.getElementById('chat-empty')) {
+                try {
+                    if (State.currentSessionId) renderChatMessages(State.currentMessages);
+                    else newChat();
+                } catch (_) {}
+            }
+        });
 
         // Phase 19.3: open/close the sidebar drawer on mobile. force=false
         // always closes, force=true always opens, omitted = toggle.
@@ -2993,12 +3056,12 @@
             const btn   = document.getElementById('theme-toggle-btn');
             if (moon)  moon.style.display  = isDark ? 'none' : '';
             if (sun)   sun.style.display   = isDark ? '' : 'none';
-            if (label) label.textContent   = isDark ? 'Light Mode' : 'Dark Mode';
+            if (label) label.textContent   = isDark ? t('theme.light') : t('theme.dark');
             if (btn) {
                 btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
                 btn.setAttribute('aria-label', isDark
-                    ? 'สลับเป็น Light mode'
-                    : 'สลับเป็น Dark mode');
+                    ? t('u.theme.switchToLight')
+                    : t('u.theme.switchToDark'));
             }
         }
         // Sync icon/label once DOM is ready
@@ -3015,7 +3078,7 @@
             const file = e.target.files[0]; if (!file) return;
             if (file.size > MAX_ATTACHMENT_BYTES) {
                 const kb = (file.size / 1024).toFixed(0);
-                showToast('ไฟล์ใหญ่เกินไป (' + kb + ' KB) — สูงสุด 256 KB', 'error');
+                showToast(tf('u.file.tooLarge', { kb }), 'error');
                 e.target.value = '';
                 return;
             }
@@ -3026,7 +3089,7 @@
                     '<div class="attached-file">📄 ' + esc(file.name) + '<button onclick="removeFile()">×</button></div>';
             };
             reader.onerror = () => {
-                showToast('อ่านไฟล์ไม่สำเร็จ', 'error');
+                showToast(t('u.file.readFailed'), 'error');
             };
             reader.readAsText(file); e.target.value = '';
         }
@@ -3124,7 +3187,7 @@
             btn.id = 'new-msg-btn';
             btn.type = 'button';
             btn.className = 'scroll-to-bottom-btn';
-            btn.innerHTML = '↓ ข้อความใหม่';
+            btn.innerHTML = esc(t('u.newMessage'));
             btn.addEventListener('click', () => {
                 const area = document.getElementById('chat-area');
                 area.scrollTop = area.scrollHeight;
@@ -3156,7 +3219,7 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'msg-action-btn msg-action-regen';
-            btn.setAttribute('aria-label', 'สร้างคำตอบใหม่');
+            btn.setAttribute('aria-label', t('u.regen.ariaLabel'));
             btn.innerHTML = '<span class="msg-action-icon">↻</span><span class="msg-action-label">Regenerate</span>';
             btn.addEventListener('click', regenerateLast);
             actionsEl.appendChild(btn);
@@ -3170,7 +3233,7 @@
             for (let i = msgs.length - 1; i >= 0; i--) {
                 if (msgs[i].role === 'user') { lastUserIdx = i; break; }
             }
-            if (lastUserIdx === -1) { showToast('ไม่มีคำถามเดิมให้สร้างใหม่', 'error'); return; }
+            if (lastUserIdx === -1) { showToast(t('u.regen.noPrevQuestion'), 'error'); return; }
             const lastUser = msgs[lastUserIdx];
 
             // Drop the last assistant message (we'll re-generate it)
@@ -3197,12 +3260,12 @@
         // ══════════════════════════════════════════════════════════
         function openUsage() {
             document.getElementById('user-dropdown').classList.remove('open');
-            document.getElementById('usage-balance').textContent = '฿' + State.balance.toFixed(2);
+            document.getElementById('usage-balance').textContent = '฿ ' + State.balance.toFixed(2);
             document.getElementById('usage-requests').textContent = State.usageHistory.length;
             const tokens = State.usageHistory.reduce((s, h) => s + (h.inputTokens || 0) + (h.outputTokens || 0), 0);
             const cost = State.usageHistory.reduce((s, h) => s + (h.cost || 0), 0);
             document.getElementById('usage-tokens').textContent = tokens.toLocaleString();
-            document.getElementById('usage-cost').textContent = '฿' + cost.toFixed(4);
+            document.getElementById('usage-cost').textContent = '฿ ' + cost.toFixed(2);
             document.getElementById('usage-modal').classList.add('open');
         }
 
@@ -3217,8 +3280,8 @@
         async function changePassword() {
             const newPwd = document.getElementById('new-password').value;
             const confirmPwd = document.getElementById('confirm-password').value;
-            if (!newPwd) { showToast('กรุณาใส่ password ใหม่', 'error'); return; }
-            if (newPwd !== confirmPwd) { showToast('Password ไม่ตรงกัน', 'error'); return; }
+            if (!newPwd) { showToast(t('u.pw.enterNew'), 'error'); return; }
+            if (newPwd !== confirmPwd) { showToast(t('err.pwMismatch'), 'error'); return; }
             const session = Auth.getSession(); if (!session) return;
             try {
                 // Phase 6.1: dedicated self-only endpoint (no admin rights needed)
@@ -3228,12 +3291,12 @@
                     body: JSON.stringify({ password: newPwd })
                 });
                 const d = await r.json();
-                if (!d.ok) { showToast('เปลี่ยน password ไม่สำเร็จ: ' + (d.error || ''), 'error'); return; }
-            } catch (e) { showToast('เกิดข้อผิดพลาด', 'error'); return; }
+                if (!d.ok) { showToast(t('u.pw.changeFailedPrefix') + (d.error || ''), 'error'); return; }
+            } catch (e) { showToast(t('u.err.somethingWrong'), 'error'); return; }
             closeOverlay('password-modal');
             document.getElementById('new-password').value = '';
             document.getElementById('confirm-password').value = '';
-            showToast('เปลี่ยน Password เรียบร้อย', 'success');
+            showToast(t('u.pw.changed'), 'success');
         }
 
         // ══════════════════════════════════════════════════════════
