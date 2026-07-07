@@ -668,7 +668,65 @@
             margin-top: 6px;
         }
 
-        /* Balance card — accent-tinted so it draws the eye to credit info */
+        /* Phase 28: cap-usage card — the per-user daily-cap progress, now the
+           prominent accent-tinted card (was the project-credit card's spot). */
+        .cap-usage-card {
+            background: linear-gradient(135deg, var(--pb-accent-soft) 0%, #ffffff 100%);
+            border: 1px solid var(--pb-accent-line);
+            border-radius: 12px;
+            padding: 12px 14px;
+            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.06);
+            position: relative;
+            overflow: hidden;
+        }
+        .cap-usage-label {
+            font-size: 0.66rem;
+            color: var(--pb-accent-hover);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+        .cap-usage-row {
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+        }
+        .cap-usage-amount {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--pb-text-1);
+            letter-spacing: -0.02em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cap-usage-of {
+            font-size: 0.74rem;
+            color: var(--pb-text-3);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .cap-usage-bar-track {
+            margin-top: 8px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.12);
+            overflow: hidden;
+        }
+        .cap-usage-bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--pb-accent);
+            transition: width 0.4s ease, background 0.3s ease;
+        }
+        .cap-usage-bar-fill.warn { background: #f59e0b; }
+        .cap-usage-bar-fill.critical { background: #ef4444; }
+        :root[data-theme="dark"] .cap-usage-card {
+            background: linear-gradient(135deg, rgba(74, 123, 214, 0.18) 0%, var(--pb-surface-1) 100%);
+            border-color: var(--pb-accent-line);
+        }
+        :root[data-theme="dark"] .cap-usage-label { color: var(--pb-blue-3); }
+        :root[data-theme="dark"] .cap-usage-bar-track { background: rgba(255, 255, 255, 0.08); }
+
+        /* Balance card — now the secondary/compact card under cap-usage */
         .balance-card {
             background: linear-gradient(135deg, var(--pb-accent-soft) 0%, #ffffff 100%);
             border: 1px solid var(--pb-accent-line);
@@ -686,6 +744,19 @@
             font-size: 1.6rem;
             pointer-events: none;
         }
+        /* Phase 28: compact variant — plain surface, no icon, smaller type.
+           Applied alongside .balance-card now that cap-usage owns the
+           prominent accent-tinted treatment. */
+        .balance-card.balance-card-compact {
+            background: var(--pb-surface-2);
+            border-color: var(--pb-border);
+            box-shadow: none;
+            padding: 8px 12px;
+            margin-top: 8px;
+        }
+        .balance-card-compact::before { display: none; }
+        .balance-card-compact .balance-amount { font-size: 0.9rem; }
+        .balance-card-compact .balance-label { margin-bottom: 2px; }
 
         .balance-label {
             font-size: 0.66rem;
@@ -1837,7 +1908,21 @@
         </div>
 
         <div class="sidebar-bottom">
-            <div class="balance-card" id="balance-card">
+            <!-- Phase 28: per-user daily cap usage — the number a user checks
+                 most often day-to-day, so it now takes the prominent slot
+                 (accent card + progress bar). Project credit (the shared
+                 pool) moves to a smaller card below it. -->
+            <div class="cap-usage-card" id="cap-usage-card">
+                <div class="cap-usage-label" data-i18n="u.cap.todayUsage">Today's Usage</div>
+                <div class="cap-usage-row">
+                    <span class="cap-usage-amount" id="cap-usage-spent">฿0.00</span>
+                    <span class="cap-usage-of" id="cap-usage-of">/ ฿—</span>
+                </div>
+                <div class="cap-usage-bar-track">
+                    <div class="cap-usage-bar-fill" id="cap-usage-bar-fill" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="balance-card balance-card-compact" id="balance-card">
                 <div class="balance-label" data-i18n="u.balance.projectCredit">Project Credit</div>
                 <div class="balance-amount" id="sidebar-balance">฿—</div>
                 <div class="balance-project" id="sidebar-project-label">—</div>
@@ -2024,7 +2109,7 @@
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
     <script src="js/md.js?v=ux-1"></script>
-    <script src="js/config.js?v=phase9-1"></script>
+    <script src="js/config.js?v=phase28-ver"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
@@ -2990,15 +3075,39 @@
             }
         }
 
-        // Phase 21.10 — Concept B: poll /api/quota-status, show 80% warning above input.
-        // Fail-silent: a network/auth hiccup just hides the banner; the real
-        // gate is server-side anyway.
+        // Phase 28: sidebar cap-usage card — spent-today vs the user's
+        // effective daily cap, with a progress bar. dailyCap === null means
+        // no cap is set for this user (unlimited) — show spend only, no bar.
+        function updateCapUsageCard(d) {
+            const spentEl = document.getElementById('cap-usage-spent');
+            const ofEl    = document.getElementById('cap-usage-of');
+            const fill    = document.getElementById('cap-usage-bar-fill');
+            if (!spentEl || !ofEl || !fill) return;
+            const spent = Number(d.spentToday) || 0;
+            spentEl.textContent = '฿' + spent.toFixed(2);
+            if (d.dailyCap == null) {
+                ofEl.textContent = t('u.cap.noLimit');
+                fill.style.width = '0%';
+                fill.classList.remove('warn', 'critical');
+            } else {
+                ofEl.textContent = '/ ฿' + Number(d.effectiveCap || 0).toFixed(2);
+                const pct = Math.max(0, Math.min(100, Math.round((d.usageRatio || 0) * 100)));
+                fill.style.width = pct + '%';
+                fill.classList.toggle('critical', !!d.capExceeded);
+                fill.classList.toggle('warn', !d.capExceeded && !!d.warning80);
+            }
+        }
+
+        // Phase 21.10 — Concept B: poll /api/quota-status, show 80% warning above input
+        // + drive the sidebar cap-usage card. Fail-silent: a network/auth hiccup just
+        // hides the banner; the real gate is server-side anyway.
         async function refreshQuotaWarning() {
             try {
                 const r = await fetch(BASE + '/api/quota-status', { headers: Auth.authHeaders() });
                 if (!r.ok) return;
                 const d = await r.json();
                 if (!d.ok) return;
+                updateCapUsageCard(d);
                 const banner = document.getElementById('quota-warn-banner');
                 const text   = document.getElementById('quota-warn-text');
                 if (!banner || !text) return;
@@ -3019,8 +3128,9 @@
                 }
             } catch (_) { /* silent */ }
         }
-        // initial check on load + every 60s
-        setTimeout(refreshQuotaWarning, 1500);
+        // Phase 28: run right away (the sidebar card needs data on first paint,
+        // not just the once-in-a-while input-area banner) + every 60s after.
+        refreshQuotaWarning();
         setInterval(refreshQuotaWarning, 60_000);
 
         function overlayClick(e, id) { if (e.target === document.getElementById(id)) closeOverlay(id); }

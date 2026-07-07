@@ -278,13 +278,21 @@
         </div>
 
         <div class="login-footer">
-            PipekAI &nbsp;|&nbsp; 2026
+            PipekAI &nbsp;|&nbsp; 2026 &nbsp;|&nbsp; <span id="app-version"></span>
         </div>
     </div>
 
-    <script src="js/config.js?v=phase9-1"></script>
+    <script src="js/config.js?v=phase28-ver"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script>
+        // Show the app version in the footer (single source of truth:
+        // js/config.js AppConfig.VERSION — bump it alongside the git tag
+        // whenever a release ships).
+        (function () {
+            const el = document.getElementById('app-version');
+            if (el) el.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
+        })();
+
         // Phase 16.26: removed role tabs — server decides role from the
         // user record after login, no need to pre-select on the form.
 
