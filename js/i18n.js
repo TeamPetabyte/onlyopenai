@@ -16,8 +16,10 @@
  *  - Switching fires a window 'i18n:change' event so render code can refresh
  *    any strings it produced imperatively.
  *
- * Default language = 'th' (the UI was authored in Thai), except pages that
- * set window.I18N_DEFAULT_LANG = 'en' before this script loads (index.html).
+ * Fallback (when nothing is saved yet) is 'th' unless the page sets
+ * window.I18N_DEFAULT_LANG = 'en' before this script loads — as of Phase 29
+ * both index.html and admin.html do, so EN is effectively the app default;
+ * 'th' only kicks in for a page that opts out of setting the override.
  */
 (function (global) {
   var STORAGE_KEY = 'agenthub_lang';

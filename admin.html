@@ -2616,6 +2616,10 @@
         </div>
     </div>
 
+    <!-- Phase 29: default to English on this page too until the user
+         toggles (must be set before i18n.js loads/reads it) — matches
+         index.html so the whole app defaults EN, not just the chat page. -->
+    <script>window.I18N_DEFAULT_LANG = 'en';</script>
     <script src="js/i18n.js?v=phase29-fix"></script>
     <script src="js/config.js?v=phase28-ver"></script>
     <script src="js/auth.js?v=phase24"></script>
