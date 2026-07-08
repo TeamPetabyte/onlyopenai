@@ -4006,7 +4006,7 @@ async function processAssistantStream(stream, threadId, sendEvent, state) {
 app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true }); return; }
 
-    const { threadId, prompt, systemPrompts, inputRate = 0.50, outputRate = 1.50, useRouter = true, userId } = req.body;
+    const { threadId, prompt, inputRate = 0.50, outputRate = 1.50, useRouter = true, userId } = req.body;
     if (!threadId || !prompt) { res.status(400).json({ ok: false, error: 'threadId and prompt required' }); return; }
 
     // Phase 21 C1 — daily cap enforcement (same guard as /api/chat).
@@ -4061,10 +4061,14 @@ app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) =
         const routerOai = await getProjectOpenAI(req.session.userId);
 
         if (useRouter) {
-            // Phase 18: prefer the JSON-catalog router. If it returns a high-
-            // confidence match we inject the catalog's prompt content. If it
-            // returns no match (or low confidence), we fall back to legacy
-            // detectIntent + frontend-supplied systemPrompts.
+            // Phase 18: JSON-catalog router. High-confidence match → inject the
+            // catalog's prompt content.
+            // Phase 31: the catalog (tbl_prompt, 50+ skills) is authoritative —
+            // if it says "none", trust that instead of burning a second
+            // gpt-4o-mini call on the old hardcoded detectIntent() classifier.
+            // (That fallback also read a `systemPrompts` field the client never
+            // actually sends, so it never did anything but cost extra latency.)
+            // additionalInstructions is left at its base SAP/ABAP default.
             const catalogPick = await pickSkillFromCatalog(prompt, routerOai);
             if (catalogPick.skillId && catalogPick.content) {
                 detectedSkill = {
@@ -4075,15 +4079,16 @@ app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) =
                     reason:     catalogPick.reason,
                 };
                 additionalInstructions = catalogPick.content;
-                sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: 'catalog', confidence: detectedSkill.confidence });
             } else {
-                // Catalog didn't match → legacy classifier (frontend systemPrompts)
-                detectedSkill = await detectIntent(prompt, routerOai);
-                sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence });
-                if (systemPrompts && systemPrompts[detectedSkill.skillId]) {
-                    additionalInstructions = systemPrompts[detectedSkill.skillId];
-                }
+                detectedSkill = {
+                    skillId:    null,
+                    label:      'General',
+                    intent:     'general',
+                    confidence: catalogPick.confidence,
+                    reason:     catalogPick.reason,
+                };
             }
+            sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence });
         }
 
         // ── เพิ่ม message ใน thread ───────────────────────────
@@ -4288,60 +4293,16 @@ app.get('/api/version', requireAdmin, async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════
-//  INTENT ROUTER — Phase 1 (Joule-inspired)
-//  วิเคราะห์ intent ของ user ก่อน แล้วเลือก system prompt ที่ดีที่สุด
+//  SKILL ROUTER — picks a system prompt from the tbl_prompt catalog
 // ══════════════════════════════════════════════════════════
 
-// Map intent → skillId จาก pricing.js
-const INTENT_SKILL_MAP = {
-    code_gen:      { skillId: 'abap-gen',            label: '⚡ ABAP Code Generator'      },
-    code_review:   { skillId: 'abap-review',         label: '🔍 ABAP Code Review'         },
-    debug:         { skillId: 'abap-debug',           label: '🐛 SAP Error Analyzer'       },
-    optimize:      { skillId: 'abap-optimize',        label: '🚀 ABAP Optimizer'           },
-    obsolete:      { skillId: 'abap-obsolete',        label: '🔎 Obsolete Checker'         },
-    best_practice: { skillId: 'abap-best-practices',  label: '🛠️ Best Practices Analyzer' },
-    documentation: { skillId: 'abap-doc',             label: '📋 SAP Documentation'        },
-    bapi:          { skillId: 'bapi-finder',          label: '🔌 BAPI/RFC Finder'          },
-    unit_test:     { skillId: 'abap-unittest',        label: '🧪 ABAP Unit Test'           },
-    cds:           { skillId: 'cds-gen',              label: '🗄️ CDS View Generator'       },
-    // Phase 14 — extended coverage
-    rap:           { skillId: 'abap-rap',             label: '🛤️ RAP / Steampunk Expert'  },
-    fiori_ui5:     { skillId: 'fiori-ui5-dev',        label: '🌐 Fiori / UI5 Developer'    },
-    basis:         { skillId: 'basis-admin',          label: '🔐 Basis / Auth Helper'      },
-    integration:   { skillId: 'sap-integration',      label: '🔗 Integration Architect'    },
-    functional:    { skillId: 'sap-functional',       label: '🔧 Functional Config Helper' },
-    general:       { skillId: 'auto',                 label: '🧠 PipekAI'               },
-};
-
-// Router prompt — เบา เร็ว ใช้ gpt-4o-mini เสมอ
-const ROUTER_SYSTEM = `You are an SAP/ABAP intent classifier. Analyze the user message and return ONLY a JSON object (no markdown, no explanation).
-
-Classify into one of these intents:
-- "code_gen"      → user wants new ABAP code written (report, class, function, BAPI call)
-- "code_review"   → user wants existing code reviewed / quality checked
-- "debug"         → user has an error, dump, ST22, or runtime exception to analyze
-- "optimize"      → user wants performance improvement (SELECT-in-LOOP, index, HANA pushdown)
-- "obsolete"      → user wants to fix obsolete syntax (TABLES, LIKE, implicit SELECT)
-- "best_practice" → user wants multi-step best practice analysis / refactoring
-- "documentation" → user wants docs, spec, or code comments written
-- "bapi"          → user wants to find a BAPI, RFC, or Function Module
-- "unit_test"     → user wants ABAP Unit Test generated
-- "cds"           → user wants CDS View or OData service generated
-- "rap"           → user mentions RAP, Steampunk, ABAP Cloud, behavior definition (BDEF), managed/unmanaged, projection, draft, service binding
-- "fiori_ui5"     → user asks about Fiori, SAPUI5, manifest.json, XML view, controller, OData binding, Fiori Elements
-- "basis"         → user asks about PFCG, SU01, SU53, roles, authorization objects, transports (STMS), background jobs (SM36/37), ST22/SM21, SM50/SM66, performance traces (ST05/SAT), locks (SM12), RFC destinations (SM59)
-- "integration"   → user asks about IDoc (WE02/WE19/WE20/BD87), tRFC/qRFC (SM58/SMQ1), ALE, CPI / Integration Suite / iFlow, BTP Event Mesh, API Management, PI/PO
-- "functional"    → user asks about SPRO, IMG customizing, enterprise structure (OX02/OX10/OVX5), FI/MM/SD/CO config (OBYC, VKOA, VOV8, V/08, OMS2), number ranges (SNRO), output management (NACE)
-- "general"       → anything else SAP/ABAP related
-
-Return format (strict JSON only):
-{"intent":"code_gen","confidence":0.95,"reason":"user asked to create a new report"}`;
-
-// Phase 18: NEW router that picks a skill from skill-prompts.json instead
-// of the hardcoded INTENT_SKILL_MAP. The legacy detectIntent() below stays
-// for back-compat in case the JSON catalog is empty or yields low-confidence
-// answers — the chat endpoints prefer this new function and only fall back
-// when needed.
+// Phase 18: picks a skill from the DB-backed catalog (skill-prompts.js).
+// Phase 31: this is now the ONLY router — the old hardcoded
+// INTENT_SKILL_MAP/detectIntent() classifier was removed. It was a second
+// gpt-4o-mini call that only ran when this catalog said "none", and its own
+// fallback (a `systemPrompts` field from the client) was never actually
+// sent by the frontend — so it added cost/latency without ever changing
+// the outcome. Chat endpoints now trust "none" from here directly.
 //
 // Behaviour
 // ─────────
@@ -4356,8 +4317,8 @@ Return format (strict JSON only):
 async function pickSkillFromCatalog(userMessage, oai) {
     const catalog = skillPrompts.buildRouterCatalog();
     if (catalog.length === 0) {
-        // No catalog loaded (file missing or parse error). Caller will
-        // decide to fall back to legacy detectIntent() if it wants to.
+        // No catalog loaded (file missing or parse error) — caller falls
+        // through to the base SAP/ABAP system prompt.
         return { skillId: null, label: null, confidence: 0, reason: 'catalog empty', content: null, fromCatalog: false };
     }
 
@@ -4446,46 +4407,10 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
     }
 }
 
-// Phase 17.2: accept an optional `oai` arg so the router routes through the
-// user's project key (consistent cost attribution). Falls back to global.
-async function detectIntent(userMessage, oai) {
-    try {
-        // ใช้ gpt-4o-mini เสมอสำหรับ router (เร็ว + ถูก)
-        const routerModel = 'gpt-4o-mini';
-        const client = oai || openai;
-        const params = {
-            model: routerModel,
-            max_tokens: 80,
-            temperature: 0,   // deterministic
-            messages: [
-                { role: 'system', content: ROUTER_SYSTEM },
-                { role: 'user',   content: userMessage.substring(0, 800) } // ตัดให้สั้น ประหยัด token
-            ],
-        };
-        const resp = await client.chat.completions.create(params).catch(async (e) => {
-            // Auto-fallback to global on 401 from project key
-            if ((e?.status === 401) && client !== openai && openai) {
-                console.warn('[router] detectIntent: 401 from project key — retrying with global');
-                return await openai.chat.completions.create(params);
-            }
-            throw e;
-        });
-        const raw = resp.choices[0]?.message?.content || '{}';
-        const parsed = JSON.parse(raw);
-        const intent = parsed.intent || 'general';
-        const mapped = INTENT_SKILL_MAP[intent] || INTENT_SKILL_MAP.general;
-        console.log(`[router] intent="${intent}" confidence=${parsed.confidence} → ${mapped.label}`);
-        return { intent, confidence: parsed.confidence, ...mapped, reason: parsed.reason };
-    } catch (e) {
-        console.warn('[router] fallback to general:', e.message);
-        return { intent: 'general', ...INTENT_SKILL_MAP.general };
-    }
-}
-
 app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true, reason: 'no_api_key' }); return; }
 
-    const { prompt, systemPrompt, systemPrompts, inputRate = 0.50, outputRate = 1.50, useRouter = true, sessionId, skillId } = req.body;
+    const { prompt, systemPrompt, inputRate = 0.50, outputRate = 1.50, useRouter = true, sessionId, skillId } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
     // Phase 21.10 — Concept B gate (project pool AND daily cap).
@@ -4609,8 +4534,14 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             || systemPrompt.includes('automatically detect')
             || systemPrompt.includes('PetabyteAi');
         if (useRouter && isAutoMode) {
-            // Phase 18: try the JSON-catalog router first (same logic as
-            // /api/thread/message). High-confidence match → use catalog content.
+            // Phase 18: JSON-catalog router (same logic as /api/thread/message).
+            // High-confidence match → use catalog content.
+            // Phase 31: the catalog (tbl_prompt, 50+ skills) is authoritative —
+            // if it says "none", trust that instead of burning a second
+            // gpt-4o-mini call on the old hardcoded detectIntent() classifier.
+            // (That fallback also read a `systemPrompts` field the client never
+            // actually sends, so it never did anything but cost extra latency.)
+            // finalSystemPrompt is left at its base SAP/ABAP default.
             const catalogPick = await pickSkillFromCatalog(prompt, oai);
             if (catalogPick.skillId && catalogPick.content) {
                 detectedSkill = {
@@ -4621,15 +4552,16 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                     reason:     catalogPick.reason,
                 };
                 finalSystemPrompt = catalogPick.content;
-                sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: 'catalog', confidence: detectedSkill.confidence });
             } else {
-                // Legacy fallback — frontend systemPrompts
-                detectedSkill = await detectIntent(prompt, oai);
-                sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence });
-                if (systemPrompts && systemPrompts[detectedSkill.skillId]) {
-                    finalSystemPrompt = systemPrompts[detectedSkill.skillId];
-                }
+                detectedSkill = {
+                    skillId:    null,
+                    label:      'General',
+                    intent:     'general',
+                    confidence: catalogPick.confidence,
+                    reason:     catalogPick.reason,
+                };
             }
+            sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence });
         }
 
         // ── Step 2: {code} placeholder ───────────────────────────────
