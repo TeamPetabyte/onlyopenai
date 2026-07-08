@@ -4570,6 +4570,18 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             finalUserPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
         }
 
+        // Phase 33: language-matching rule. Skill prompts from tbl_prompt
+        // don't all specify this, and the default fallback above is
+        // Thai-only — so without this, a pure-English question could still
+        // get a Thai-mixed reply. Appended to whatever system prompt was
+        // chosen (default / skill / catalog) so it always applies.
+        finalSystemPrompt += `
+
+## Language rule
+- If the user's message is written entirely in English, respond entirely in English — no Thai words mixed in.
+- If the user's message mixes Thai and English (common for Thai SAP/ABAP developers), respond in Thai with English technical terms mixed in naturally.
+- Match the user's language per message, not the conversation's earlier language.`;
+
         // ── Step 3: Phase 4 — Chat with Tool Use (multi-turn) ────────
         // Tools สำหรับ chat completions (ไม่มี file_search — ใช้เฉพาะ function tools)
         const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
