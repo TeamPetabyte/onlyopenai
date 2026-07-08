@@ -4582,11 +4582,19 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // (oai resolved above — shared between router + main chat call)
 
         const MAX_TOOL_TURNS = 3;
+        // Phase 32: if a response gets cut off by the token cap (finish_reason
+        // "length" — e.g. AI is generating a full ABAP file that runs long),
+        // automatically ask it to continue instead of silently handing the
+        // user a truncated file. Capped separately from MAX_TOOL_TURNS so a
+        // long file doesn't eat into the tool-calling budget.
+        const MAX_LENGTH_CONTINUATIONS = 4;
         let lastFinishReason = null;
-        for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+        let lengthContinuations = 0;
+        let toolTurn = 0;
+        while (toolTurn < MAX_TOOL_TURNS) {
             if (clientAborted) break;
             const streamArgs = {
-                model: MODEL, stream: true, max_completion_tokens: 2000,
+                model: MODEL, stream: true, max_completion_tokens: 3000,
                 messages,
                 tools:        chatTools,
                 tool_choice:  'auto',
@@ -4618,6 +4626,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
 
             let pendingToolCalls = [];
             let finishReason    = null;
+            let turnText        = '';   // only THIS API call's text (for continuation re-prompts)
 
             try {
                 for await (const chunk of stream) {
@@ -4628,6 +4637,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                     // text content
                     if (delta?.content) {
                         fullText += delta.content;
+                        turnText += delta.content;
                         sendEvent({ type: 'chunk', text: delta.content });
                     }
 
@@ -4664,6 +4674,18 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             // User stopped mid-stream → don't loop into another tool turn
             if (clientAborted) break;
 
+            // Phase 32: hit the token cap mid-generation (e.g. a long ABAP
+            // file) — ask the model to continue instead of handing back a
+            // truncated file. Doesn't consume the tool-turn budget; capped
+            // separately by MAX_LENGTH_CONTINUATIONS so this can't loop forever.
+            if (finishReason === 'length' && lengthContinuations < MAX_LENGTH_CONTINUATIONS) {
+                lengthContinuations++;
+                console.warn(`[chat] response truncated (length) — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
+                messages.push({ role: 'assistant', content: turnText });
+                messages.push({ role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.' });
+                continue;
+            }
+
             // ถ้าไม่มี tool calls → จบ
             if (finishReason !== 'tool_calls' || pendingToolCalls.length === 0) break;
 
@@ -4683,6 +4705,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                 const result = await executeTool(tc.function.name, args);
                 messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
             }
+            toolTurn++;
         }
 
         // ครบ MAX_TOOL_TURNS แล้ว AI ยังอยากเรียก tool ต่อ (finishReason ยังเป็น
@@ -4692,7 +4715,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         if (!clientAborted && fullText.length === 0 && lastFinishReason === 'tool_calls') {
             console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
             const finalArgs = {
-                model: MODEL, stream: true, max_completion_tokens: 2000,
+                model: MODEL, stream: true, max_completion_tokens: 3000,
                 messages,
                 tools:       chatTools,
                 tool_choice: 'none',

@@ -135,6 +135,57 @@
         return actions;   // caller can append more buttons (e.g. Regenerate)
     }
 
+    // ─── Download button: save the raw AI response as a file ──
+    function attachMessageDownload(actionsEl, rawText, filename) {
+        if (!actionsEl) return;
+        if (actionsEl.querySelector('.msg-action-download')) return;   // idempotent
+
+        const dlBtn = document.createElement('button');
+        dlBtn.type = 'button';
+        dlBtn.className = 'msg-action-btn msg-action-download';
+        dlBtn.setAttribute('aria-label', 'ดาวน์โหลดคำตอบ');
+        dlBtn.innerHTML = '<span class="msg-action-icon">⬇</span><span class="msg-action-label">Download</span>';
+        dlBtn.addEventListener('click', () => downloadText(rawText, filename || guessFilename(rawText)));
+
+        actionsEl.appendChild(dlBtn);
+        return dlBtn;
+    }
+
+    // ─── Pick a sensible filename/extension from the response ──
+    // If the AI response is a single fenced code block, use its language
+    // for the extension so e.g. ABAP code downloads as .abap not .txt.
+    const LANG_EXT = {
+        abap: 'abap', javascript: 'js', typescript: 'ts', python: 'py',
+        java: 'java', json: 'json', sql: 'sql', xml: 'xml', html: 'html',
+        css: 'css', bash: 'sh', shell: 'sh', sh: 'sh', yaml: 'yml', yml: 'yml',
+        c: 'c', cpp: 'cpp', csharp: 'cs', go: 'go', ruby: 'rb', php: 'php',
+        markdown: 'md', md: 'md', plaintext: 'txt', text: 'txt',
+    };
+    function guessFilename(rawText) {
+        const m = /^```(\w+)?/m.exec(String(rawText || ''));
+        const lang = m && m[1] ? m[1].toLowerCase() : '';
+        const ext = LANG_EXT[lang] || 'txt';
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        return `pipekai-response-${ts}.${ext}`;
+    }
+
+    // ─── Trigger a client-side file download via Blob + <a download> ──
+    function downloadText(text, filename) {
+        try {
+            const blob = new Blob([String(text || '')], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename || 'pipekai-response.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+            console.warn('[md] download failed:', e.message);
+        }
+    }
+
     // ─── Copy helper with feedback ─────────────────────────
     function copyTextTo(text, btnEl) {
         const done = () => {
@@ -173,6 +224,7 @@
         render,
         postProcess,
         attachMessageCopy,
+        attachMessageDownload,
         escapeHtml,
         copyText: copyTextTo,
         get ready() { return libsReady(); },

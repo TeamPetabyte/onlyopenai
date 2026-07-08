@@ -2108,7 +2108,7 @@
     <script src="js/vendor/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
-    <script src="js/md.js?v=ux-1"></script>
+    <script src="js/md.js?v=ux-2"></script>
     <script src="js/config.js?v=phase28-ver"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script src="js/pricing.js?v=pipek"></script>
@@ -2461,6 +2461,7 @@
                     div.appendChild(bubble);
                     // ⧉ Copy + ↻ Regenerate toolbar
                     const actions = MD.attachMessageCopy(bubble, msg.content || '');
+                    if (actions) MD.attachMessageDownload(actions, msg.content || '');
                     if (actions && isLast) addRegenerateButton(actions);
                     if (msg.cost !== undefined) {
                         const tok = (msg.inputTokens || 0) + (msg.outputTokens || 0);
@@ -2925,6 +2926,7 @@
                         streamBubble.innerHTML = MD.render(accumulated);
                         MD.postProcess(streamBubble);
                         const actions = MD.attachMessageCopy(streamBubble, accumulated);
+                        if (actions) MD.attachMessageDownload(actions, accumulated);
                         if (actions) addRegenerateButton(actions);
 
                         const badge = document.createElement('div'); badge.className = 'cost-badge';
