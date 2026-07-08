@@ -2109,7 +2109,7 @@
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
     <script src="js/md.js?v=ux-2"></script>
-    <script src="js/config.js?v=1.3.3"></script>
+    <script src="js/config.js?v=1.3.4"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
@@ -2886,6 +2886,33 @@
 
             let accumulated = '', responseMsgEl = null, streamBubble = null;
 
+            // Phase 34: reveal at a capped pace instead of painting every SSE
+            // chunk the instant it arrives. Raw tokens can burst in faster
+            // than a user can react, so a long/fast answer used to "pop"
+            // onto screen almost fully formed — no real window to notice
+            // and hit Stop. Pacing the reveal also throttles DOM repaints
+            // for long responses (fewer, steadier updates instead of one
+            // per token).
+            let displayedLen = 0;
+            let revealTimer = null;
+            const REVEAL_TICK_MS = 20;
+            const REVEAL_CHARS_PER_TICK = 5;   // ~250 chars/sec reveal rate
+
+            function stopReveal() {
+                if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+            }
+            function startReveal() {
+                if (revealTimer) return;
+                revealTimer = setInterval(() => {
+                    if (displayedLen >= accumulated.length) return;
+                    displayedLen = Math.min(accumulated.length, displayedLen + REVEAL_CHARS_PER_TICK);
+                    // During streaming we escape (fast, safe). Markdown rendering
+                    // happens once at finalize — partial markdown is unparseable.
+                    if (streamBubble) streamBubble.textContent = accumulated.slice(0, displayedLen);
+                    scrollToBottom(area);
+                }, REVEAL_TICK_MS);
+            }
+
             // Phase 21.10 — Concept B: server may block with 402 (pool empty)
             // or 429 (daily cap). Show a clear in-chat block bubble with the
             // right action (top-up vs request more).
@@ -2907,12 +2934,10 @@
                         responseMsgEl.appendChild(streamBubble);
                         area.appendChild(responseMsgEl);
                     }
-                    // During streaming we escape (fast, safe). Markdown rendering
-                    // happens once at finalize — partial markdown is unparseable.
-                    if (streamBubble) streamBubble.textContent = accumulated;
-                    scrollToBottom(area);
+                    startReveal();
                 },
                 async result => {
+                    stopReveal();
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
                     // Phase 30: trust the server's cost (tbl_pricing-based, same
                     // source tbl_daily_usage/spentToday uses) — no more local
