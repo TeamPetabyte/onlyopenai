@@ -3203,8 +3203,9 @@
         // would (a) freeze the browser while FileReader gulps them down,
         // (b) blow past the model's context window if sent, and (c) leak
         // huge strings into State that survive until the next reload.
-        // 256 KB covers any realistic ABAP source dump.
-        const MAX_ATTACHMENT_BYTES = 256 * 1024;
+        // Phase 33: raised 256 KB → 1 MB to cover bigger ABAP source dumps;
+        // server's express.json limit is 2 MB so this still leaves headroom.
+        const MAX_ATTACHMENT_BYTES = 1024 * 1024;
 
         function handleFileSelect(e) {
             const file = e.target.files[0]; if (!file) return;
