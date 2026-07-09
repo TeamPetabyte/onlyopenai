@@ -4224,13 +4224,35 @@ app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) =
                          inputTokens || 0, cachedTokens || 0,
                          outputTokens || 0, reasoningTokens || 0,
                          (inputTokens || 0) + (outputTokens || 0)]);
-                    // Phase 21.10 (Concept B) — deduct from project pool.
+                    // Phase 21.10 (Concept B) — atomic deduct from project pool.
+                    // Phase 33: was missing the tbl_user_credit_transaction write
+                    // that /api/chat does (see that handler for the pattern this
+                    // mirrors) — deducting the pool with no ledger entry meant
+                    // this endpoint's usage was invisible to the transaction
+                    // journal / admin dashboards. Dormant today (no frontend
+                    // caller) but fixing before thread mode is ever enabled.
                     const dedRes = await pool.query(
                         `UPDATE tbl_balance SET project_credits = project_credits - $1
-                         WHERE project_id=$2 AND project_credits >= $1`,
+                         WHERE project_id=$2 AND project_credits >= $1
+                         RETURNING project_credits AS balance_after`,
                         [cost || 0, projectId]);
                     if (dedRes.rowCount === 0 && (cost || 0) > 0) {
                         console.warn(`[thread] ⚠ project pool insufficient — project:${projectId} cost:${cost}`);
+                    } else if (dedRes.rowCount === 1 && (cost || 0) > 0) {
+                        const balAfter  = parseFloat(dedRes.rows[0].balance_after);
+                        const balBefore = balAfter + Number(cost);
+                        try {
+                            await pool.query(`
+                                INSERT INTO tbl_user_credit_transaction
+                                    (user_id, project_id, transaction_type, amount,
+                                     balance_before, balance_after,
+                                     ref_type, ref_id, note, created_by)
+                                VALUES ($1, $2, 'usage', $3, $4, $5, 'thread', NULL, $6, NULL)`,
+                                [userId, projectId, -Number(cost),
+                                 balBefore, balAfter, 'thread:' + threadId]);
+                        } catch (logErr) {
+                            console.warn('[thread] credit log INSERT failed:', logErr.message);
+                        }
                     }
                     console.log(`[thread] ✅ DB saved — user:${userId} project:${projectId} cost:฿${cost.toFixed(4)} deducted:${dedRes.rowCount > 0}`);
                 }
