@@ -2783,6 +2783,76 @@ app.delete('/api/skills/:id', requireAdmin, async (req, res) => {
     }
 });
 
+// POST /api/skills/:id/test — admin-only QA sandbox: run a test prompt
+// against a skill's system prompt without touching the chat budget gate or
+// persisting a tbl_chat_session row. Non-streaming (one-shot QA check, not
+// a live chat UX). Supports a short tool-calling loop since some skills
+// (find_bapi, lookup_auth_object, etc.) only produce a meaningful answer
+// via tool results.
+app.post('/api/skills/:id/test', requireAdmin, async (req, res) => {
+    if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
+    const skill = skillPrompts.getSkill(req.params.id);
+    if (!skill) return res.status(404).json({ ok: false, error: 'skill not found' });
+
+    const prompt = String(req.body?.prompt || '').trim();
+    if (!prompt) return res.status(400).json({ ok: false, error: 'prompt required' });
+
+    let systemPrompt = skill.content;
+    let userPrompt   = prompt;
+    if (systemPrompt.includes('{code}')) {
+        systemPrompt = systemPrompt.replace('{code}', prompt);
+        userPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
+    }
+
+    const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: userPrompt },
+    ];
+
+    const MAX_TEST_TOOL_TURNS = 2;
+    let inputTokens = 0, outputTokens = 0, answer = '';
+    try {
+        for (let turn = 0; turn < MAX_TEST_TOOL_TURNS; turn++) {
+            const completion = await openai.chat.completions.create({
+                model: MODEL,
+                stream: false,
+                max_completion_tokens: 3000,
+                messages,
+                tools: chatTools,
+                tool_choice: 'auto',
+            });
+            const choice = completion.choices[0];
+            const usage  = completion.usage || {};
+            inputTokens  += usage.prompt_tokens     || 0;
+            outputTokens += usage.completion_tokens || 0;
+
+            if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
+                messages.push(choice.message);
+                for (const tc of choice.message.tool_calls) {
+                    const args   = JSON.parse(tc.function.arguments || '{}');
+                    const result = await executeTool(tc.function.name, args);
+                    messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+                }
+                continue;
+            }
+            answer = choice.message.content || '';
+            break;
+        }
+
+        logAdminAction(req, {
+            action: 'test_skill_prompt',
+            targetType: 'skill',
+            extra: { skillId: skill.id, promptPreview: prompt.slice(0, 100), inputTokens, outputTokens },
+        });
+
+        res.json({ ok: true, answer, inputTokens, outputTokens });
+    } catch (e) {
+        console.error('[skills/test]', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // POST /api/sync-now — manual trigger. Returns the result of THIS run.
 app.post('/api/sync-now', requireAdmin, async (req, res) => {
     try {

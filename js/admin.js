@@ -1267,6 +1267,7 @@ var admin = {
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:8px;flex-shrink:0">'
+        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openTestSkill(' + idJs + ')">🧪 ' + escapeHtml(TT('btn.test', 'ทดสอบ')) + '</button>'
         +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
         +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
@@ -1316,6 +1317,55 @@ var admin = {
     var el = document.getElementById('es-content');
     var c  = document.getElementById('es-charcount');
     if (el && c) c.textContent = (el.value || '').length.toLocaleString() + ' chars';
+  },
+
+  // Phase 33: QA sandbox — run a test prompt through a skill's system
+  // prompt without touching the chat budget gate or leaving a session
+  // behind in the user's real chat history. See POST /api/skills/:id/test.
+  openTestSkill: function (id) {
+    this._testSkillId = id;
+    var out = document.getElementById('ts-output');
+    var inp = document.getElementById('ts-prompt');
+    var err = document.getElementById('ts-error');
+    if (out) out.style.display = 'none';
+    if (inp) inp.value = '';
+    if (err) err.textContent = '';
+    document.getElementById('ts-title').textContent = '🧪 ' + t('modal.testSkill.title', 'ทดสอบ Skill') + ': ' + id;
+    showModal('modal-test-skill');
+    setTimeout(function () { var el = document.getElementById('ts-prompt'); if (el) el.focus(); }, 50);
+  },
+
+  runSkillTest: function () {
+    var self = this;
+    var id  = this._testSkillId;
+    var g   = function (elId) { return document.getElementById(elId); };
+    var prompt = (g('ts-prompt').value || '').trim();
+    var errEl  = g('ts-error');
+    var outEl  = g('ts-output');
+    if (!prompt) { errEl.textContent = t('err.enterTestPrompt', 'กรุณากรอกคำถามทดสอบ'); return; }
+    errEl.textContent = '';
+
+    var btn = document.querySelector('#modal-test-skill .btn-modal-submit');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = t('common.running', 'กำลังรัน...'); }
+    outEl.style.display = 'none';
+
+    fetch(BASE + '/api/skills/' + encodeURIComponent(id) + '/test', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
+      body: JSON.stringify({ prompt: prompt }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { errEl.textContent = d.error || t('err.testFailed', 'ทดสอบไม่สำเร็จ'); return; }
+        outEl.style.display = '';
+        outEl.querySelector('pre').textContent = d.answer || '(empty response)';
+        var meta = outEl.querySelector('.ts-meta');
+        if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens';
+      })
+      .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
+      .finally(function () {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = t('btn.run', 'Run'); }
+      });
   },
 
   openAddSkill: function () {
