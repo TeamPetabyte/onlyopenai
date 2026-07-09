@@ -1358,7 +1358,7 @@ var admin = {
       .then(function (d) {
         if (!d.ok) { errEl.textContent = d.error || t('err.testFailed', 'ทดสอบไม่สำเร็จ'); return; }
         outEl.style.display = '';
-        outEl.querySelector('pre').textContent = d.answer || '(empty response)';
+        outEl.querySelector('pre').textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         var meta = outEl.querySelector('.ts-meta');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens';
       })
