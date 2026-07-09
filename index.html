@@ -2109,7 +2109,7 @@
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
     <script src="js/md.js?v=ux-2"></script>
-    <script src="js/config.js?v=1.3.6"></script>
+    <script src="js/config.js?v=1.3.6.1"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
@@ -2994,7 +2994,12 @@
                         inputTokens: result.inputTokens, outputTokens: result.outputTokens, cost, durationMs: result.durationMs
                     });
 
-                    updateBalanceDisplay();
+                    // Phase 34: fetch real post-spend numbers instead of just
+                    // re-rendering the stale client-side State.balance — was
+                    // only ever set once on page load, so the sidebar balance
+                    // and cap-usage card wouldn't reflect this turn's cost
+                    // until the next 60s poll (or a manual refresh).
+                    refreshQuotaWarning();
                     if (result.stopped) {
                         showToast(t('u.stop.stoppedGenerating'), 'success');
                     } else {
@@ -3138,6 +3143,12 @@
                 if (!r.ok) return;
                 const d = await r.json();
                 if (!d.ok) return;
+                // Phase 34: this is also called right after each chat turn finishes,
+                // so the sidebar balance updates with the real post-spend number
+                // instead of waiting up to 60s for the next poll tick.
+                State.balance = parseFloat(d.projectPool) || 0;
+                State.save();
+                updateBalanceDisplay();
                 updateCapUsageCard(d);
                 const banner = document.getElementById('quota-warn-banner');
                 const text   = document.getElementById('quota-warn-text');
