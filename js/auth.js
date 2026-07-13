@@ -66,14 +66,14 @@
         return _origFetch(input, init).then(function (res) {
             try {
                 const path = (window.location.pathname || '').toLowerCase();
-                const onPwPage    = path.indexOf('change-password.html') >= 0;
-                const onLoginPage = path.indexOf('login.html') >= 0;
+                const onPwPage    = path.indexOf('change-password') >= 0;
+                const onLoginPage = path.indexOf('login') >= 0;
                 if (res.status === 423 && !onPwPage) {
                     try {
                         const s = JSON.parse(localStorage.getItem('agenthub_session') || 'null');
                         if (s) { s.mustChangePassword = true; localStorage.setItem('agenthub_session', JSON.stringify(s)); }
                     } catch (_) {}
-                    setTimeout(function () { window.location.href = 'change-password.html'; }, 0);
+                    setTimeout(function () { window.location.href = '/change-password'; }, 0);
                 }
                 // Phase 19.5: global 401 handler. The auth headers were
                 // sent but the server rejected them → token is expired or
@@ -106,7 +106,7 @@
                             localStorage.removeItem('agenthub_csrf');
                         } catch (_) {}
                         setTimeout(function () {
-                            window.location.href = 'login.html?expired=1';
+                            window.location.href = '/login?expired=1';
                         }, 0);
                     }
                 }
@@ -126,7 +126,7 @@
                                 localStorage.removeItem('agenthub_token');
                                 localStorage.removeItem('agenthub_csrf');
                             } catch (_) {}
-                            window.location.href = 'login.html?expired=1';
+                            window.location.href = '/login?expired=1';
                         }
                     }).catch(function () { /* not JSON body — leave alone */ });
                 }
@@ -173,10 +173,10 @@ const Auth = {
         return fetch(fullUrl, opts).then(function (res) {
             // Skip the password-change page itself — it's the only escape hatch.
             var path = (window.location.pathname || '').toLowerCase();
-            var onPwPage = path.indexOf('change-password.html') >= 0;
+            var onPwPage = path.indexOf('change-password') >= 0;
             if (res.status === 423 && !onPwPage) {
                 self._markPwChangeRequired();
-                window.location.href = 'change-password.html';
+                window.location.href = '/change-password';
             }
             return res;
         });
@@ -371,14 +371,14 @@ const Auth = {
 
     check(requiredRole) {
         const session = this.getSession();
-        if (!session) { window.location.href = 'login.html'; return false; }
+        if (!session) { window.location.href = '/login'; return false; }
         // Phase 8: must change password before doing anything else
         if (session.mustChangePassword) {
-            window.location.href = 'change-password.html';
+            window.location.href = '/change-password';
             return false;
         }
         if (session.role !== requiredRole) {
-            window.location.href = session.role === 'admin' ? 'admin.html' : 'index.html';
+            window.location.href = session.role === 'admin' ? '/admin' : '/';
             return false;
         }
         return true;
@@ -440,7 +440,7 @@ const Auth = {
         localStorage.removeItem(this.SESSION_KEY);
         localStorage.removeItem(this.TOKEN_KEY);
         localStorage.removeItem(this.CSRF_KEY);
-        window.location.href = 'login.html';
+        window.location.href = '/login';
     },
 
     // ── Users — async (DB) ────────────────────────────────────

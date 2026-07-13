@@ -5,6 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — Login</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -282,8 +285,8 @@
         </div>
     </div>
 
-    <script src="js/config.js?v=1.3.8.1"></script>
-    <script src="js/auth.js?v=phase24"></script>
+    <script src="js/config.js?v=1.3.8.2"></script>
+    <script src="js/auth.js?v=1.3.8.2"></script>
     <script>
         // Show the app version in the footer (single source of truth:
         // js/config.js AppConfig.VERSION — bump it alongside the git tag
@@ -302,10 +305,10 @@
             if (session) {
                 // Phase 8: pending pw change short-circuits everything else
                 if (session.mustChangePassword) {
-                    window.location.href = 'change-password.html';
+                    window.location.href = '/change-password';
                     return;
                 }
-                window.location.href = session.role === 'admin' ? 'admin.html' : 'index.html';
+                window.location.href = session.role === 'admin' ? '/admin' : '/';
             }
         })();
 
@@ -369,10 +372,10 @@
                 }
                 // Phase 8: forced password change → go to dedicated page first
                 if (result.mustChangePassword) {
-                    window.location.href = 'change-password.html';
+                    window.location.href = '/change-password';
                     return;
                 }
-                window.location.href = result.session.role === 'admin' ? 'admin.html' : 'index.html';
+                window.location.href = result.session.role === 'admin' ? '/admin' : '/';
             } catch (e) {
                 showError('Something went wrong. Please try again.');
                 btn.disabled = false;

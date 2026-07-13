@@ -875,7 +875,31 @@ app.use(csrfGuard);
 // can sit on a stale `index.html` that still points at old JS even
 // after we ship new code. JS/CSS keep their default cache headers —
 // the version-string in the URL is the cache buster for them.
+// Security: express.static below serves the whole repo root (so the
+// frontend at ../index.html, ../js, ../css, ../assets is reachable). That
+// also exposed server source, internal docs, DB dumps, and deploy scripts
+// to anyone on the internet (e.g. GET /server/server.js, /docs/*.md). Block
+// every non-frontend top-level folder here, before static runs. Allowlist
+// mindset: only the four asset dirs the browser actually needs stay open.
+const BLOCKED_TOP_DIRS = /^\/(server|docs|backups|windows|node_modules|\.git)(\/|$)/i;
+app.use((req, res, next) => {
+    if (BLOCKED_TOP_DIRS.test(req.path)) return res.status(404).send('Not found');
+    next();
+});
+
+// Clean URLs: /login instead of /login.html. Old .html addresses 301 to
+// the extensionless form so bookmarks and old links keep working, and
+// express.static's `extensions` option resolves /login back to login.html
+// on disk. Must be registered BEFORE the static middleware, otherwise
+// static serves the .html file first and the redirect never runs.
+app.get(['/login.html', '/admin.html', '/change-password.html', '/index.html'], (req, res) => {
+    const clean = req.path === '/index.html' ? '/' : req.path.replace(/\.html$/, '');
+    const query = req.originalUrl.slice(req.path.length);   // keep ?expired=1 etc.
+    res.redirect(301, clean + query);
+});
+
 app.use(express.static(path.join(__dirname, '..'), {
+    extensions: ['html'],
     setHeaders: function (res, filePath) {
         if (filePath.toLowerCase().endsWith('.html')) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
