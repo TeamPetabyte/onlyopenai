@@ -23,7 +23,7 @@ PostgreSQL is NOT needed locally — the DB lives on `192.168.69.125`.
 
 ## 2. Get the code
 ```bash
-git clone https://github.com/winzy11111-prog/onlyopenai.git ai-agent-dashboard
+git clone https://github.com/TeamPetabyte/onlyopenai.git ai-agent-dashboard
 cd ai-agent-dashboard/server
 npm install                  # installs pg, exceljs, etc.
 ```

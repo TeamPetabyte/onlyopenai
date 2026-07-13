@@ -66,6 +66,26 @@ function sha256(buf) {
     return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+// Hashes must survive git's autocrlf: the same .sql checked out on Windows
+// (CRLF) vs Linux/Mac (LF) is byte-different but semantically identical,
+// which used to trigger false "MODIFIED since applied" warnings. Normalize
+// to LF before hashing so the hash follows content, not the checkout.
+function normalizeEol(s) {
+    return s.replace(/\r\n/g, '\n');
+}
+
+function contentHash(body) {
+    return sha256(normalizeEol(body));
+}
+
+// True when a recorded hash matches this content under either line-ending
+// style — i.e. the file content is unchanged and only EOL drift happened.
+function matchesAnyEolVariant(recorded, body) {
+    const lf = normalizeEol(body);
+    return recorded === sha256(lf) ||
+           recorded === sha256(lf.replace(/\n/g, '\r\n'));
+}
+
 function listMigrationFiles() {
     if (!fs.existsSync(MIGRATIONS_DIR)) return [];
     return fs.readdirSync(MIGRATIONS_DIR)
@@ -84,7 +104,7 @@ async function getApplied(client) {
 async function applyOne(client, filename) {
     const full = path.join(MIGRATIONS_DIR, filename);
     const body = fs.readFileSync(full, 'utf8');
-    const hash = sha256(body);
+    const hash = contentHash(body);
     const t0   = Date.now();
     // Our existing .sql files include their own BEGIN/COMMIT (DO $$ blocks
     // etc.) so we run them as-is and record after.
@@ -125,7 +145,7 @@ async function runMigrations(poolIn) {
 
         for (const f of files) {
             const body = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
-            const hash = sha256(body);
+            const hash = contentHash(body);
             const prev = applied.get(f);
 
             if (prev === undefined) {
@@ -134,11 +154,24 @@ async function runMigrations(poolIn) {
                 console.log(`[migrate]   ✓ ${f} (${dur} ms)`);
                 stats.applied.push(f);
             } else if (prev !== hash) {
-                console.warn(`[migrate] ⚠  ${f} has been MODIFIED since it was applied`);
-                console.warn(`[migrate]   recorded: ${prev.slice(0, 12)}...`);
-                console.warn(`[migrate]   now:      ${hash.slice(0, 12)}...`);
-                console.warn(`[migrate]   (not re-running — add a NEW migration file instead)`);
-                stats.modified.push(f);
+                // Rows recorded before EOL-normalized hashing hold a hash of
+                // the raw bytes from whichever checkout ran the migration.
+                // If the recorded hash matches this content under either EOL
+                // style, the SQL is unchanged — converge the row to the
+                // normalized hash instead of crying wolf.
+                if (matchesAnyEolVariant(prev, body)) {
+                    await client.query(
+                        'UPDATE _meta.schema_migrations SET sha256=$1 WHERE filename=$2',
+                        [hash, f]);
+                    console.log(`[migrate] ✓ ${f} re-recorded (line-ending drift only, SQL unchanged)`);
+                    stats.skipped.push(f);
+                } else {
+                    console.warn(`[migrate] ⚠  ${f} has been MODIFIED since it was applied`);
+                    console.warn(`[migrate]   recorded: ${prev.slice(0, 12)}...`);
+                    console.warn(`[migrate]   now:      ${hash.slice(0, 12)}...`);
+                    console.warn(`[migrate]   (not re-running — add a NEW migration file instead)`);
+                    stats.modified.push(f);
+                }
             } else {
                 stats.skipped.push(f);
             }
@@ -167,9 +200,10 @@ async function migrationStatus(poolIn) {
         const files   = listMigrationFiles();
         for (const f of files) {
             const body = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
-            const hash = sha256(body);
+            const hash = contentHash(body);
             if (!applied.has(f))              out.pending.push(f);
-            else if (applied.get(f) !== hash) out.modified.push(f);
+            else if (applied.get(f) !== hash &&
+                     !matchesAnyEolVariant(applied.get(f), body)) out.modified.push(f);
             else                               out.applied.push(f);
         }
     } finally {

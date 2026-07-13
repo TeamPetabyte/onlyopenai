@@ -3070,7 +3070,16 @@
             })
             .then(r => r.json())
             .then(d => {
-                if (!d.ok) { showToast(d.message || d.error || t('u.quota.requestFailed'), 'error'); return; }
+                if (!d.ok) {
+                    // Translate known error codes so the toast follows the
+                    // user's language; unknown codes fall back to the server
+                    // message (English).
+                    const msg = d.error === 'pending_request_exists'
+                        ? t('u.quota.pendingExists')
+                        : (d.message || d.error || t('u.quota.requestFailed'));
+                    showToast(msg, 'error');
+                    return;
+                }
                 showToast(t('u.quota.requestSent'), 'success');
             })
             .catch(e => showToast('Error: ' + e.message, 'error'));

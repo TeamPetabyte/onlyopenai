@@ -1546,7 +1546,7 @@ app.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance), as
             return res.json({
                 ok: false,
                 code: 'INSUFFICIENT_POOL',
-                error: `Project pool มีเพียง ฿${poolBefore.toFixed(2)} — ไม่สามารถจัดสรร ฿${delta.toFixed(2)} เพิ่มได้ กรุณา top up ก่อน`,
+                error: `Project pool only has ฿${poolBefore.toFixed(2)} — cannot allocate ฿${delta.toFixed(2)} more. Top up the project first.`,
                 poolAvailable: poolBefore,
                 requested:     delta,
             });
@@ -3245,7 +3245,7 @@ app.post('/api/quota-requests', requireAuth, async (req, res) => {
     const reason = String(req.body?.reason || '').slice(0, 500);
     if (!Number.isFinite(requestedExtra) || requestedExtra <= 0 || requestedExtra > 10000) {
         return res.status(400).json({ ok: false, error: 'invalid_amount',
-            message: 'requestedExtra ต้อง > 0 และ ≤ 10000' });
+            message: 'requestedExtra must be > 0 and ≤ 10000' });
     }
     try {
         // Prevent piling up pending requests for the same user today.
@@ -3259,7 +3259,7 @@ app.post('/api/quota-requests', requireAuth, async (req, res) => {
             return res.status(409).json({
                 ok: false,
                 error: 'pending_request_exists',
-                message: 'มีคำขออยู่ระหว่างพิจารณาแล้ว — รอ admin ตอบก่อน',
+                message: 'You already have a pending request — wait for an admin to respond first',
                 requestId: dup.rows[0].request_id,
             });
         }
@@ -3329,7 +3329,7 @@ app.post('/api/quota-requests/:id/resolve', requireAdmin, async (req, res) => {
     }
     if (action !== 'approve' && action !== 'deny') {
         return res.status(400).json({ ok: false, error: 'invalid_action',
-            message: "action ต้องเป็น 'approve' หรือ 'deny'" });
+            message: "action must be 'approve' or 'deny'" });
     }
     const adminId = req.session?.userId;
     const client  = await pool.connect();
@@ -3346,7 +3346,7 @@ app.post('/api/quota-requests/:id/resolve', requireAdmin, async (req, res) => {
         if (q.status !== 'pending') {
             await client.query('ROLLBACK');
             return res.status(409).json({ ok: false, error: 'already_resolved',
-                message: `Request นี้ถูก${q.status}ไปแล้ว` });
+                message: `This request was already ${q.status}` });
         }
 
         const newStatus = action === 'approve' ? 'approved' : 'denied';
