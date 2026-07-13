@@ -63,7 +63,7 @@ html {
 }
 
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Geomini', 'Inter', sans-serif;
     background: var(--bg-base);
     color: var(--text-primary);
     min-height: 100vh;
@@ -303,7 +303,7 @@ img {
     border: 1px solid var(--border-default);
     border-radius: 8px;
     color: var(--text-1);
-    font-family: 'Inter', sans-serif;
+    font-family: 'Geomini', 'Inter', sans-serif;
     font-size: .86rem;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -359,7 +359,7 @@ img {
     border-radius: 6px;
     color: var(--text-1);
     font-size: .82rem;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Geomini', 'Inter', sans-serif;
     outline: none;
     transition: border-color 0.15s ease;
 }
