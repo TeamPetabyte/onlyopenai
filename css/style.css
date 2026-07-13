@@ -917,7 +917,7 @@ img {
 .recent-cost {
     color: var(--green);
     font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
 }
 
 .recent-time {
@@ -1204,7 +1204,7 @@ img {
     font-weight: 600;
     padding: 3px 9px;
     border-radius: 100px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
 }
 
 .badge-tokens {
@@ -1306,7 +1306,7 @@ img {
 }
 
 .cost-value {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
     font-size: 0.85rem;
     color: var(--text-primary);
 }
@@ -1508,7 +1508,7 @@ img {
 }
 
 .rate-cell {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
     color: var(--text-primary);
 }
 
@@ -1600,11 +1600,11 @@ img {
 .history-cost {
     color: var(--green);
     font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
 }
 
 .history-tokens {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
     font-size: 0.8rem;
 }
 
@@ -1740,7 +1740,7 @@ img {
     border: 1px solid var(--border-bright);
     border-radius: var(--radius-sm);
     padding: 14px 16px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Geist Mono', monospace;
     font-size: 0.82rem;
     line-height: 1.7;
     color: var(--text-1);

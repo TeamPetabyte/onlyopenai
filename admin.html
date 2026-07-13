@@ -7,10 +7,10 @@
     <title>PipekAI — Admin Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700;800&display=swap"
         rel="stylesheet" />
     <!-- tokens.css MUST load before style.css — defines --sidebar-w, --surface-0, --accent, etc. -->
-    <link rel="stylesheet" href="css/tokens.css?v=geomini-1" />
+    <link rel="stylesheet" href="css/tokens.css?v=1.3.8.1" />
 
     <!-- Phase 16.15: theme bootstrap. Reads saved preference and sets
          data-theme BEFORE first paint to prevent a brief flash of the
@@ -53,7 +53,7 @@
         document.addEventListener('DOMContentLoaded', _refreshThemeUI);
     </script>
     <link rel="stylesheet" href="css/components.css?v=phase19-5" />
-    <link rel="stylesheet" href="css/style.css?v=geomini-1" />
+    <link rel="stylesheet" href="css/style.css?v=1.3.8.1" />
     <style>
         /* ── Admin extras ─────────────────────────── */
         .admin-badge {
@@ -76,7 +76,7 @@
             border: 1px solid var(--border-default);
             border-radius: 6px;
             color: var(--text-1);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             font-size: .82rem;
             padding: 6px 10px;
             width: 90px;
@@ -208,7 +208,7 @@
 
         .log-cost {
             color: var(--text-2);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             font-size: .78rem;
             white-space: nowrap;
             margin-left: 12px;
@@ -257,7 +257,7 @@
             background: transparent;
             border: none;
             color: var(--text-1);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             font-size: .82rem;
             padding: 4px 4px;
             outline: none;
@@ -547,12 +547,12 @@
             background: rgba(37, 99, 235, .05);
         }
         .tx-cell-mono {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             font-size: .8rem;
             color: var(--text-2);
         }
         .tx-cell-amount {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             font-size: .88rem;
             font-weight: 700;
             text-align: right;
@@ -902,7 +902,7 @@
         .eu-identity-sub {
             font-size: .72rem;
             color: var(--text-3);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
             margin-top: 2px;
         }
         .modal-actions-eu {
@@ -1067,7 +1067,7 @@
             font-size: 1rem;
             font-weight: 700;
             color: var(--text-1);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
         }
 
         .usage-bar-wrap {
@@ -1121,7 +1121,7 @@
 
         .usage-history-table td.val {
             color: var(--text-2);
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Geist Mono', monospace;
         }
 
         .usage-history-table tbody tr:hover td {
@@ -1206,8 +1206,8 @@
         .audit-table tbody tr:hover { background: var(--surface-3); }
         .audit-table tbody tr:last-child td { border-bottom: none; }
         .audit-name { color: var(--text-1, #f4f4f7); font-weight: 600; }
-        .audit-username { color: var(--text-3, #9ca3af); font-family: 'JetBrains Mono', monospace; font-size: .78rem; }
-        .audit-duration { color: var(--accent, #818cf8); font-family: 'JetBrains Mono', monospace; font-size: .82rem; }
+        .audit-username { color: var(--text-3, #9ca3af); font-family: 'Geist Mono', monospace; font-size: .78rem; }
+        .audit-duration { color: var(--accent, #818cf8); font-family: 'Geist Mono', monospace; font-size: .82rem; }
         .audit-empty { text-align: center; padding: 32px; color: var(--text-3, #9ca3af); font-size: .85rem; }
         .audit-pill {
             display: inline-block;
@@ -2218,7 +2218,7 @@
                     <span id="es-charcount" style="float:right;color:var(--text-3);font-weight:400;font-size:.72rem">0 chars</span>
                 </label>
                 <textarea class="modal-input" id="es-content" rows="16"
-                    style="font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.5;white-space:pre"
+                    style="font-family:'Geist Mono',monospace;font-size:.8rem;line-height:1.5;white-space:pre"
                     placeholder="วาง prompt เต็มที่นี่… ใช้ {code} เป็นจุดที่จะแทนด้วยโค้ดของผู้ใช้"></textarea>
                 <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45">
                     💡 ใส่ <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px">{code}</code> ตรงที่ต้องการให้ระบบแทนด้วยโค้ดที่ผู้ใช้ส่งมา
@@ -2248,7 +2248,7 @@
                     <label class="modal-label" style="margin:0" data-i18n="modal.testSkill.answerLabel">AI answer</label>
                     <span class="ts-meta" style="font-size:.72rem;color:var(--text-3)"></span>
                 </div>
-                <pre style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto"></pre>
+                <pre style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto"></pre>
             </div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-test-skill')"><span data-i18n="btn.cancelTh">ยกเลิก</span></button>
@@ -2629,11 +2629,11 @@
             </div>
             <div class="modal-field">
                 <label class="modal-label" data-i18n="vt.prompt">สิ่งที่ user พิมพ์</label>
-                <pre id="vt-prompt" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+                <pre id="vt-prompt" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
             </div>
             <div class="modal-field">
                 <label class="modal-label" data-i18n="vt.response">คำตอบของ AI</label>
-                <pre id="vt-response" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+                <pre id="vt-response" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
             </div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-view-turn')" data-i18n="btn.cancelTh">ยกเลิก</button>
@@ -2646,10 +2646,10 @@
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
     <script src="js/i18n.js?v=phase33-i18n-fix"></script>
-    <script src="js/config.js?v=1.3.8"></script>
+    <script src="js/config.js?v=1.3.8.1"></script>
     <script src="js/auth.js?v=phase24"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=phase33-i18n-fix"></script>
+    <script src="js/admin.js?v=1.3.8.1"></script>
 </body>
 
 </html>

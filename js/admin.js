@@ -373,7 +373,7 @@ var admin = {
           +   'letter-spacing:.06em;margin-bottom:8px;font-weight:600">'
           +   icon + ' ' + label + '</div>'
           + '<div style="font-size:1.55rem;font-weight:800;color:var(--text-1);'
-          +   'font-family:JetBrains Mono,monospace;letter-spacing:-.02em;margin-bottom:4px">'
+          +   'font-family:Geist Mono,monospace;letter-spacing:-.02em;margin-bottom:4px">'
           +   value + '</div>'
           + (sub ? '<div style="font-size:.72rem;color:var(--text-3)">' + sub + '</div>' : '')
           + '</div>';
@@ -754,7 +754,7 @@ var admin = {
       +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
       +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
       +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escapeHtml(p.id) + '\').then(()=>flash(\'✓ Copied: ' + escapeHtml(p.id) + '\'))" '
-      +         'style="font-family:JetBrains Mono,monospace;font-size:.72rem;padding:3px 9px;'
+      +         'style="font-family:Geist Mono,monospace;font-size:.72rem;padding:3px 9px;'
       +         'background:var(--accent-soft-bg);color:var(--accent);'
       +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer;'
       +         'transition:background .15s">' + escapeHtml(p.id) + '</span>'
@@ -792,7 +792,7 @@ var admin = {
       footHtml = '💡 ' + TT('proj.topupHint','กด "+ เติมเงิน Project" เพื่อเริ่มใช้งาน');
     } else if (isEmpty) {
       // funded before but spent everything — clear "depleted" warning
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:JetBrains Mono,monospace">0%</span>'
+      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:Geist Mono,monospace">0%</span>'
                + '<span style="font-size:.78rem;color:#dc2626;font-weight:600;margin-left:8px">⚠ '
                + TT('proj.depleted','เครดิตหมด') + '</span>';
       barPct = 0; barColor = '#dc2626'; poolNumColor = '#dc2626';
@@ -801,7 +801,7 @@ var admin = {
       // normal — colour by how much is left
       var col = usablePct >= 50 ? 'var(--success-hover,#34d399)'
               : usablePct >= 20 ? '#f59e0b' : '#dc2626';
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:' + col + ';font-family:JetBrains Mono,monospace;letter-spacing:-.02em">'
+      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:' + col + ';font-family:Geist Mono,monospace;letter-spacing:-.02em">'
                + usablePct.toFixed(1) + '%</span>'
                + '<span style="font-size:.76rem;color:var(--text-3);margin-left:8px">' + TT('proj.usableLeft','คงเหลือใช้ได้') + '</span>';
       barPct = usablePct; barColor = col; poolNumColor = 'var(--text-1)';
@@ -814,7 +814,7 @@ var admin = {
       +   '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px;gap:12px;flex-wrap:wrap">'
       +     '<div>' + leftHtml + '</div>'
       +     '<div style="text-align:right">'
-      +       '<span style="font-size:1.4rem;font-weight:800;color:' + poolNumColor + ';font-family:JetBrains Mono,monospace">'
+      +       '<span style="font-size:1.4rem;font-weight:800;color:' + poolNumColor + ';font-family:Geist Mono,monospace">'
       +         formatTHB(budget.pool) + '</span>'
       +       '<span style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-left:6px">' + TT('proj.poolLeft','Pool left') + '</span>'
       +     '</div>'
@@ -833,7 +833,7 @@ var admin = {
       return '<div style="padding:14px 16px;background:var(--surface-2);'
         + 'border:1px solid var(--border-default);border-radius:10px">'
         + '<div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">' + icon + ' ' + label + '</div>'
-        + '<div style="font-size:1.3rem;font-weight:700;color:' + valueColor + ';font-family:JetBrains Mono,monospace">' + value + '</div>'
+        + '<div style="font-size:1.3rem;font-weight:700;color:' + valueColor + ';font-family:Geist Mono,monospace">' + value + '</div>'
         + (sub ? '<div style="font-size:.7rem;color:var(--text-3);margin-top:4px">' + sub + '</div>' : '')
         + '</div>';
     };
@@ -872,7 +872,7 @@ var admin = {
           + '</div>';
       };
       var mono = function (s, color) {
-        return '<span style="font-weight:600;color:' + (color || 'var(--text-1)') + ';font-family:JetBrains Mono,monospace;font-size:.85rem">' + s + '</span>';
+        return '<span style="font-weight:600;color:' + (color || 'var(--text-1)') + ';font-family:Geist Mono,monospace;font-size:.85rem">' + s + '</span>';
       };
       var rows = users.map(function (u, idx) {
         var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
@@ -1057,12 +1057,12 @@ var admin = {
         '<span style="display:inline-block;padding:4px 12px;border-radius:20px;'
         + 'background:' + c.bg + ';color:' + c.fg + ';border:1px solid ' + c.bd + ';'
         + 'font-size:.82rem;font-weight:600">' + c.label + '</span>' },
-      { label: 'Last Run',          value: '<span style="font-family:JetBrains Mono,monospace;color:var(--text-1)">' + lastRun + '</span>' },
-      { label: 'Next Run',          value: '<span style="font-family:JetBrains Mono,monospace;color:var(--text-2)">' + nextEta + '</span>' },
+      { label: 'Last Run',          value: '<span style="font-family:Geist Mono,monospace;color:var(--text-1)">' + lastRun + '</span>' },
+      { label: 'Next Run',          value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + nextEta + '</span>' },
       { label: 'Interval',          value: '<span style="color:var(--text-2)">' + (d.intervalMin || '?') + ' min</span>' },
-      { label: 'Last Duration',     value: '<span style="font-family:JetBrains Mono,monospace;color:var(--text-2)">' + (s.last_duration_ms != null ? s.last_duration_ms + ' ms' : '—') + '</span>' },
-      { label: 'Rows This Run',     value: '<span style="font-family:JetBrains Mono,monospace;color:var(--text-2)">' + (s.last_rows_inserted || 0) + '</span>' },
-      { label: 'Rows Total',        value: '<span style="font-family:JetBrains Mono,monospace;color:var(--text-2)">' + (s.rows_synced_total || 0).toLocaleString() + '</span>' },
+      { label: 'Last Duration',     value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.last_duration_ms != null ? s.last_duration_ms + ' ms' : '—') + '</span>' },
+      { label: 'Rows This Run',     value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.last_rows_inserted || 0) + '</span>' },
+      { label: 'Rows Total',        value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.rows_synced_total || 0).toLocaleString() + '</span>' },
       { label: 'Admin Key',         value: d.adminKeyConfigured ? '<span style="color:#3fa64d">✓ configured</span>' : '<span style="color:#e25563">✗ missing</span>' },
     ];
 
@@ -1078,7 +1078,7 @@ var admin = {
           }).join('')
       + '</div>'
       + (s.last_error
-          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:JetBrains Mono,monospace">'
+          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:Geist Mono,monospace">'
             + '<b>Error:</b> ' + escapeHtml(s.last_error) + '</div>'
           : '');
   },
@@ -1109,7 +1109,7 @@ var admin = {
         ? formatDateStd(r.openai_synced_at)
         : '<span style="color:var(--text-3);font-style:italic">never</span>';
       var pidPill = r.openai_project_id
-        ? '<span style="font-family:JetBrains Mono,monospace;font-size:.7rem;padding:2px 7px;'
+        ? '<span style="font-family:Geist Mono,monospace;font-size:.7rem;padding:2px 7px;'
           + 'background:var(--accent-soft-bg);color:var(--accent);'
           + 'border:1px solid var(--accent-soft-border);border-radius:5px;margin-left:8px">'
           + escapeHtml(r.openai_project_id.slice(0, 16) + '…') + '</span>'
@@ -1121,9 +1121,9 @@ var admin = {
         +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem">'
         +     '📂 ' + escapeHtml(r.project_name || '—') + pidPill + '</div>'
         + '</div>'
-        + '<div style="font-size:.82rem;color:var(--text-2);font-family:JetBrains Mono,monospace">' + synced + '</div>'
-        + '<div style="text-align:right;font-family:JetBrains Mono,monospace;color:var(--text-1);font-weight:600">' + tokens.toLocaleString() + '</div>'
-        + '<div style="text-align:right;font-family:JetBrains Mono,monospace;color:' + (cached > 0 ? '#3fa64d' : 'var(--text-3)') + ';font-weight:600">' + cachedPct + '</div>'
+        + '<div style="font-size:.82rem;color:var(--text-2);font-family:Geist Mono,monospace">' + synced + '</div>'
+        + '<div style="text-align:right;font-family:Geist Mono,monospace;color:var(--text-1);font-weight:600">' + tokens.toLocaleString() + '</div>'
+        + '<div style="text-align:right;font-family:Geist Mono,monospace;color:' + (cached > 0 ? '#3fa64d' : 'var(--text-3)') + ';font-weight:600">' + cachedPct + '</div>'
         + '</div>';
     }).join('');
 
@@ -1212,10 +1212,10 @@ var admin = {
 
     var blocks = [
       { label: 'Status',     value: statusPill },
-      { label: 'Total',      value: '<span style="font-family:JetBrains Mono,monospace">' + totalCount + ' skills</span>' },
-      { label: 'Configured', value: '<span style="font-family:JetBrains Mono,monospace;color:#3fa64d">' + configuredCount + '</span>' },
-      { label: 'Placeholder',value: '<span style="font-family:JetBrains Mono,monospace;color:#e6a14a">' + (totalCount - configuredCount) + '</span>' },
-      { label: 'Last Loaded',value: '<span style="font-family:JetBrains Mono,monospace;font-size:.82rem">' + loadedAt + '</span>' },
+      { label: 'Total',      value: '<span style="font-family:Geist Mono,monospace">' + totalCount + ' skills</span>' },
+      { label: 'Configured', value: '<span style="font-family:Geist Mono,monospace;color:#3fa64d">' + configuredCount + '</span>' },
+      { label: 'Placeholder',value: '<span style="font-family:Geist Mono,monospace;color:#e6a14a">' + (totalCount - configuredCount) + '</span>' },
+      { label: 'Last Loaded',value: '<span style="font-family:Geist Mono,monospace;font-size:.82rem">' + loadedAt + '</span>' },
     ];
 
     el.innerHTML =
@@ -1230,7 +1230,7 @@ var admin = {
           }).join('')
       + '</div>'
       + (hasError
-          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:JetBrains Mono,monospace">'
+          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:Geist Mono,monospace">'
             + '<b>Load error:</b> ' + escapeHtml(status.error) + '</div>'
           : '');
   },
@@ -1249,7 +1249,7 @@ var admin = {
         ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">⚠ Placeholder</span>'
         : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.30);font-size:.7rem;font-weight:600">✓ Configured</span>';
       var openaiPill = s.openaiPromptId
-        ? '<span style="font-family:JetBrains Mono,monospace;font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
+        ? '<span style="font-family:Geist Mono,monospace;font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
         : '<span style="color:var(--text-3);font-size:.72rem;font-style:italic">no openai ref</span>';
 
       var idJs = "'" + String(s.id).replace(/'/g, "\\'") + "'";
@@ -1261,7 +1261,7 @@ var admin = {
         +       statusBadge
         +     '</div>'
         +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-        +       '<span style="font-family:JetBrains Mono,monospace;font-size:.74rem;color:var(--text-3)">id: <b style="color:var(--text-2)">' + escapeHtml(s.id) + '</b></span>'
+        +       '<span style="font-family:Geist Mono,monospace;font-size:.74rem;color:var(--text-3)">id: <b style="color:var(--text-2)">' + escapeHtml(s.id) + '</b></span>'
         +       openaiPill
         +     '</div>'
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
@@ -1275,7 +1275,7 @@ var admin = {
         + '<details style="margin-top:10px">'
         +   '<summary style="cursor:pointer;font-size:.74rem;color:var(--text-3);font-weight:600;user-select:none">'
         +     '📄 Content preview (' + s.contentLength + ' chars)</summary>'
-        +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
+        +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:Geist Mono,monospace;font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
         +     escapeHtml(s.contentPreview) + '</pre>'
         + '</details>'
         + '</div>';
@@ -1663,7 +1663,7 @@ var admin = {
       // Real-time "used today" cell with progress bar.
       var usedCell;
       if (!hasCap) {
-        usedCell = '<span style="font-family:JetBrains Mono,monospace;color:var(--text-2)">' + fmtB(spent) + '</span>'
+        usedCell = '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + fmtB(spent) + '</span>'
                  + '<span style="color:var(--text-3);font-size:.7rem"> ' + TTc('lbl.used','ใช้แล้ว') + '</span>';
       } else {
         var ratio = effective > 0 ? Math.min(1, spent / effective) : (spent > 0 ? 1 : 0);
@@ -1671,7 +1671,7 @@ var admin = {
         var barColor = ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#16a34a';
         usedCell =
             '<div style="display:flex;flex-direction:column;gap:4px;min-width:120px">'
-          +   '<div style="font-family:JetBrains Mono,monospace;font-size:.8rem">'
+          +   '<div style="font-family:Geist Mono,monospace;font-size:.8rem">'
           +     '<b style="color:' + barColor + '">' + fmtB(spent) + '</b>'
           +     '<span style="color:var(--text-3)"> / ' + fmtB(effective) + '</span>'
           +     '<span style="color:var(--text-3);font-size:.7rem"> · ' + pct + '%</span>'
@@ -1871,7 +1871,7 @@ var admin = {
           +   (u.projectId ? '📂 ' + escapeHtml(projectName) : '<span style="opacity:.5">— No project —</span>')
           + '</div>'
           // Created
-          + '<div style="font-size:.82rem;color:var(--text-3);font-family:JetBrains Mono,monospace">' + created + '</div>'
+          + '<div style="font-size:.82rem;color:var(--text-3);font-family:Geist Mono,monospace">' + created + '</div>'
           // Status badge
           + '<div style="min-width:78px;text-align:center">' + statusBadge + '</div>'
           // Action
@@ -2838,7 +2838,7 @@ var admin = {
         return '<div style="padding:14px 16px;background:var(--surface-2);'
           + 'border:1px solid var(--border-default);border-radius:10px">'
           + '<div style="font-size:.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">' + icon + ' ' + label + '</div>'
-          + '<div style="font-size:1.25rem;font-weight:700;color:' + valueColor + ';font-family:JetBrains Mono,monospace">' + value + '</div>'
+          + '<div style="font-size:1.25rem;font-weight:700;color:' + valueColor + ';font-family:Geist Mono,monospace">' + value + '</div>'
           + '</div>';
       };
 
@@ -2852,7 +2852,7 @@ var admin = {
         // Click-to-copy project_id pill (matches Overview redesign)
         +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
         +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escapeHtml(p.id) + '\').then(()=>flash(\'✓ Copied: ' + escapeHtml(p.id) + '\'))" '
-        +         'style="font-family:JetBrains Mono,monospace;font-size:.7rem;padding:3px 9px;'
+        +         'style="font-family:Geist Mono,monospace;font-size:.7rem;padding:3px 9px;'
         +         'background:var(--accent-soft-bg);color:var(--accent);'
         +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer">'
         +         escapeHtml(p.id) + '</span>'
@@ -4029,7 +4029,7 @@ var admin = {
           '<div class="usage-user-meta">' + escapeHtml(u.username || '') + (proj ? ' · 📂 ' + escapeHtml(proj.name || '') : '') + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
-          '<span style="font-family:\'JetBrains Mono\',monospace;font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
+          '<span style="font-family:\'Geist Mono\',monospace;font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
           '<span style="color:var(--text-3);font-size:1.1rem" id="ucard-arrow-' + idx + '">▸</span>' +
           '</div>' +
           '</div>' +
