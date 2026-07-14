@@ -1370,6 +1370,29 @@
             color: var(--pb-accent);
         }
 
+        /* Phase 34: model + reasoning-effort pickers in the composer toolbar */
+        .composer-select {
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 6px 26px 6px 13px;
+            border: 1.5px solid var(--pb-border);
+            border-radius: 20px;
+            background-color: var(--pb-surface-1);
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238a99b0' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            font-family: 'Geomini', 'Inter', sans-serif;
+            font-size: 0.78rem;
+            color: var(--pb-text-2);
+            cursor: pointer;
+            transition: background-color .12s, color .12s, border-color .12s;
+        }
+
+        .composer-select:hover {
+            border-color: var(--pb-accent-line);
+            color: var(--pb-accent);
+        }
+
         .attached-file {
             display: inline-flex;
             align-items: center;
@@ -2020,6 +2043,23 @@
                     </svg>
                     <span data-i18n="u.file.chooseFiles">Choose Files (.txt)</span>
                 </button>
+                <!-- Phase 34: model + reasoning-effort pickers -->
+                <select id="model-select" class="composer-select" onchange="onModelChange(this.value)"
+                    aria-label="Model">
+                    <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                    <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
+                    <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                    <option value="gpt-5.5">GPT-5.5</option>
+                </select>
+                <select id="effort-select" class="composer-select" onchange="onEffortChange(this.value)"
+                    aria-label="Reasoning effort" title="Reasoning effort">
+                    <option value="none">Effort: none</option>
+                    <option value="low">Effort: low</option>
+                    <option value="medium" selected>Effort: medium</option>
+                    <option value="high">Effort: high</option>
+                    <option value="xhigh">Effort: xhigh</option>
+                    <option value="max">Effort: max</option>
+                </select>
                 <div id="attached-file-display"></div>
             </div>
             <input type="file" id="file-input" accept=".txt" style="display:none" onchange="handleFileSelect(event)" />
@@ -2112,17 +2152,19 @@
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
     <script src="js/md.js?v=ux-2"></script>
-    <script src="js/config.js?v=1.3.8.2"></script>
+    <script src="js/config.js?v=1.4.0"></script>
     <script src="js/auth.js?v=1.3.8.2"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
-    <script src="js/ai-client.js?v=phase21-10"></script>
+    <script src="js/ai-client.js?v=1.4.0"></script>
     <script>
         // ══════════════════════════════════════════════════════════
         // STATE
         // ══════════════════════════════════════════════════════════
         const State = {
             selectedSkill: 'auto',
+            selectedModel: 'gpt-5.6-terra',   // Phase 34: model picker default
+            selectedEffort: 'medium',          // Phase 34: reasoning effort default
             isRunning: false,
             balance: 100,
             usageHistory: [],       // for Usage modal
@@ -2136,12 +2178,17 @@
                 const s = Auth.getSession(); if (!s) return;
                 this.balance = parseFloat(localStorage.getItem('agenthub_balance_' + s.username) || '100');
                 try { this.usageHistory = JSON.parse(localStorage.getItem('agenthub_history_' + s.username) || '[]'); } catch { this.usageHistory = []; }
+                // Phase 34: restore the user's model + effort choice
+                this.selectedModel  = localStorage.getItem('agenthub_model_'  + s.username) || this.selectedModel;
+                this.selectedEffort = localStorage.getItem('agenthub_effort_' + s.username) || this.selectedEffort;
             },
             save() {
                 const s = Auth.getSession(); if (!s) return;
                 localStorage.setItem('agenthub_balance_' + s.username, this.balance.toString());
                 localStorage.setItem('agenthub_history_' + s.username, JSON.stringify(this.usageHistory));
                 localStorage.setItem('agenthub_balance', this.balance.toString());
+                localStorage.setItem('agenthub_model_'  + s.username, this.selectedModel);
+                localStorage.setItem('agenthub_effort_' + s.username, this.selectedEffort);
             },
             addUsageEntry(entry) {
                 entry.id = Date.now(); entry.timestamp = new Date().toISOString();
@@ -2246,6 +2293,7 @@
             if (!Auth.check('user')) return;
             const session = Auth.getSession();
             State.load();
+            syncComposerControls();   // Phase 34: reflect restored model/effort into the pickers
             const displayName = session.displayName || session.username;
             document.getElementById('user-display-name').textContent = displayName;
             document.getElementById('user-avatar').textContent = displayName.charAt(0).toUpperCase();
@@ -3017,7 +3065,8 @@
                 },
                 rates,
                 State.currentSessionId,   // Phase 12: thread into an existing chat
-                onChatBlocked              // Phase 21.10: 402/429 → block UI
+                onChatBlocked,             // Phase 21.10: 402/429 → block UI
+                { model: State.selectedModel, effort: State.selectedEffort }  // Phase 34
             );
         }
 
@@ -3276,6 +3325,24 @@
         }
 
         function removeFile() { State.attachedFile = null; document.getElementById('attached-file-display').innerHTML = ''; }
+
+        // ── Phase 34: model + reasoning-effort pickers ──────────────
+        // Effort only applies to the gpt-5.6 reasoning family; hide it for
+        // models that don't accept it (e.g. gpt-5.5) so we never send an
+        // invalid param.
+        function onModelChange(v) {
+            State.selectedModel = v; State.save();
+            const eff = document.getElementById('effort-select');
+            if (eff) eff.style.display = v.startsWith('gpt-5.6') ? '' : 'none';
+        }
+        function onEffortChange(v) { State.selectedEffort = v; State.save(); }
+        // Reflect restored State into the two <select>s on load.
+        function syncComposerControls() {
+            const m = document.getElementById('model-select');
+            const e = document.getElementById('effort-select');
+            if (m) m.value = State.selectedModel;
+            if (e) { e.value = State.selectedEffort; e.style.display = State.selectedModel.startsWith('gpt-5.6') ? '' : 'none'; }
+        }
 
         // Unified send-button handler — while idle, send; while streaming,
         // clicking the (now-red square) button stops generation.

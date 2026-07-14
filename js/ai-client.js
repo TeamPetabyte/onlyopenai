@@ -40,17 +40,17 @@ const AIClient = {
      * @param {Function} onDone(result) — { inputTokens, outputTokens, cost, durationMs }
      * @param {object}   rates          — { inputRate, outputRate }
      */
-    async run(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError) {
+    async run(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError, opts) {
         const mode = await this.checkBackend();
         if (mode === 'openai') {
-            await this._streamFromBackend(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError);
+            await this._streamFromBackend(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError, opts);
         } else {
             await MockAI.run(skillId, prompt, onChunk, onDone);
         }
     },
 
     /** Read SSE stream from backend in real-time */
-    async _streamFromBackend(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError) {
+    async _streamFromBackend(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError, opts = {}) {
         const startTime = Date.now();
         const inputRate = (rates && rates.inputRate) || 0.50;
         const outputRate = (rates && rates.outputRate) || 1.50;
@@ -67,6 +67,11 @@ const AIClient = {
                 ? Auth.authHeaders()
                 : { 'Content-Type': 'application/json' };
             const body = { skillId, prompt, systemPrompt, inputRate, outputRate };
+            // Phase 34: model + reasoning effort chosen in the composer. The
+            // server validates against its allowlist and falls back to the env
+            // default when absent, so these are safe to always include.
+            if (opts.model)  body.model  = opts.model;
+            if (opts.effort) body.effort = opts.effort;
             // Phase 12: thread messages into an existing chat session (or
             // let the server create one on first send when sessionId is null).
             if (sessionId) body.sessionId = sessionId;

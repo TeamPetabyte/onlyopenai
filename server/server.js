@@ -379,6 +379,40 @@ const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
     ? (process.env.OPENAI_TEMPERATURE.trim() === '' ? null : Number(process.env.OPENAI_TEMPERATURE))
     : 0.4;
 let _tempUnsupported = false;
+
+// Phase 34: model registry — which models the picker exposes, and which OpenAI
+// API each one uses. The gpt-5.6 family (sol/terra/luna) runs on the Responses
+// API (/v1/responses) with reasoning.effort; gpt-5.5 stays on the existing Chat
+// Completions loop (dual-path, safe rollback). Single source for request-side
+// validation. Per-model pricing lives in tbl_pricing (phase27-001). The bare
+// `gpt-5.6` alias resolves to sol (see resolveModel below).
+const ALLOWED_MODELS = {
+    'gpt-5.6-sol':   { path: 'responses', label: 'GPT-5.6 Sol',   supportsEffort: true },
+    'gpt-5.6-terra': { path: 'responses', label: 'GPT-5.6 Terra', supportsEffort: true },
+    'gpt-5.6-luna':  { path: 'responses', label: 'GPT-5.6 Luna',  supportsEffort: true },
+    'gpt-5.5':       { path: 'chat',      label: 'GPT-5.5',       supportsEffort: false },
+};
+const MODEL_ALIASES = { 'gpt-5.6': 'gpt-5.6-sol' };
+const VALID_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+const DEFAULT_EFFORT = 'medium';
+
+// Resolve the client-supplied model to { model, path }. An EXPLICIT, known
+// model from the request is honored (with its API path); anything else falls
+// back to the env default MODEL on whichever path it belongs to — so if the
+// request omits a model, behavior is unchanged from today (e.g. gpt-4o/gpt-5.5
+// keep running on the Chat Completions loop). This keeps the rollout safe:
+// only an explicit gpt-5.6-* request ever reaches the Responses API path.
+function resolveModel(requested) {
+    const aliased = MODEL_ALIASES[requested] || requested;
+    if (aliased && ALLOWED_MODELS[aliased]) {
+        return { model: aliased, path: ALLOWED_MODELS[aliased].path };
+    }
+    const dflt = MODEL_ALIASES[MODEL] || MODEL;
+    return { model: dflt, path: ALLOWED_MODELS[dflt]?.path || 'chat' };
+}
+function resolveEffort(requested) {
+    return VALID_EFFORTS.includes(requested) ? requested : DEFAULT_EFFORT;
+}
 let openai = null;
 let OpenAI = null;
 // Optional corporate egress proxy + fail-fast timeout for OpenAI calls.
@@ -4047,6 +4081,143 @@ async function executeTool(name, args) {
     }
 }
 
+// ── Phase 34: Responses API path (gpt-5.6 family) ──────────────────────────
+// The Responses API (/v1/responses) uses a different request/stream shape than
+// Chat Completions. This helper mirrors the Chat Completions tool loop but on
+// Responses, emitting the SAME SSE vocabulary ({type:'chunk'|'tool_call'}) so
+// the frontend + billing/persist tail are unchanged. Event/usage field names
+// were verified live against gpt-5.6 before writing this.
+
+// Chat Completions tool = {type:'function', function:{name,description,parameters}}
+// Responses tool        = {type:'function', name, description, parameters}  (flat)
+function toResponsesTools(tools) {
+    return tools.map(t => ({
+        type: 'function',
+        name: t.function.name,
+        description: t.function.description,
+        parameters: t.function.parameters,
+    }));
+}
+
+async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, tools, sendEvent, acc, isAborted, setStream }) {
+    const MAX_TOOL_TURNS = 3;
+    const MAX_LENGTH_CONTINUATIONS = 4;   // Phase 32 analog for Responses
+    const rTools = toResponsesTools(tools);
+    let previousResponseId = null;
+    let input = userPrompt;               // first turn: plain string prompt
+    let toolTurn = 0;
+    let lengthContinuations = 0;
+
+    // One streaming Responses call. Accumulates text + tool calls, updates acc
+    // usage/text, returns { calls, incomplete, respId }.
+    async function once(args) {
+        let stream;
+        try {
+            stream = await oai.responses.create(args);
+        } catch (e) {
+            // Mirror the chat path's project-key 401 → global-key fallback.
+            if (e?.status === 401 && oai !== openai && openai) {
+                await markProjectKeyInvalid(userId, 'responses stream 401');
+                stream = await openai.responses.create(args);
+            } else { throw e; }
+        }
+        setStream(stream);
+        const fcalls = {};   // item_id → { call_id, name, args }
+        let respId = null, usage = null, incomplete = null;
+        try {
+            for await (const ev of stream) {
+                if (isAborted()) break;
+                switch (ev.type) {
+                    case 'response.output_text.delta':
+                        acc.fullText += ev.delta;
+                        sendEvent({ type: 'chunk', text: ev.delta });
+                        break;
+                    case 'response.output_item.added':
+                        if (ev.item?.type === 'function_call') {
+                            fcalls[ev.item.id] = { call_id: ev.item.call_id, name: ev.item.name, args: '' };
+                        }
+                        break;
+                    case 'response.function_call_arguments.delta':
+                        if (fcalls[ev.item_id]) fcalls[ev.item_id].args += ev.delta;
+                        break;
+                    case 'response.completed':
+                        respId = ev.response?.id;
+                        usage = ev.response?.usage;
+                        incomplete = ev.response?.incomplete_details;
+                        break;
+                    case 'response.failed':
+                    case 'error':
+                        throw new Error(ev.response?.error?.message || ev.message || 'Responses API stream error');
+                }
+            }
+        } catch (streamErr) {
+            if (isAborted()) return { calls: [], incomplete: null, respId };
+            throw streamErr;
+        } finally {
+            setStream(null);
+        }
+        if (usage) {
+            acc.inputTokens     += usage.input_tokens  || 0;
+            acc.outputTokens    += usage.output_tokens || 0;
+            acc.cachedTokens    += usage.input_tokens_details?.cached_tokens     || 0;
+            acc.reasoningTokens += usage.output_tokens_details?.reasoning_tokens || 0;
+        }
+        return { calls: Object.values(fcalls), incomplete, respId };
+    }
+
+    while (toolTurn < MAX_TOOL_TURNS) {
+        if (isAborted()) break;
+        const args = {
+            model, stream: true, max_output_tokens: 4000,
+            tools: rTools, reasoning: { effort }, store: true,
+            input,
+        };
+        // instructions only seed the first turn; later turns carry context via
+        // previous_response_id (server keeps the transcript — no resend needed).
+        if (previousResponseId) args.previous_response_id = previousResponseId;
+        else                    args.instructions = instructions;
+
+        const { calls, incomplete, respId } = await once(args);
+        if (respId) previousResponseId = respId;
+        if (isAborted()) return;
+
+        // Truncated by the output cap (no tool call pending) → ask to continue.
+        if (calls.length === 0 && incomplete?.reason === 'max_output_tokens'
+            && lengthContinuations < MAX_LENGTH_CONTINUATIONS) {
+            lengthContinuations++;
+            console.warn(`[chat/responses] truncated — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
+            input = 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.';
+            continue;
+        }
+
+        if (calls.length === 0) return;   // plain answer → done
+
+        // Tool calls → execute and feed outputs back on the next turn.
+        sendEvent({ type: 'tool_call', tools: calls.map(c => c.name) });
+        const outputs = [];
+        for (const c of calls) {
+            let parsed = {};
+            try { parsed = JSON.parse(c.args || '{}'); } catch (_) {}
+            const result = await executeTool(c.name, parsed);
+            outputs.push({ type: 'function_call_output', call_id: c.call_id, output: JSON.stringify(result) });
+        }
+        input = outputs;   // previous_response_id carries the function_call items
+        toolTurn++;
+    }
+
+    // Hit the tool-turn cap with no answer yet → force one tools-off turn so the
+    // user gets a summary instead of an empty reply (mirrors the chat path).
+    if (!isAborted() && acc.fullText.length === 0 && previousResponseId) {
+        console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`);
+        await once({
+            model, stream: true, max_output_tokens: 4000,
+            reasoning: { effort }, store: true, tool_choice: 'none',
+            previous_response_id: previousResponseId,
+            input: 'Based on the tool results above, give the final answer now.',
+        });
+    }
+}
+
 /**
  * Process an AssistantStream — handle text deltas AND tool calls recursively.
  * เมื่อ Assistant ต้องการเรียก tool จะหยุด stream, execute, แล้ว submit ผลกลับ
@@ -4526,7 +4697,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
 app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true, reason: 'no_api_key' }); return; }
 
-    const { prompt, systemPrompt, inputRate = 0.50, outputRate = 1.50, useRouter = true, sessionId, skillId } = req.body;
+    const { prompt, systemPrompt, inputRate = 0.50, outputRate = 1.50, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
     // Phase 21.10 — Concept B gate (project pool AND daily cap).
@@ -4702,6 +4873,27 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // Tools สำหรับ chat completions (ไม่มี file_search — ใช้เฉพาะ function tools)
         const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
 
+        // Phase 34: route by model. gpt-5.6 family → Responses API path (reasoning
+        // effort); everything else → the existing Chat Completions loop below.
+        // reqModel/reqEffort resolved from the request (validated allowlist), with
+        // the env default MODEL as fallback so omitted-model requests are unchanged.
+        const { model: reqModel, path: modelPath } = resolveModel(bodyModel);
+        const reqEffort = resolveEffort(bodyEffort);
+        const acc = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0, fullText: '' };
+
+        if (modelPath === 'responses') {
+            await runResponsesTurn({
+                oai, userId: req.session.userId, model: reqModel, effort: reqEffort,
+                instructions: finalSystemPrompt, userPrompt: finalUserPrompt,
+                tools: chatTools, sendEvent, acc,
+                isAborted: () => clientAborted,
+                setStream: (s) => { currentOpenAIStream = s; },
+            });
+            inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
+            cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
+            fullText = acc.fullText;
+        } else {
+
         const messages = [
             { role: 'system', content: finalSystemPrompt },
             { role: 'user',   content: finalUserPrompt },
@@ -4722,7 +4914,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         while (toolTurn < MAX_TOOL_TURNS) {
             if (clientAborted) break;
             const streamArgs = {
-                model: MODEL, stream: true, max_completion_tokens: 3000,
+                model: reqModel, stream: true, max_completion_tokens: 3000,
                 messages,
                 tools:        chatTools,
                 tool_choice:  'auto',
@@ -4740,7 +4932,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                 if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in streamArgs)) {
                     _tempUnsupported = true;                 // remember → stop sending it next time
                     delete streamArgs.temperature;
-                    console.warn(`[chat] model ${MODEL} rejects custom temperature — retrying without it`);
+                    console.warn(`[chat] model ${reqModel} rejects custom temperature — retrying without it`);
                     stream = await oai.chat.completions.create(streamArgs);
                 } else if ((e?.status === 401) && oai !== openai && openai) {
                     await markProjectKeyInvalid(req.session.userId, 'chat stream 401');
@@ -4843,7 +5035,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         if (!clientAborted && fullText.length === 0 && lastFinishReason === 'tool_calls') {
             console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
             const finalArgs = {
-                model: MODEL, stream: true, max_completion_tokens: 3000,
+                model: reqModel, stream: true, max_completion_tokens: 3000,
                 messages,
                 tools:       chatTools,
                 tool_choice: 'none',
@@ -4885,6 +5077,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                 currentOpenAIStream = null;
             }
         }
+        }   // ── end else: Chat Completions path (Phase 34 router split) ──
 
         if (inputTokens === 0) {
             inputTokens  = Math.ceil((prompt.length + finalSystemPrompt.length) / 3.5);
@@ -4897,7 +5090,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // values still serve as fallback so an unseeded model degrades to
         // sensible defaults rather than 0. cachedInputRate defaults to half
         // of input_price (matches OpenAI gpt-4o public pricing).
-        const pricing = await getActivePricing(MODEL, { inputRate, outputRate });
+        const pricing = await getActivePricing(reqModel, { inputRate, outputRate });
         const useInput  = pricing.inputPrice;
         const useOutput = pricing.outputPrice;
         const useCached = (typeof req.body.cachedInputRate === 'number')
@@ -4928,7 +5121,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                             (response_id, project_id, user_id, model, created_at, input_param, output_param,
                              input_tokens, input_cached_tokens, output_tokens, output_reasoning_tokens, total_tokens)
                         VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7,$8,$9,$10,$11)`,
-                        [responseId, projectId, userId, MODEL,
+                        [responseId, projectId, userId, reqModel,
                          prompt || '', fullText || '',
                          inputTokens || 0, cachedTokens || 0,
                          outputTokens || 0, reasoningTokens || 0,
@@ -4989,7 +5182,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                              VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7)`,
                             [chatSessionId, fullText || '',
                              inputTokens || null, outputTokens || null,
-                             cost || null, MODEL, skillId]);
+                             cost || null, reqModel, skillId]);
                         await client.query(
                             `UPDATE tbl_chat_session
                              SET message_count = message_count + 2,
@@ -5024,7 +5217,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                                    AND effective_from <= NOW()
                                    AND (effective_to IS NULL OR effective_to > NOW())
                                  ORDER BY effective_from DESC LIMIT 1`,
-                                [MODEL]);
+                                [reqModel]);
                             const pr = priceRow.rows[0] || { input_cost: 0, output_cost: 0, cached_cost: 0 };
                             const inT = inputTokens || 0;
                             const outT = outputTokens || 0;
