@@ -911,13 +911,23 @@ app.use(csrfGuard);
 // the version-string in the URL is the cache buster for them.
 // Security: express.static below serves the whole repo root (so the
 // frontend at ../index.html, ../js, ../css, ../assets is reachable). That
-// also exposed server source, internal docs, DB dumps, and deploy scripts
-// to anyone on the internet (e.g. GET /server/server.js, /docs/*.md). Block
-// every non-frontend top-level folder here, before static runs. Allowlist
-// mindset: only the four asset dirs the browser actually needs stay open.
-const BLOCKED_TOP_DIRS = /^\/(server|docs|backups|windows|node_modules|\.git)(\/|$)/i;
+// also exposed server source, internal docs, DB dumps, deploy scripts, and
+// archived legacy data (e.g. GET /server/server.js, /docs/*.md, and
+// /_archive/legacy/db.json which held bcrypt password hashes). Block every
+// non-frontend top-level folder here, before static runs — including any dir
+// starting with "_" (archives / mockups) or "." (.git, .env, .claude), which
+// the earlier explicit list missed. Only js/ css/ assets/ + the page HTML
+// files stay public.
+const BLOCKED_TOP_DIRS = /^\/(server|docs|backups|windows|node_modules|_[^/]+|\.[^/]+)(\/|$)/i;
+// Also block root-level source/config files (start.js, README.md, *.sh/.bat,
+// etc.) — the browser only ever needs the page HTML files + js/css/assets, so
+// these are just source exposure. Frontend assets live under js/ css/ assets/
+// so the /dir/ prefix keeps them clear of this root-file match.
+const BLOCKED_ROOT_FILES = /^\/[^/]+\.(js|mjs|cjs|ts|sh|bat|ps1|md|py|sql|json|ya?ml|env|example|lock)$/i;
 app.use((req, res, next) => {
-    if (BLOCKED_TOP_DIRS.test(req.path)) return res.status(404).send('Not found');
+    if (BLOCKED_TOP_DIRS.test(req.path) || BLOCKED_ROOT_FILES.test(req.path)) {
+        return res.status(404).send('Not found');
+    }
     next();
 });
 

@@ -18,3 +18,9 @@ logs/
 
 # ── DB data backups (clean-slate dumps — never commit) ───
 backups/
+
+# ── Local UI mockups (design scratch, not shipped) ───────
+_ux-mockup/
+
+# ── Legacy / archived code (kept on disk, out of git+deploy) ─
+_archive/
