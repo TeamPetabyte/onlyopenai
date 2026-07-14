@@ -2862,49 +2862,66 @@ app.post('/api/skills/:id/test', requireAdmin, async (req, res) => {
         userPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
     }
 
-    const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt },
-    ];
+    // Phase 34: pick model + effort from the request (validated allowlist),
+    // defaulting to the env model. The gpt-5.6 family runs on the Responses API
+    // path — reuse runResponsesTurn with a no-op sendEvent to collect the full
+    // answer non-streamed; other models use the Chat Completions tool loop.
+    const { model: reqModel, path: modelPath } = resolveModel(req.body.model);
+    const reqEffort = resolveEffort(req.body.effort);
 
-    const MAX_TEST_TOOL_TURNS = 2;
+    const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
+
     let inputTokens = 0, outputTokens = 0, answer = '';
     try {
-        for (let turn = 0; turn < MAX_TEST_TOOL_TURNS; turn++) {
-            const completion = await openai.chat.completions.create({
-                model: MODEL,
-                stream: false,
-                max_completion_tokens: 3000,
-                messages,
-                tools: chatTools,
-                tool_choice: 'auto',
+        if (modelPath === 'responses') {
+            const acc = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0, fullText: '' };
+            await runResponsesTurn({
+                oai: openai, userId: req.session.userId, model: reqModel, effort: reqEffort,
+                instructions: systemPrompt, userPrompt, tools: chatTools,
+                sendEvent: () => {}, acc, isAborted: () => false, setStream: () => {},
             });
-            const choice = completion.choices[0];
-            const usage  = completion.usage || {};
-            inputTokens  += usage.prompt_tokens     || 0;
-            outputTokens += usage.completion_tokens || 0;
+            answer = acc.fullText; inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
+        } else {
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user',   content: userPrompt },
+            ];
+            const MAX_TEST_TOOL_TURNS = 2;
+            for (let turn = 0; turn < MAX_TEST_TOOL_TURNS; turn++) {
+                const completion = await openai.chat.completions.create({
+                    model: reqModel,
+                    stream: false,
+                    max_completion_tokens: 3000,
+                    messages,
+                    tools: chatTools,
+                    tool_choice: 'auto',
+                });
+                const choice = completion.choices[0];
+                const usage  = completion.usage || {};
+                inputTokens  += usage.prompt_tokens     || 0;
+                outputTokens += usage.completion_tokens || 0;
 
-            if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
-                messages.push(choice.message);
-                for (const tc of choice.message.tool_calls) {
-                    const args   = JSON.parse(tc.function.arguments || '{}');
-                    const result = await executeTool(tc.function.name, args);
-                    messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+                if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
+                    messages.push(choice.message);
+                    for (const tc of choice.message.tool_calls) {
+                        const args   = JSON.parse(tc.function.arguments || '{}');
+                        const result = await executeTool(tc.function.name, args);
+                        messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+                    }
+                    continue;
                 }
-                continue;
+                answer = choice.message.content || '';
+                break;
             }
-            answer = choice.message.content || '';
-            break;
         }
 
         logAdminAction(req, {
             action: 'test_skill_prompt',
             targetType: 'skill',
-            extra: { skillId: skill.id, promptPreview: prompt.slice(0, 100), inputTokens, outputTokens },
+            extra: { skillId: skill.id, model: reqModel, effort: reqEffort, promptPreview: prompt.slice(0, 100), inputTokens, outputTokens },
         });
 
-        res.json({ ok: true, answer, inputTokens, outputTokens });
+        res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens });
     } catch (e) {
         console.error('[skills/test]', e.message);
         res.status(500).json({ ok: false, error: e.message });

@@ -1330,9 +1330,19 @@ var admin = {
     if (out) out.style.display = 'none';
     if (inp) inp.value = '';
     if (err) err.textContent = '';
+    // Phase 34: default to gpt-5.6-terra / medium each open, sync effort visibility
+    var mdl = document.getElementById('ts-model'); if (mdl) mdl.value = 'gpt-5.6-terra';
+    var eff = document.getElementById('ts-effort'); if (eff) eff.value = 'medium';
+    this.onTestModelChange(mdl ? mdl.value : 'gpt-5.6-terra');
     document.getElementById('ts-title').textContent = '🧪 ' + t('modal.testSkill.title', 'ทดสอบ Skill') + ': ' + id;
     showModal('modal-test-skill');
     setTimeout(function () { var el = document.getElementById('ts-prompt'); if (el) el.focus(); }, 50);
+  },
+
+  // Effort only applies to the gpt-5.6 reasoning family — hide it otherwise.
+  onTestModelChange: function (v) {
+    var f = document.getElementById('ts-effort-field');
+    if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
   },
 
   runSkillTest: function () {
@@ -1352,7 +1362,11 @@ var admin = {
     fetch(BASE + '/api/skills/' + encodeURIComponent(id) + '/test', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
-      body: JSON.stringify({ prompt: prompt }),
+      body: JSON.stringify({
+        prompt: prompt,
+        model:  (g('ts-model')  || {}).value,
+        effort: (g('ts-effort') || {}).value,
+      }),
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -1360,7 +1374,8 @@ var admin = {
         outEl.style.display = '';
         outEl.querySelector('pre').textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         var meta = outEl.querySelector('.ts-meta');
-        if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens';
+        if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
+          + (d.model ? ' · ' + d.model : '');
       })
       .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
       .finally(function () {
