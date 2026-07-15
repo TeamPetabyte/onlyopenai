@@ -81,7 +81,7 @@ var admin = {
   // still resolve, but their sidebar entries are hidden (display:none) until
   // the team is ready to surface them.
   _validViews: ['overview', 'users', 'projects', 'activity', 'login-history',
-                'usage', 'balance', 'sync', 'skills', 'lab'],
+                'usage', 'balance', 'sync', 'skills', 'lab', 'evals'],
 
   // Phase 19.4: read the current URL hash and return a valid view name,
   // or null if there's nothing usable. Stripping the leading `#/` lets us
@@ -202,6 +202,7 @@ var admin = {
       sync:    function () { self.renderSync(); },        // Phase 17.4
       skills:  function () { self.renderSkills(); },      // Phase 18
       lab:     function () { self.renderLab(); },         // Phase 29: Prompt Lab
+      evals:   function () { self.renderEvals(); },       // Phase 30: Eval harness
     };
     if (renders[view]) renders[view]();
     document.getElementById('sidebar').classList.remove('open');
@@ -1586,7 +1587,8 @@ var admin = {
     var statsEl = document.getElementById('lab-stats');
     if (statsEl) statsEl.innerHTML = t('modal.testHistory.total', 'รวม') + ' <b>' + (stats.total || 0) + '</b>'
       + ' · ✅ ' + (stats.correct || 0) + ' · ⚠️ ' + (stats.partial || 0)
-      + ' · ❌ ' + (stats.incorrect || 0) + ' · ⏳ ' + (stats.pending || 0);
+      + ' · ❌ ' + (stats.incorrect || 0) + ' · ⏳ ' + (stats.pending || 0)
+      + ' · ⭐ ' + (stats.eval_cases || 0);
     if (!listEl) return;
     if (!rows.length) {
       listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);font-size:.8rem">'
@@ -1600,6 +1602,7 @@ var admin = {
         + ' style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer"'
         + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
         + admin._verdictBadge(r.verdict)
+        + (r.is_eval_case ? '<span title="อยู่ในชุดข้อสอบ">⭐</span>' : '')
         + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
         + '<span style="font-family:Geist Mono,monospace;font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
         + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
@@ -1634,16 +1637,337 @@ var admin = {
         + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
         + escapeHtml(text || '') + '</pre>';
     };
+    // Phase 30: ⭐ promote/demote into the exam set. Only judged cases with a
+    // golden reference qualify — the backend enforces it; here we just hint.
+    var canStar = log.verdict === 'correct' || (log.corrected_answer || '').trim();
+    var starBtn = log.verdict
+      ? '<button type="button" class="btn-action" style="padding:4px 12px;font-size:.75rem'
+        + (log.is_eval_case ? ';background:var(--accent-soft-bg);border-color:var(--accent-soft-border);color:var(--accent)' : '')
+        + '" onclick="admin.toggleEvalCase(' + log.log_id + ',' + (!log.is_eval_case) + ')"'
+        + (canStar ? '' : ' disabled title="' + escapeHtml(t('evals.needGolden', 'ต้องมีเฉลย หรือ verdict = ถูกต้อง ก่อน')) + '"')
+        + '>' + (log.is_eval_case
+            ? '⭐ ' + escapeHtml(t('evals.inSet', 'อยู่ในชุดข้อสอบ — กดเพื่อเอาออก'))
+            : '☆ ' + escapeHtml(t('evals.addToSet', 'เข้าชุดข้อสอบ')))
+        + '</button>'
+      : '';
     det.innerHTML =
-        '<div style="font-size:.72rem;color:var(--text-3);margin-bottom:2px">#' + log.log_id + ' · ' + escapeHtml(log.model || '')
-      +   (log.effort ? ' / ' + escapeHtml(log.effort) : '')
-      +   ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</div>'
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:2px;flex-wrap:wrap">'
+      +   '<span style="font-size:.72rem;color:var(--text-3)">#' + log.log_id + ' · ' + escapeHtml(log.model || '')
+      +     (log.effort ? ' / ' + escapeHtml(log.effort) : '')
+      +     ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</span>'
+      +   starBtn
+      + '</div>'
       + pre(t('modal.testHistory.question', 'โจทย์'), log.question)
       + pre(t('modal.testSkill.answerLabel', 'คำตอบ AI'), log.answer)
       + '<div id="lh-verdict" style="display:none;margin-top:10px"></div>';
     det.style.display = '';
     this.showVerdictBar('lh', log.log_id, log);
     det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  },
+
+  // ⭐ toggle → backend validates (needs verdict + golden reference), then
+  // re-render both the detail (button state) and the list (row badge/stats).
+  toggleEvalCase: function (logId, on) {
+    var self = this;
+    fetch(BASE + '/api/skill-test-logs/' + logId + '/eval-case', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
+      body: JSON.stringify({ on: on }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var e = document.getElementById('lab-hist-error');
+        if (!d.ok) { if (e) e.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); return; }
+        if (e) e.textContent = '';
+        self.openTestLogDetail(logId);
+        self.loadTestHistory(true);
+      })
+      .catch(function (err) {
+        var e = document.getElementById('lab-hist-error');
+        if (e) e.textContent = err.message;
+      });
+  },
+
+  // ── Phase 30: Evals page — exam runner + score report ─────────────────
+
+  renderEvals: function () {
+    var self = this;
+    fetch(BASE + '/api/skills', { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        var el = document.getElementById('ev-skill');
+        if (!el) return;
+        var want = self._evalSkillId || self._labSkillId || (d.skills[0] && d.skills[0].id) || '';
+        el.innerHTML = (d.skills || []).map(function (s) {
+          return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label || s.id) + '</option>';
+        }).join('');
+        el.value = want;
+        if (!el.value && d.skills.length) el.value = d.skills[0].id;
+        self._evalSkillId = el.value;
+        self.onEvalSkillChange();
+      })
+      .catch(function () {});
+  },
+
+  onEvalSkillChange: function () {
+    var el = document.getElementById('ev-skill');
+    if (el && el.value) this._evalSkillId = el.value;
+    var self = this;
+    // ⭐ ready-count for the selected skill (from the test-log stats).
+    fetch(BASE + '/api/skill-test-logs?skill=' + encodeURIComponent(this._evalSkillId) + '&limit=1',
+      { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var s = document.getElementById('ev-ready');
+        if (!s) return;
+        var n = (d.ok && d.stats && d.stats.eval_cases) || 0;
+        s.innerHTML = '⭐ <b>' + n + '</b> ' + t('evals.readyCount', 'ข้อสอบพร้อมสอบ')
+          + ' · ' + t('evals.judgeInfo', 'ผู้ตรวจ: GPT-5.6 Terra / high');
+        var btn = document.getElementById('ev-run-btn');
+        if (btn) btn.disabled = n === 0;
+      })
+      .catch(function () {});
+    this.loadEvalRuns();
+  },
+
+  onEvalModelChange: function (v) {
+    var f = document.getElementById('ev-effort-field');
+    if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
+  },
+
+  startEvalRun: function () {
+    var self = this;
+    var g = function (id) { return document.getElementById(id); };
+    var errEl = g('ev-error');
+    errEl.textContent = '';
+    var btn = g('ev-run-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+    fetch(BASE + '/api/evals', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
+      body: JSON.stringify({
+        skill:  this._evalSkillId,
+        model:  (g('ev-model')  || {}).value,
+        effort: (g('ev-effort') || {}).value,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) {
+          errEl.textContent = d.error || t('err.testFailed', 'เริ่มสอบไม่สำเร็จ');
+          if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+          return;
+        }
+        self._activeEvalRunId = d.runId;
+        var p = g('ev-progress'); if (p) p.style.display = '';
+        self._pollEvalRun();
+      })
+      .catch(function (e) {
+        errEl.textContent = e.message;
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+      });
+  },
+
+  // Poll the active run every 2.5s until it leaves 'running'. Each case takes
+  // seconds (answer + judge), so this cadence is plenty.
+  _pollEvalRun: function () {
+    var self  = this;
+    var runId = this._activeEvalRunId;
+    if (!runId) return;
+    fetch(BASE + '/api/evals/' + runId, { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { self._finishEvalUI(); return; }
+        var run = d.run;
+        var txt = document.getElementById('ev-progress-text');
+        var bar = document.getElementById('ev-progress-bar');
+        var pct = run.total_cases ? Math.round((run.done_cases / run.total_cases) * 100) : 0;
+        if (txt) txt.textContent = t('evals.progress', 'กำลังสอบ') + ' ' + run.done_cases + '/' + run.total_cases
+          + ' · ✅ ' + run.pass_cases;
+        if (bar) bar.style.width = pct + '%';
+        if (run.status === 'running') {
+          self._evalPollTimer = setTimeout(function () { self._pollEvalRun(); }, 2500);
+        } else {
+          self._finishEvalUI();
+          self.loadEvalRuns();
+          self.openEvalRunDetail(runId);
+        }
+      })
+      .catch(function () {
+        self._evalPollTimer = setTimeout(function () { self._pollEvalRun(); }, 4000);
+      });
+  },
+
+  _finishEvalUI: function () {
+    if (this._evalPollTimer) { clearTimeout(this._evalPollTimer); this._evalPollTimer = null; }
+    this._activeEvalRunId = null;
+    var p = document.getElementById('ev-progress'); if (p) p.style.display = 'none';
+    var b = document.getElementById('ev-run-btn');  if (b) { b.disabled = false; b.style.opacity = '1'; }
+  },
+
+  cancelEvalRun: function () {
+    if (!this._activeEvalRunId) return;
+    fetch(BASE + '/api/evals/' + this._activeEvalRunId + '/cancel', {
+      method: 'POST', headers: Auth.authHeaders(),
+    }).catch(function () {});
+    // Keep polling — the loop flips the run to 'cancelled' after the current
+    // case and the poller closes the UI from that status change.
+  },
+
+  loadEvalRuns: function () {
+    var self = this;
+    var skillId = this._evalSkillId;
+    if (!skillId) return;
+    fetch(BASE + '/api/evals?skill=' + encodeURIComponent(skillId), { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        self._renderEvalSummary(d.runs || []);
+        self._renderEvalRuns(d.runs || []);
+      })
+      .catch(function () {});
+  },
+
+  // Top summary card: latest finished score + delta vs the previous sitting.
+  _renderEvalSummary: function (runs) {
+    var card = document.getElementById('ev-summary');
+    if (!card) return;
+    var done = runs.filter(function (r) { return r.status === 'done'; });
+    if (!done.length) { card.style.display = 'none'; return; }
+    var cur = done[0], prev = done[1];
+    var delta = prev != null && prev.score_pct != null
+      ? (Number(cur.score_pct) - Number(prev.score_pct)) : null;
+    var deltaHtml = delta === null ? ''
+      : delta >= 0
+        ? '<span style="color:#3fa64d;font-weight:700"> ⬆ +' + delta.toFixed(1) + '</span>'
+        : '<span style="color:#e25563;font-weight:700"> ⬇ ' + delta.toFixed(1) + '</span>';
+    var trend = done.slice(0, 6).reverse().map(function (r) { return Number(r.score_pct).toFixed(0) + '%'; }).join(' → ');
+    card.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">'
+      +   '<div>'
+      +     '<div style="font-size:.72rem;color:var(--text-3);font-weight:600;letter-spacing:.4px">' + escapeHtml(t('evals.latestScore', 'คะแนนล่าสุด')) + ' · run #' + cur.run_id + ' · ' + escapeHtml(cur.model) + (cur.effort ? '/' + escapeHtml(cur.effort) : '') + '</div>'
+      +     '<div style="font-size:2rem;font-weight:800;color:var(--text-1)">' + Number(cur.score_pct).toFixed(1) + '%' + deltaHtml + '</div>'
+      +     '<div style="font-size:.76rem;color:var(--text-2)">✅ ' + cur.pass_cases + ' / ' + cur.total_cases + ' ' + escapeHtml(t('evals.casesPassed', 'เคสผ่าน')) + '</div>'
+      +   '</div>'
+      +   '<div style="text-align:right">'
+      +     '<div style="font-size:.72rem;color:var(--text-3);font-weight:600">' + escapeHtml(t('evals.trend', 'แนวโน้ม')) + '</div>'
+      +     '<div style="font-family:\'Geist Mono\',monospace;font-size:.85rem;color:var(--text-2)">' + trend + '</div>'
+      +   '</div>'
+      + '</div>';
+    card.style.display = '';
+  },
+
+  _renderEvalRuns: function (runs) {
+    var el = document.getElementById('ev-runs');
+    if (!el) return;
+    if (!runs.length) {
+      el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);font-size:.8rem">'
+        + t('evals.noRuns', 'ยังไม่เคยสอบ skill นี้ — กด ▶ Run Eval เพื่อเริ่มรอบแรก') + '</div>';
+      return;
+    }
+    var badge = function (s) {
+      if (s === 'done')      return '<span style="color:#3fa64d;font-weight:600">done</span>';
+      if (s === 'running')   return '<span style="color:var(--accent);font-weight:600">running…</span>';
+      if (s === 'cancelled') return '<span style="color:#e6a14a;font-weight:600">cancelled</span>';
+      return '<span style="color:#e25563;font-weight:600">failed</span>';
+    };
+    el.innerHTML = runs.map(function (r) {
+      var dt = new Date(r.started_at);
+      var when = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return '<div onclick="admin.openEvalRunDetail(' + r.run_id + ')"'
+        + ' style="display:flex;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer"'
+        + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
+        + '<b style="font-size:.78rem;color:var(--text-2);white-space:nowrap">#' + r.run_id + '</b>'
+        + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
+        + '<span style="font-family:\'Geist Mono\',monospace;font-size:.68rem;color:var(--text-3)">' + escapeHtml(r.model) + (r.effort ? '/' + escapeHtml(r.effort) : '') + '</span>'
+        + badge(r.status)
+        + '<span style="flex:1"></span>'
+        + (r.score_pct != null ? '<b style="font-size:.85rem;color:var(--text-1)">' + Number(r.score_pct).toFixed(1) + '%</b>' : '')
+        + '<span style="font-size:.72rem;color:var(--text-3)">' + r.pass_cases + '/' + r.total_cases + '</span>'
+        + '</div>';
+    }).join('');
+  },
+
+  openEvalRunDetail: function (runId) {
+    var self = this;
+    fetch(BASE + '/api/evals/' + runId, { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        self._renderEvalRunDetail(d.run, d.results || []);
+      })
+      .catch(function () {});
+  },
+
+  _renderEvalRunDetail: function (run, results) {
+    var det = document.getElementById('ev-run-detail');
+    if (!det) return;
+    // Per-category pass rate (computed client-side — 30ish rows max).
+    var byCat = {};
+    results.forEach(function (r) {
+      var c = r.category || '—';
+      byCat[c] = byCat[c] || { total: 0, pass: 0 };
+      byCat[c].total++;
+      if (r.passed) byCat[c].pass++;
+    });
+    var catHtml = Object.keys(byCat).sort().map(function (c) {
+      var v = byCat[c];
+      var pct = Math.round((v.pass / v.total) * 100);
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:.76rem;margin-bottom:4px">'
+        + '<span style="min-width:90px;color:var(--text-2)">' + escapeHtml(c) + '</span>'
+        + '<div style="flex:1;height:7px;background:var(--surface-3);border-radius:4px;overflow:hidden">'
+        +   '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 70 ? '#3fa64d' : pct >= 40 ? '#e6a14a' : '#e25563') + '"></div>'
+        + '</div>'
+        + '<span style="min-width:70px;text-align:right;color:var(--text-3)">' + v.pass + '/' + v.total + ' (' + pct + '%)</span>'
+        + '</div>';
+    }).join('');
+    var rowsHtml = results.map(function (r) {
+      return '<div onclick="admin._toggleEvalCaseDetail(' + r.result_id + ')"'
+        + ' style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer">'
+        + '<div style="display:flex;gap:10px;align-items:center">'
+        +   (r.error ? '<span title="' + escapeHtml(r.error) + '">🟡</span>' : (r.passed ? '<span>✅</span>' : '<span>❌</span>'))
+        +   (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
+        +   '<span style="flex:1;font-size:.76rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
+        +   (r.score != null ? '<b style="font-size:.76rem;color:var(--text-1)">' + Number(r.score).toFixed(1) + '/10</b>' : '')
+        + '</div>'
+        + '<div style="font-size:.72rem;color:var(--text-3);margin-top:2px;padding-left:26px">' + escapeHtml(r.judge_reason || r.error || '') + '</div>'
+        + '<div id="ev-case-' + r.result_id + '" style="display:none;margin-top:8px"></div>'
+        + '</div>';
+    }).join('');
+    det.innerHTML =
+        '<div style="font-size:.75rem;color:var(--text-3);margin-bottom:6px">run <b>#' + run.run_id + '</b> · '
+      +   escapeHtml(run.model) + (run.effort ? '/' + escapeHtml(run.effort) : '')
+      +   ' · ' + t('evals.judgedBy', 'ตรวจโดย') + ' ' + escapeHtml(run.judge_model)
+      +   ' · ' + ((run.input_tokens || 0) + (run.output_tokens || 0)).toLocaleString() + ' tokens'
+      +   (run.error ? ' · <span style="color:#e25563">' + escapeHtml(run.error) + '</span>' : '')
+      + '</div>'
+      + (catHtml ? '<div style="margin-bottom:10px">' + catHtml + '</div>' : '')
+      + '<div style="border:1px solid var(--border-subtle);border-radius:6px;max-height:420px;overflow:auto">' + rowsHtml + '</div>';
+    det.style.display = '';
+    this._evalResults = {};
+    var self = this;
+    results.forEach(function (r) { self._evalResults[r.result_id] = r; });
+    det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  },
+
+  // Expand one exam case inline: question / golden reference / fresh answer.
+  _toggleEvalCaseDetail: function (resultId) {
+    var box = document.getElementById('ev-case-' + resultId);
+    var r = (this._evalResults || {})[resultId];
+    if (!box || !r) return;
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    var pre = function (label, text) {
+      return '<label class="modal-label" style="margin-top:6px">' + escapeHtml(label) + '</label>'
+        + '<pre style="margin:0;padding:9px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.72rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto">'
+        + escapeHtml(text || '') + '</pre>';
+    };
+    var golden = (r.corrected_answer || '').trim() || r.old_answer;
+    box.innerHTML =
+        pre(t('modal.testHistory.question', 'โจทย์'), r.question)
+      + pre(t('evals.golden', 'เฉลย (golden)'), golden)
+      + pre(t('evals.freshAnswer', 'คำตอบรอบสอบนี้'), r.answer);
+    box.style.display = '';
   },
 
   openAddSkill: function () {
