@@ -81,7 +81,7 @@ var admin = {
   // still resolve, but their sidebar entries are hidden (display:none) until
   // the team is ready to surface them.
   _validViews: ['overview', 'users', 'projects', 'activity', 'login-history',
-                'usage', 'balance', 'sync', 'skills'],
+                'usage', 'balance', 'sync', 'skills', 'lab'],
 
   // Phase 19.4: read the current URL hash and return a valid view name,
   // or null if there's nothing usable. Stripping the leading `#/` lets us
@@ -201,6 +201,7 @@ var admin = {
       balance: function () { self.renderBalance(); },
       sync:    function () { self.renderSync(); },        // Phase 17.4
       skills:  function () { self.renderSkills(); },      // Phase 18
+      lab:     function () { self.renderLab(); },         // Phase 29: Prompt Lab
     };
     if (renders[view]) renders[view]();
     document.getElementById('sidebar').classList.remove('open');
@@ -1267,8 +1268,8 @@ var admin = {
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:8px;flex-shrink:0">'
-        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openTestSkill(' + idJs + ')">🧪 ' + escapeHtml(TT('btn.test', 'ทดสอบ')) + '</button>'
-        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openTestHistory(' + idJs + ')">📋 ' + escapeHtml(TT('btn.history', 'ประวัติ')) + '</button>'
+        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openPromptLab(' + idJs + ')">🧪 ' + escapeHtml(TT('btn.test', 'ทดสอบ')) + '</button>'
+        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openPromptLab(' + idJs + ', true)">📋 ' + escapeHtml(TT('btn.history', 'ประวัติ')) + '</button>'
         +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
         +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
@@ -1323,69 +1324,118 @@ var admin = {
   // Phase 33: QA sandbox — run a test prompt through a skill's system
   // prompt without touching the chat budget gate or leaving a session
   // behind in the user's real chat history. See POST /api/skills/:id/test.
-  openTestSkill: function (id) {
-    this._testSkillId = id;
-    var out = document.getElementById('ts-output');
-    var inp = document.getElementById('ts-prompt');
-    var err = document.getElementById('ts-error');
-    if (out) out.style.display = 'none';
-    if (inp) inp.value = '';
-    if (err) err.textContent = '';
-    // Phase 28: clear any judgement bar left over from a previous run
-    var vb = document.getElementById('ts-verdict');
-    if (vb) { vb.style.display = 'none'; vb.innerHTML = ''; }
-    // Phase 34: default to gpt-5.6-terra / medium each open, sync effort visibility
-    var mdl = document.getElementById('ts-model'); if (mdl) mdl.value = 'gpt-5.6-terra';
-    var eff = document.getElementById('ts-effort'); if (eff) eff.value = 'medium';
-    this.onTestModelChange(mdl ? mdl.value : 'gpt-5.6-terra');
-    document.getElementById('ts-title').textContent = '🧪 ' + t('modal.testSkill.title', 'ทดสอบ Skill') + ': ' + id;
-    showModal('modal-test-skill');
-    setTimeout(function () { var el = document.getElementById('ts-prompt'); if (el) el.focus(); }, 50);
+  // ── Phase 29: Prompt Lab (full-page test workspace) ────────────────────
+  // Replaces the old test/history modals: pick skill + model/effort, see the
+  // system prompt under test, run a question, judge the answer and browse
+  // history — all on one page (view-lab).
+
+  // Entry point from the Skill Prompts cards: 🧪 opens the lab on that skill,
+  // 📋 additionally scrolls down to the history block.
+  openPromptLab: function (skillId, showHistory) {
+    if (skillId) this._labSkillId = skillId;
+    this.navigate('lab');
+    if (showHistory) {
+      setTimeout(function () {
+        var el = document.getElementById('lab-history-card');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 450);
+    }
+  },
+
+  renderLab: function () {
+    var self = this;
+    fetch(BASE + '/api/skills', { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        var sel = d.skills || [];
+        var el  = document.getElementById('lab-skill');
+        if (!el) return;
+        var want = self._labSkillId || (sel[0] && sel[0].id) || '';
+        el.innerHTML = sel.map(function (s) {
+          return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label || s.id) + '</option>';
+        }).join('');
+        el.value = want;
+        if (!el.value && sel.length) el.value = sel[0].id;
+        self._labSkillId = el.value;
+        self.onLabSkillChange();
+      })
+      .catch(function () {});
+  },
+
+  onLabSkillChange: function () {
+    var el = document.getElementById('lab-skill');
+    if (el && el.value) this._labSkillId = el.value;
+    // A different skill means the old answer/verdict no longer applies.
+    var ans = document.getElementById('lab-answer'); if (ans) ans.textContent = '';
+    var meta = document.getElementById('lab-meta');  if (meta) meta.textContent = '';
+    this.showVerdictBar('lab', null);
+    this._loadLabPrompt();
+    this.loadTestHistory();
   },
 
   // Effort only applies to the gpt-5.6 reasoning family — hide it otherwise.
-  onTestModelChange: function (v) {
-    var f = document.getElementById('ts-effort-field');
+  onLabModelChange: function (v) {
+    var f = document.getElementById('lab-effort-field');
     if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
   },
 
-  runSkillTest: function () {
+  // Show which system prompt is being tested (full content + length) so the
+  // page explains itself: question vs THIS prompt.
+  _loadLabPrompt: function () {
+    var id = this._labSkillId;
+    if (!id) return;
+    fetch(BASE + '/api/skills/' + encodeURIComponent(id), { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok || !d.skill) return;
+        var sum = document.getElementById('lab-prompt-summary');
+        var pre = document.getElementById('lab-prompt-preview');
+        if (sum) sum.textContent = '📄 ' + t('lab.promptSummary', 'System prompt ที่ใช้ทดสอบ')
+          + ' — ' + (d.skill.label || d.skill.id) + ' (' + (d.skill.content || '').length.toLocaleString() + ' chars)';
+        if (pre) pre.textContent = d.skill.content || '';
+      })
+      .catch(function () {});
+  },
+
+  labRun: function () {
     var self = this;
-    var id  = this._testSkillId;
-    var g   = function (elId) { return document.getElementById(elId); };
-    var prompt = (g('ts-prompt').value || '').trim();
-    var errEl  = g('ts-error');
-    var outEl  = g('ts-output');
+    var id   = this._labSkillId;
+    var g    = function (elId) { return document.getElementById(elId); };
+    var prompt = (g('lab-question').value || '').trim();
+    var errEl  = g('lab-error');
+    if (!id) return;
     if (!prompt) { errEl.textContent = t('err.enterTestPrompt', 'กรุณากรอกคำถามทดสอบ'); return; }
     errEl.textContent = '';
 
-    var btn = document.querySelector('#modal-test-skill .btn-modal-submit');
+    var btn = g('lab-run-btn');
     if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = t('common.running', 'กำลังรัน...'); }
-    outEl.style.display = 'none';
+    var ans = g('lab-answer'); if (ans) ans.textContent = '';
+    var meta = g('lab-meta');  if (meta) meta.textContent = '';
+    this.showVerdictBar('lab', null);
 
     fetch(BASE + '/api/skills/' + encodeURIComponent(id) + '/test', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
       body: JSON.stringify({
         prompt: prompt,
-        model:  (g('ts-model')  || {}).value,
-        effort: (g('ts-effort') || {}).value,
+        model:  (g('lab-model')  || {}).value,
+        effort: (g('lab-effort') || {}).value,
       }),
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) { errEl.textContent = d.error || t('err.testFailed', 'ทดสอบไม่สำเร็จ'); return; }
-        outEl.style.display = '';
-        outEl.querySelector('pre').textContent = d.answer || t('msg.emptyResponse', '(empty response)');
-        var meta = outEl.querySelector('.ts-meta');
+        if (ans) ans.textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
           + (d.model ? ' · ' + d.model : '');
-        // Phase 28: arm the judgement bar for this run (logId from backend)
-        self.showVerdictBar('ts', d.logId || null);
+        self.showVerdictBar('lab', d.logId || null);
+        // The run itself created a (pending) history row — refresh the list.
+        self.loadTestHistory(true);
       })
       .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
       .finally(function () {
-        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = t('btn.run', 'Run'); }
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '▶ ' + t('btn.run', 'Run'); }
       });
   },
 
@@ -1490,35 +1540,26 @@ var admin = {
       .then(function (d) {
         if (!d.ok) { if (msg) { msg.style.color = '#e25563'; msg.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); } return; }
         if (msg) { msg.style.color = '#3fa64d'; msg.textContent = '✓ ' + t('modal.testSkill.verdictSaved', 'บันทึกแล้ว'); }
-        // In the history view, refresh the list so the row badge updates.
-        if (prefix === 'th') self.loadTestHistory(true);
+        // Refresh the history list so the row badge/stats reflect the verdict
+        // (both the run area 'lab' and the history detail 'lh' live on the
+        // lab page next to the list).
+        if (prefix === 'lab' || prefix === 'lh') self.loadTestHistory(true);
       })
       .catch(function (e) { if (msg) { msg.style.color = '#e25563'; msg.textContent = e.message; } })
       .finally(function () { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } });
-  },
-
-  openTestHistory: function (id) {
-    this._historySkillId = id;
-    var f = document.getElementById('th-filter'); if (f) f.value = '';
-    var d = document.getElementById('th-detail'); if (d) { d.style.display = 'none'; d.innerHTML = ''; }
-    var e = document.getElementById('th-error');  if (e) e.textContent = '';
-    document.getElementById('th-title').textContent =
-      '📋 ' + t('modal.testHistory.title', 'ประวัติการทดสอบ') + ': ' + id;
-    showModal('modal-test-history');
-    this.loadTestHistory();
   },
 
   // keepDetail=true → don't collapse the open detail pane (used after saving
   // a verdict from the detail view so the senior keeps their place).
   loadTestHistory: function (keepDetail) {
     var self    = this;
-    var skillId = this._historySkillId;
+    var skillId = this._labSkillId;
     if (!skillId) return;
-    var verdict = (document.getElementById('th-filter') || {}).value || '';
-    var errEl   = document.getElementById('th-error');
-    var listEl  = document.getElementById('th-list');
+    var verdict = (document.getElementById('lab-filter') || {}).value || '';
+    var errEl   = document.getElementById('lab-hist-error');
+    var listEl  = document.getElementById('lab-list');
     if (!keepDetail) {
-      var det = document.getElementById('th-detail');
+      var det = document.getElementById('lab-detail');
       if (det) { det.style.display = 'none'; det.innerHTML = ''; }
     }
     if (listEl) listEl.innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:.8rem">'
@@ -1541,8 +1582,8 @@ var admin = {
   },
 
   _renderTestHistory: function (rows, stats) {
-    var listEl  = document.getElementById('th-list');
-    var statsEl = document.getElementById('th-stats');
+    var listEl  = document.getElementById('lab-list');
+    var statsEl = document.getElementById('lab-stats');
     if (statsEl) statsEl.innerHTML = t('modal.testHistory.total', 'รวม') + ' <b>' + (stats.total || 0) + '</b>'
       + ' · ✅ ' + (stats.correct || 0) + ' · ⚠️ ' + (stats.partial || 0)
       + ' · ❌ ' + (stats.incorrect || 0) + ' · ⏳ ' + (stats.pending || 0);
@@ -1573,20 +1614,20 @@ var admin = {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          var e = document.getElementById('th-error');
+          var e = document.getElementById('lab-hist-error');
           if (e) e.textContent = d.error || t('err.loadFailed', 'โหลดไม่สำเร็จ');
           return;
         }
         self._renderTestLogDetail(d.log);
       })
       .catch(function (e2) {
-        var e = document.getElementById('th-error');
+        var e = document.getElementById('lab-hist-error');
         if (e) e.textContent = e2.message;
       });
   },
 
   _renderTestLogDetail: function (log) {
-    var det = document.getElementById('th-detail');
+    var det = document.getElementById('lab-detail');
     if (!det) return;
     var pre = function (label, text) {
       return '<label class="modal-label" style="margin-top:8px">' + escapeHtml(label) + '</label>'
@@ -1599,9 +1640,9 @@ var admin = {
       +   ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</div>'
       + pre(t('modal.testHistory.question', 'โจทย์'), log.question)
       + pre(t('modal.testSkill.answerLabel', 'คำตอบ AI'), log.answer)
-      + '<div id="th-verdict" style="display:none;margin-top:10px"></div>';
+      + '<div id="lh-verdict" style="display:none;margin-top:10px"></div>';
     det.style.display = '';
-    this.showVerdictBar('th', log.log_id, log);
+    this.showVerdictBar('lh', log.log_id, log);
     det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 

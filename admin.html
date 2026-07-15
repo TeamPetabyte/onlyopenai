@@ -1341,6 +1341,18 @@
                 <span>Skill Prompts</span>
             </a>
 
+            <!-- Phase 29: Prompt Lab — full-page workspace to test a skill's
+                 system prompt, judge the answers (senior verdict) and browse
+                 the test history. Replaces the old test/history modals. -->
+            <a class="nav-item" onclick="admin.navigate('lab');return false;"
+               href="#" id="nav-lab">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10 3v6.5L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9.5V3"/>
+                    <path d="M9 3h6M7 15h10"/>
+                </svg>
+                <span data-i18n="nav.lab">Prompt Lab</span>
+            </a>
+
             <!-- Phase 17.4: Sync Status — HIDDEN pending PM approval.
                  The view + JS handlers + backend endpoints + background
                  sync job all remain wired so usage data keeps accumulating
@@ -1785,6 +1797,96 @@
 
             <!-- Skill list -->
             <div id="skills-list"></div>
+        </div>
+
+        <!-- PROMPT LAB (Phase 29) — one-page workspace: pick a skill, see the
+             system prompt being tested, run a question, judge the answer and
+             browse/judge past runs. All rendering logic lives in admin.js
+             (renderLab / labRun / loadTestHistory / showVerdictBar). -->
+        <div class="view hidden" id="view-lab">
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.lab.title">🧪 Prompt Lab</h2>
+                    <p class="page-subtitle" data-i18n="page.lab.sub">ทดสอบคำถามกับ system prompt ของแต่ละ skill → ให้ senior ตัดสินคำตอบ → สะสมเป็นชุดเฉลย (golden dataset)</p>
+                </div>
+            </div>
+
+            <!-- Controls: which skill + which model/effort to test on -->
+            <div class="glass-card" style="margin-bottom:14px">
+                <div class="modal-row">
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="lab.skillLabel">Skill ที่ทดสอบ</label>
+                        <select class="modal-input" id="lab-skill" onchange="admin.onLabSkillChange()"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.modelLabel">โมเดล</label>
+                        <select class="modal-input" id="lab-model" onchange="admin.onLabModelChange(this.value)">
+                            <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                            <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
+                            <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                            <option value="gpt-5.5">GPT-5.5</option>
+                        </select>
+                    </div>
+                    <div class="modal-field" id="lab-effort-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.effortLabel">ระดับการคิด (effort)</label>
+                        <select class="modal-input" id="lab-effort">
+                            <option value="none">none</option>
+                            <option value="low">low</option>
+                            <option value="medium" selected>medium</option>
+                            <option value="high">high</option>
+                            <option value="xhigh">xhigh</option>
+                            <option value="max">max</option>
+                        </select>
+                    </div>
+                </div>
+                <details style="margin-top:8px">
+                    <summary id="lab-prompt-summary" style="cursor:pointer;font-size:.76rem;color:var(--text-3);font-weight:600;user-select:none">📄 System prompt</summary>
+                    <pre id="lab-prompt-preview" style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.74rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto"></pre>
+                </details>
+            </div>
+
+            <!-- Question / Answer workspace -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:14px">
+                <div class="glass-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <label class="modal-label" style="margin:0" data-i18n="lab.questionLabel">โจทย์ (วางโค้ด ABAP หรือคำถาม)</label>
+                        <button class="btn-action btn-primary-sm" id="lab-run-btn" style="padding:8px 22px" onclick="admin.labRun()">▶ <span data-i18n="btn.run">Run</span></button>
+                    </div>
+                    <textarea class="modal-input" id="lab-question" rows="14"
+                        style="font-family:'Geist Mono',monospace;font-size:.8rem"
+                        data-i18n-ph="lab.questionPh"
+                        placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."></textarea>
+                    <div class="modal-error" id="lab-error"></div>
+                </div>
+                <div class="glass-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <label class="modal-label" style="margin:0" data-i18n="modal.testSkill.answerLabel">คำตอบ AI</label>
+                        <span id="lab-meta" style="font-size:.72rem;color:var(--text-3)"></span>
+                    </div>
+                    <pre id="lab-answer" style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;min-height:120px;max-height:420px;overflow:auto"></pre>
+                    <div id="lab-verdict" style="display:none;margin-top:10px"></div>
+                </div>
+            </div>
+
+            <!-- History: every past run of the selected skill, judge-able -->
+            <div class="glass-card" id="lab-history-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <label class="modal-label" style="margin:0" data-i18n="lab.historyLabel">📋 ประวัติการทดสอบ</label>
+                        <span id="lab-stats" style="font-size:.78rem;color:var(--text-2)"></span>
+                    </div>
+                    <select class="modal-input" id="lab-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
+                        <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
+                        <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่ตัดสิน</option>
+                        <option value="correct" data-i18n="modal.testHistory.filterCorrect">✅ ถูกต้อง</option>
+                        <option value="partial" data-i18n="modal.testHistory.filterPartial">⚠️ เกือบถูก</option>
+                        <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">❌ ผิด</option>
+                    </select>
+                </div>
+                <div class="modal-error" id="lab-hist-error"></div>
+                <div id="lab-list" style="max-height:280px;overflow:auto;border:1px solid var(--border-subtle);border-radius:6px"></div>
+                <div id="lab-detail" style="display:none;margin-top:10px"></div>
+            </div>
         </div>
 
         <!-- SYNC STATUS (Phase 17.4) — monitors the OpenAI usage sync job -->
@@ -2235,82 +2337,6 @@
         </div>
     </div>
 
-    <!-- MODAL: Test Skill (Phase 33) — QA sandbox, no budget gate, no session persisted -->
-    <div class="modal-overlay" id="modal-test-skill">
-        <div class="modal-box" style="max-width:760px">
-            <div class="modal-title" id="ts-title">🧪 Test skill</div>
-            <!-- Phase 34: pick which model + effort to test the prompt on -->
-            <div class="modal-row">
-                <div class="modal-field">
-                    <label class="modal-label" data-i18n="modal.testSkill.modelLabel">Model</label>
-                    <select class="modal-input" id="ts-model" onchange="admin.onTestModelChange(this.value)">
-                        <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
-                        <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
-                        <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
-                        <option value="gpt-5.5">GPT-5.5</option>
-                    </select>
-                </div>
-                <div class="modal-field" id="ts-effort-field">
-                    <label class="modal-label" data-i18n="modal.testSkill.effortLabel">Reasoning effort</label>
-                    <select class="modal-input" id="ts-effort">
-                        <option value="none">none</option>
-                        <option value="low">low</option>
-                        <option value="medium" selected>medium</option>
-                        <option value="high">high</option>
-                        <option value="xhigh">xhigh</option>
-                        <option value="max">max</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-field">
-                <label class="modal-label" data-i18n="modal.testSkill.promptLabel">Test prompt</label>
-                <textarea class="modal-input" id="ts-prompt" rows="4"
-                    data-i18n-ph="modal.testSkill.promptPh"
-                    placeholder="Type a question to send to this skill and see how the AI responds"></textarea>
-            </div>
-            <div class="modal-error" id="ts-error"></div>
-            <div id="ts-output" style="display:none;margin-top:4px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                    <label class="modal-label" style="margin:0" data-i18n="modal.testSkill.answerLabel">AI answer</label>
-                    <span class="ts-meta" style="font-size:.72rem;color:var(--text-3)"></span>
-                </div>
-                <pre style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto"></pre>
-            </div>
-            <!-- Phase 28: judgement container — admin.showVerdictBar('ts', …)
-                 renders the verdict UI here once an answer (with logId) shows. -->
-            <div id="ts-verdict" style="display:none;margin-top:10px"></div>
-            <div class="modal-actions">
-                <button class="btn-modal-cancel" onclick="hideModal('modal-test-skill')"><span data-i18n="btn.cancelTh">ยกเลิก</span></button>
-                <button class="btn-modal-submit" onclick="admin.runSkillTest()"><span data-i18n="btn.run">Run</span></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Test history (Phase 28) — browse a skill's past test runs and
-         judge them retroactively (senior workflow: run several tests, then
-         sit down and grade them in one pass). -->
-    <div class="modal-overlay" id="modal-test-history">
-        <div class="modal-box" style="max-width:860px">
-            <div class="modal-title" id="th-title">📋 Test history</div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap">
-                <div id="th-stats" style="font-size:.78rem;color:var(--text-2)"></div>
-                <select class="modal-input" id="th-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
-                    <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
-                    <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่ตัดสิน</option>
-                    <option value="correct" data-i18n="modal.testHistory.filterCorrect">✅ ถูกต้อง</option>
-                    <option value="partial" data-i18n="modal.testHistory.filterPartial">⚠️ เกือบถูก</option>
-                    <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">❌ ผิด</option>
-                </select>
-            </div>
-            <div class="modal-error" id="th-error"></div>
-            <div id="th-list" style="max-height:260px;overflow:auto;border:1px solid var(--border-subtle);border-radius:6px"></div>
-            <div id="th-detail" style="display:none;margin-top:10px"></div>
-            <div class="modal-actions">
-                <button class="btn-modal-cancel" onclick="hideModal('modal-test-history')"><span data-i18n="btn.close">ปิด</span></button>
-            </div>
-        </div>
-    </div>
-
     <!-- MODAL: Top-up Project -->
     <div class="modal-overlay" id="modal-topup">
         <div class="modal-box" style="max-width:420px">
@@ -2699,11 +2725,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.4.3"></script>
-    <script src="js/config.js?v=1.4.3"></script>
+    <script src="js/i18n.js?v=1.4.4"></script>
+    <script src="js/config.js?v=1.4.4"></script>
     <script src="js/auth.js?v=1.3.8.2"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.4.3"></script>
+    <script src="js/admin.js?v=1.4.4"></script>
 </body>
 
 </html>
