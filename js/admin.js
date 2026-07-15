@@ -1269,8 +1269,8 @@ var admin = {
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:8px;flex-shrink:0">'
-        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openPromptLab(' + idJs + ')">🧪 ' + escapeHtml(TT('btn.test', 'ทดสอบ')) + '</button>'
-        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openPromptLab(' + idJs + ', true)">📋 ' + escapeHtml(TT('btn.history', 'ประวัติ')) + '</button>'
+        // v1.5.1: test/history buttons removed — all testing lives in the
+        // 🧪 Prompt Lab tab now; this page only manages the prompts.
         +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
         +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
@@ -1438,6 +1438,67 @@ var admin = {
       .finally(function () {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '▶ ' + t('btn.run', 'Run'); }
       });
+  },
+
+  // ── v1.5.1: attach Z-program files into the question box ──────────────
+  // Same limits as the chat composer (index.html handleFileSelect): 1 MB per
+  // file; plus a 1.5 MB cap on the combined textarea so we stay inside the
+  // server's express.json 2 MB body limit. Files are read client-side and
+  // APPENDED into #lab-question with an ABAP-comment header per file, so the
+  // content is visible/editable and the test/log/eval pipeline needs no
+  // backend change.
+  _LAB_MAX_FILE_BYTES:  1024 * 1024,
+  _LAB_MAX_TOTAL_CHARS: 1536 * 1024,
+
+  labAttachFiles: function (e) {
+    var self  = this;
+    var files = Array.prototype.slice.call((e.target && e.target.files) || []);
+    e.target.value = '';                       // allow re-attaching the same file
+    if (!files.length) return;
+    var errEl = document.getElementById('lab-error');
+    var box   = document.getElementById('lab-question');
+    if (!box) return;
+    if (errEl) errEl.textContent = '';
+
+    var queue = Promise.resolve();
+    files.forEach(function (file) {
+      queue = queue.then(function () {
+        return new Promise(function (resolve) {
+          if (file.size > self._LAB_MAX_FILE_BYTES) {
+            var kb = (file.size / 1024).toFixed(0);
+            if (errEl) errEl.textContent = (typeof tf === 'function')
+              ? tf('u.file.tooLarge', { kb: kb })
+              : t('u.file.tooLarge', 'ไฟล์ใหญ่เกินไป (' + kb + ' KB) — สูงสุด 1 MB');
+            return resolve();
+          }
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            var block = '* ===== File: ' + file.name + ' =====\n' + ev.target.result;
+            var joined = box.value ? box.value.replace(/\s+$/, '') + '\n\n' + block : block;
+            if (joined.length > self._LAB_MAX_TOTAL_CHARS) {
+              if (errEl) errEl.textContent = t('lab.totalTooLarge', 'เนื้อหารวมใหญ่เกิน 1.5 MB — ลบบางส่วนออกก่อน');
+              return resolve();
+            }
+            box.value = joined;
+            self._labUpdateCharCount();
+            resolve();
+          };
+          reader.onerror = function () {
+            if (errEl) errEl.textContent = t('u.file.readFailed', 'อ่านไฟล์ไม่สำเร็จ');
+            resolve();
+          };
+          reader.readAsText(file);
+        });
+      });
+    });
+  },
+
+  _labUpdateCharCount: function () {
+    var box = document.getElementById('lab-question');
+    var el  = document.getElementById('lab-char-count');
+    if (!box || !el) return;
+    var n = box.value.length;
+    el.textContent = n ? n.toLocaleString() + ' ' + t('lab.charCount', 'ตัวอักษร') : '';
   },
 
   // ── Phase 28: senior judgement (verdict) + test history ───────────────

@@ -1794,7 +1794,8 @@
                 <div>
                     <h2 class="page-title">Skill Prompts</h2>
                     <p class="page-subtitle"><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span>
-                        · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span></p>
+                        · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span>
+                        · <span data-i18n="page.skills.testHint">ทดสอบ prompt ได้ที่แท็บ 🧪 Prompt Lab</span></p>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
@@ -1859,15 +1860,27 @@
             <!-- Question / Answer workspace -->
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:14px">
                 <div class="glass-card">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
                         <label class="modal-label" style="margin:0" data-i18n="lab.questionLabel">โจทย์ (วางโค้ด ABAP หรือคำถาม)</label>
-                        <button class="btn-action btn-primary-sm" id="lab-run-btn" style="padding:8px 22px" onclick="admin.labRun()">▶ <span data-i18n="btn.run">Run</span></button>
+                        <div style="display:flex;gap:8px">
+                            <!-- v1.5.1: attach Z-program source files — read client-side
+                                 and appended into the textarea (visible + editable). -->
+                            <button class="btn-action" style="padding:8px 14px" onclick="document.getElementById('lab-file-input').click()">📎 <span data-i18n="lab.attachFile">แนบไฟล์</span></button>
+                            <button class="btn-action btn-primary-sm" id="lab-run-btn" style="padding:8px 22px" onclick="admin.labRun()">▶ <span data-i18n="btn.run">Run</span></button>
+                        </div>
                     </div>
+                    <input type="file" id="lab-file-input" multiple style="display:none"
+                        accept=".abap,.txt,.md,.cds,.ddls,.sql,.js,.ts,.xml,.json,.csv,.yaml,.yml,.log,.properties,.ini,.conf,.text"
+                        onchange="admin.labAttachFiles(event)" />
                     <textarea class="modal-input" id="lab-question" rows="14"
                         style="font-family:'Geist Mono',monospace;font-size:.8rem"
                         data-i18n-ph="lab.questionPh"
-                        placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."></textarea>
-                    <div class="modal-error" id="lab-error"></div>
+                        placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."
+                        oninput="admin._labUpdateCharCount()"></textarea>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;gap:8px">
+                        <div class="modal-error" id="lab-error" style="margin:0"></div>
+                        <span id="lab-char-count" style="font-size:.7rem;color:var(--text-3);white-space:nowrap"></span>
+                    </div>
                 </div>
                 <div class="glass-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -2804,11 +2817,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.5.0"></script>
-    <script src="js/config.js?v=1.5.0"></script>
+    <script src="js/i18n.js?v=1.5.1"></script>
+    <script src="js/config.js?v=1.5.1"></script>
     <script src="js/auth.js?v=1.3.8.2"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.5.0"></script>
+    <script src="js/admin.js?v=1.5.1"></script>
 </body>
 
 </html>
