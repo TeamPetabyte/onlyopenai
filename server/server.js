@@ -2931,9 +2931,133 @@ app.post('/api/skills/:id/test', requireAdmin, async (req, res) => {
             extra: { skillId: skill.id, model: reqModel, effort: reqEffort, promptPreview: prompt.slice(0, 100), inputTokens, outputTokens },
         });
 
-        res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens });
+        // Phase 28: persist the full question+answer so a senior can judge it
+        // later (verdict + corrected answer → golden dataset). A failed insert
+        // must NOT fail the test itself — the answer is still useful on screen.
+        let logId = null;
+        try {
+            const ins = await pool.query(
+                `INSERT INTO tbl_skill_test_log
+                     (skill_id, skill_label, prompt_sha256, prompt_length,
+                      model, effort, question, answer, input_tokens, output_tokens, tested_by)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                 RETURNING log_id`,
+                [skill.id, skill.label || null,
+                 crypto.createHash('sha256').update(skill.content, 'utf8').digest('hex'),
+                 skill.content.length,
+                 reqModel, reqEffort, prompt, answer, inputTokens, outputTokens,
+                 req.session.userId]);
+            logId = ins.rows[0].log_id;
+        } catch (e2) {
+            console.error('[skills/test] log insert failed:', e2.message);
+        }
+
+        res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens, logId });
     } catch (e) {
         console.error('[skills/test]', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── Phase 28: skill test log — verdict + history ──────────────────────────
+// The senior-dev training loop: every /api/skills/:id/test run is persisted
+// to tbl_skill_test_log; these endpoints let an admin judge answers
+// (correct/partial/incorrect + corrected answer) and browse the history.
+// NOTE: path is /api/skill-test-logs (NOT /api/skills/test-logs) so it can't
+// collide with the GET /api/skills/:id param route above.
+
+const TEST_VERDICTS = ['correct', 'partial', 'incorrect'];
+
+// POST /api/skill-test-logs/:logId/verdict — save (or overwrite) a judgement.
+// Body: { verdict, correctedAnswer, note, category }. Re-judging is allowed:
+// the latest judgement wins (judged_by/judged_at overwritten).
+app.post('/api/skill-test-logs/:logId/verdict', requireAdmin, async (req, res) => {
+    const logId = parseInt(req.params.logId, 10);
+    if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
+
+    const verdict = String(req.body?.verdict || '');
+    if (!TEST_VERDICTS.includes(verdict)) {
+        return res.status(400).json({ ok: false, error: 'verdict must be one of: ' + TEST_VERDICTS.join(', ') });
+    }
+    const correctedAnswer = String(req.body?.correctedAnswer || '').trim() || null;
+    const note            = String(req.body?.note || '').trim() || null;
+    const category        = String(req.body?.category || '').trim().slice(0, 40) || null;
+
+    try {
+        const upd = await pool.query(
+            `UPDATE tbl_skill_test_log
+                SET verdict=$1, corrected_answer=$2, verdict_note=$3, category=$4,
+                    judged_by=$5, judged_at=NOW()
+              WHERE log_id=$6
+              RETURNING log_id, skill_id, verdict, judged_at`,
+            [verdict, correctedAnswer, note, category, req.session.userId, logId]);
+        if (!upd.rows.length) return res.status(404).json({ ok: false, error: 'log not found' });
+
+        logAdminAction(req, {
+            action: 'judge_skill_test',
+            targetType: 'skill',
+            extra: { logId, skillId: upd.rows[0].skill_id, verdict, hasCorrection: !!correctedAnswer, category },
+        });
+        res.json({ ok: true, logId, verdict, judgedAt: upd.rows[0].judged_at });
+    } catch (e) {
+        console.error('[skill-test-logs/verdict]', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /api/skill-test-logs?skill=<id>&verdict=<correct|partial|incorrect|pending>&limit&offset
+// List rows (question/answer previews only) + verdict stats for the same filter
+// scope (skill), so the history modal renders header counts in one call.
+app.get('/api/skill-test-logs', requireAdmin, async (req, res) => {
+    const skillId = String(req.query.skill || '').trim();
+    const verdict = String(req.query.verdict || '').trim();
+    const limit   = Math.min(Math.max(parseInt(req.query.limit, 10)  || 50, 1), 200);
+    const offset  = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const where  = [];
+    const params = [];
+    if (skillId) { params.push(skillId); where.push(`skill_id=$${params.length}`); }
+    if (verdict === 'pending')                 where.push('verdict IS NULL');
+    else if (TEST_VERDICTS.includes(verdict)) { params.push(verdict); where.push(`verdict=$${params.length}`); }
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    try {
+        const rowsQ = pool.query(
+            `SELECT log_id, skill_id, skill_label, model, effort, verdict, category,
+                    LEFT(question, 160) AS question_preview,
+                    LEFT(answer, 160)   AS answer_preview,
+                    input_tokens, output_tokens, judged_at, created_at
+               FROM tbl_skill_test_log ${whereSql}
+              ORDER BY created_at DESC
+              LIMIT ${limit} OFFSET ${offset}`, params);
+        // Stats scope = the skill filter only (not the verdict filter), so the
+        // header counts stay stable while the admin flips verdict filters.
+        const statsQ = pool.query(
+            `SELECT COUNT(*)::int                                        AS total,
+                    COUNT(*) FILTER (WHERE verdict='correct')::int       AS correct,
+                    COUNT(*) FILTER (WHERE verdict='partial')::int       AS partial,
+                    COUNT(*) FILTER (WHERE verdict='incorrect')::int     AS incorrect,
+                    COUNT(*) FILTER (WHERE verdict IS NULL)::int         AS pending
+               FROM tbl_skill_test_log ${skillId ? 'WHERE skill_id=$1' : ''}`,
+            skillId ? [skillId] : []);
+        const [rows, stats] = await Promise.all([rowsQ, statsQ]);
+        res.json({ ok: true, rows: rows.rows, stats: stats.rows[0] });
+    } catch (e) {
+        console.error('[skill-test-logs]', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /api/skill-test-logs/:logId — full record for the detail view.
+app.get('/api/skill-test-logs/:logId', requireAdmin, async (req, res) => {
+    const logId = parseInt(req.params.logId, 10);
+    if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
+    try {
+        const r = await pool.query('SELECT * FROM tbl_skill_test_log WHERE log_id=$1', [logId]);
+        if (!r.rows.length) return res.status(404).json({ ok: false, error: 'log not found' });
+        res.json({ ok: true, log: r.rows[0] });
+    } catch (e) {
+        console.error('[skill-test-logs/:id]', e.message);
         res.status(500).json({ ok: false, error: e.message });
     }
 });

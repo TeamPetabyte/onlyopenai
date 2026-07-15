@@ -1268,6 +1268,7 @@ var admin = {
         +   '</div>'
         +   '<div style="display:flex;gap:8px;flex-shrink:0">'
         +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openTestSkill(' + idJs + ')">🧪 ' + escapeHtml(TT('btn.test', 'ทดสอบ')) + '</button>'
+        +     '<button class="btn-action" style="padding:7px 14px" onclick="admin.openTestHistory(' + idJs + ')">📋 ' + escapeHtml(TT('btn.history', 'ประวัติ')) + '</button>'
         +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
         +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
@@ -1330,6 +1331,9 @@ var admin = {
     if (out) out.style.display = 'none';
     if (inp) inp.value = '';
     if (err) err.textContent = '';
+    // Phase 28: clear any judgement bar left over from a previous run
+    var vb = document.getElementById('ts-verdict');
+    if (vb) { vb.style.display = 'none'; vb.innerHTML = ''; }
     // Phase 34: default to gpt-5.6-terra / medium each open, sync effort visibility
     var mdl = document.getElementById('ts-model'); if (mdl) mdl.value = 'gpt-5.6-terra';
     var eff = document.getElementById('ts-effort'); if (eff) eff.value = 'medium';
@@ -1376,11 +1380,229 @@ var admin = {
         var meta = outEl.querySelector('.ts-meta');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
           + (d.model ? ' · ' + d.model : '');
+        // Phase 28: arm the judgement bar for this run (logId from backend)
+        self.showVerdictBar('ts', d.logId || null);
       })
       .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
       .finally(function () {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = t('btn.run', 'Run'); }
       });
+  },
+
+  // ── Phase 28: senior judgement (verdict) + test history ───────────────
+  // One shared verdict bar renderer serves both the test modal (prefix 'ts')
+  // and the history detail view (prefix 'th'). Every element id is
+  // '<prefix>-…' so the two instances never collide.
+
+  _verdictLogIds: {},   // prefix → log_id currently being judged
+  _verdictPick:   {},   // prefix → selected verdict value
+
+  _VERDICTS: [
+    { v: 'correct',   icon: '✅', key: 'modal.testSkill.vCorrect',   fb: 'ถูกต้อง' },
+    { v: 'partial',   icon: '⚠️', key: 'modal.testSkill.vPartial',   fb: 'เกือบถูก' },
+    { v: 'incorrect', icon: '❌', key: 'modal.testSkill.vIncorrect', fb: 'ผิด' },
+  ],
+
+  // Render the judgement bar into #<prefix>-verdict. `existing` (optional) is
+  // a full log record — the history detail passes it to prefill a past verdict.
+  showVerdictBar: function (prefix, logId, existing) {
+    var box = document.getElementById(prefix + '-verdict');
+    if (!box) return;
+    if (!logId) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
+    this._verdictLogIds[prefix] = logId;
+    this._verdictPick[prefix]   = null;
+
+    var btns = this._VERDICTS.map(function (d) {
+      return '<button type="button" class="btn-action" id="' + prefix + '-v-' + d.v + '" style="padding:6px 13px"'
+        + ' onclick="admin.pickVerdict(\'' + prefix + '\',\'' + d.v + '\')">'
+        + d.icon + ' ' + escapeHtml(TT(d.key, d.fb)) + '</button>';
+    }).join('');
+
+    box.innerHTML =
+        '<div style="padding:11px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-3)">'
+      +   '<label class="modal-label" style="margin-bottom:6px">' + escapeHtml(TT('modal.testSkill.verdictLabel', 'คำตัดสิน (senior)')) + '</label>'
+      +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' + btns + '</div>'
+      +   '<div id="' + prefix + '-corrected-wrap" style="display:none;margin-bottom:8px">'
+      +     '<label class="modal-label">' + escapeHtml(TT('modal.testSkill.correctedLabel', 'เฉลยที่ถูกต้อง')) + '</label>'
+      +     '<textarea class="modal-input" id="' + prefix + '-corrected" rows="4" placeholder="'
+      +       escapeHtml(TT('modal.testSkill.correctedPh', 'วางคำตอบที่ถูกต้อง — จะกลายเป็นเฉลยใน golden dataset')) + '"></textarea>'
+      +   '</div>'
+      +   '<div class="modal-row">'
+      +     '<div class="modal-field"><label class="modal-label">' + escapeHtml(TT('modal.testSkill.categoryLabel', 'หมวด (ไม่บังคับ)')) + '</label>'
+      +       '<input class="modal-input" id="' + prefix + '-category" placeholder="FI / MM / SD / ..." /></div>'
+      +     '<div class="modal-field"><label class="modal-label">' + escapeHtml(TT('modal.testSkill.noteLabel', 'โน้ต (ไม่บังคับ)')) + '</label>'
+      +       '<input class="modal-input" id="' + prefix + '-vnote" /></div>'
+      +   '</div>'
+      +   '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">'
+      +     '<span id="' + prefix + '-verdict-msg" style="font-size:.75rem;color:#3fa64d"></span>'
+      +     '<button type="button" class="btn-modal-submit" id="' + prefix + '-verdict-save" onclick="admin.saveVerdict(\'' + prefix + '\')">💾 '
+      +       escapeHtml(TT('modal.testSkill.saveVerdict', 'บันทึกคำตัดสิน')) + '</button>'
+      +   '</div>'
+      + '</div>';
+    box.style.display = '';
+
+    if (existing) {
+      if (existing.verdict) this.pickVerdict(prefix, existing.verdict);
+      var c = document.getElementById(prefix + '-corrected'); if (c) c.value = existing.corrected_answer || '';
+      var g = document.getElementById(prefix + '-category');  if (g) g.value = existing.category || '';
+      var n = document.getElementById(prefix + '-vnote');     if (n) n.value = existing.verdict_note || '';
+    }
+  },
+
+  pickVerdict: function (prefix, v) {
+    this._verdictPick[prefix] = v;
+    this._VERDICTS.forEach(function (d) {
+      var b = document.getElementById(prefix + '-v-' + d.v);
+      if (!b) return;
+      var on = d.v === v;
+      b.style.background  = on ? 'var(--accent-soft-bg)' : '';
+      b.style.borderColor = on ? 'var(--accent-soft-border)' : '';
+      b.style.color       = on ? 'var(--accent)' : '';
+      b.style.fontWeight  = on ? '700' : '';
+    });
+    // The corrected-answer box only matters when the AI got it (partly) wrong.
+    var wrap = document.getElementById(prefix + '-corrected-wrap');
+    if (wrap) wrap.style.display = (v === 'partial' || v === 'incorrect') ? '' : 'none';
+  },
+
+  saveVerdict: function (prefix) {
+    var self  = this;
+    var logId = this._verdictLogIds[prefix];
+    var v     = this._verdictPick[prefix];
+    var msg   = document.getElementById(prefix + '-verdict-msg');
+    if (!logId) return;
+    if (!v) { if (msg) { msg.style.color = '#e25563'; msg.textContent = t('err.pickVerdict', 'เลือกคำตัดสินก่อน'); } return; }
+    var gv  = function (suffix) { var el = document.getElementById(prefix + suffix); return el ? el.value : ''; };
+    var btn = document.getElementById(prefix + '-verdict-save');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+    fetch(BASE + '/api/skill-test-logs/' + logId + '/verdict', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.authHeaders()),
+      body: JSON.stringify({
+        verdict: v,
+        correctedAnswer: gv('-corrected'),
+        note: gv('-vnote'),
+        category: gv('-category'),
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { if (msg) { msg.style.color = '#e25563'; msg.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); } return; }
+        if (msg) { msg.style.color = '#3fa64d'; msg.textContent = '✓ ' + t('modal.testSkill.verdictSaved', 'บันทึกแล้ว'); }
+        // In the history view, refresh the list so the row badge updates.
+        if (prefix === 'th') self.loadTestHistory(true);
+      })
+      .catch(function (e) { if (msg) { msg.style.color = '#e25563'; msg.textContent = e.message; } })
+      .finally(function () { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } });
+  },
+
+  openTestHistory: function (id) {
+    this._historySkillId = id;
+    var f = document.getElementById('th-filter'); if (f) f.value = '';
+    var d = document.getElementById('th-detail'); if (d) { d.style.display = 'none'; d.innerHTML = ''; }
+    var e = document.getElementById('th-error');  if (e) e.textContent = '';
+    document.getElementById('th-title').textContent =
+      '📋 ' + t('modal.testHistory.title', 'ประวัติการทดสอบ') + ': ' + id;
+    showModal('modal-test-history');
+    this.loadTestHistory();
+  },
+
+  // keepDetail=true → don't collapse the open detail pane (used after saving
+  // a verdict from the detail view so the senior keeps their place).
+  loadTestHistory: function (keepDetail) {
+    var self    = this;
+    var skillId = this._historySkillId;
+    if (!skillId) return;
+    var verdict = (document.getElementById('th-filter') || {}).value || '';
+    var errEl   = document.getElementById('th-error');
+    var listEl  = document.getElementById('th-list');
+    if (!keepDetail) {
+      var det = document.getElementById('th-detail');
+      if (det) { det.style.display = 'none'; det.innerHTML = ''; }
+    }
+    if (listEl) listEl.innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:.8rem">'
+      + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
+    fetch(BASE + '/api/skill-test-logs?skill=' + encodeURIComponent(skillId)
+        + (verdict ? '&verdict=' + verdict : ''), { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { if (errEl) errEl.textContent = d.error || t('err.loadFailed', 'โหลดไม่สำเร็จ'); return; }
+        self._renderTestHistory(d.rows || [], d.stats || {});
+      })
+      .catch(function (e) { if (errEl) errEl.textContent = e.message; });
+  },
+
+  _verdictBadge: function (v) {
+    if (v === 'correct')   return '<span style="font-weight:700">✅</span>';
+    if (v === 'partial')   return '<span style="font-weight:700">⚠️</span>';
+    if (v === 'incorrect') return '<span style="font-weight:700">❌</span>';
+    return '<span style="color:var(--text-3)">⏳</span>';
+  },
+
+  _renderTestHistory: function (rows, stats) {
+    var listEl  = document.getElementById('th-list');
+    var statsEl = document.getElementById('th-stats');
+    if (statsEl) statsEl.innerHTML = t('modal.testHistory.total', 'รวม') + ' <b>' + (stats.total || 0) + '</b>'
+      + ' · ✅ ' + (stats.correct || 0) + ' · ⚠️ ' + (stats.partial || 0)
+      + ' · ❌ ' + (stats.incorrect || 0) + ' · ⏳ ' + (stats.pending || 0);
+    if (!listEl) return;
+    if (!rows.length) {
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);font-size:.8rem">'
+        + t('modal.testHistory.empty', 'ยังไม่มีการทดสอบ skill นี้') + '</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function (r) {
+      var dt   = new Date(r.created_at);
+      var when = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return '<div onclick="admin.openTestLogDetail(' + r.log_id + ')"'
+        + ' style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer"'
+        + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
+        + admin._verdictBadge(r.verdict)
+        + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
+        + '<span style="font-family:Geist Mono,monospace;font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
+        + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
+        + '<span style="flex:1;font-size:.78rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
+        + '</div>';
+    }).join('');
+  },
+
+  openTestLogDetail: function (logId) {
+    var self = this;
+    fetch(BASE + '/api/skill-test-logs/' + logId, { headers: Auth.authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) {
+          var e = document.getElementById('th-error');
+          if (e) e.textContent = d.error || t('err.loadFailed', 'โหลดไม่สำเร็จ');
+          return;
+        }
+        self._renderTestLogDetail(d.log);
+      })
+      .catch(function (e2) {
+        var e = document.getElementById('th-error');
+        if (e) e.textContent = e2.message;
+      });
+  },
+
+  _renderTestLogDetail: function (log) {
+    var det = document.getElementById('th-detail');
+    if (!det) return;
+    var pre = function (label, text) {
+      return '<label class="modal-label" style="margin-top:8px">' + escapeHtml(label) + '</label>'
+        + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
+        + escapeHtml(text || '') + '</pre>';
+    };
+    det.innerHTML =
+        '<div style="font-size:.72rem;color:var(--text-3);margin-bottom:2px">#' + log.log_id + ' · ' + escapeHtml(log.model || '')
+      +   (log.effort ? ' / ' + escapeHtml(log.effort) : '')
+      +   ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</div>'
+      + pre(t('modal.testHistory.question', 'โจทย์'), log.question)
+      + pre(t('modal.testSkill.answerLabel', 'คำตอบ AI'), log.answer)
+      + '<div id="th-verdict" style="display:none;margin-top:10px"></div>';
+    det.style.display = '';
+    this.showVerdictBar('th', log.log_id, log);
+    det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 
   openAddSkill: function () {

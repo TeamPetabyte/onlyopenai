@@ -2276,9 +2276,37 @@
                 </div>
                 <pre style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto"></pre>
             </div>
+            <!-- Phase 28: judgement container — admin.showVerdictBar('ts', …)
+                 renders the verdict UI here once an answer (with logId) shows. -->
+            <div id="ts-verdict" style="display:none;margin-top:10px"></div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-test-skill')"><span data-i18n="btn.cancelTh">ยกเลิก</span></button>
                 <button class="btn-modal-submit" onclick="admin.runSkillTest()"><span data-i18n="btn.run">Run</span></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Test history (Phase 28) — browse a skill's past test runs and
+         judge them retroactively (senior workflow: run several tests, then
+         sit down and grade them in one pass). -->
+    <div class="modal-overlay" id="modal-test-history">
+        <div class="modal-box" style="max-width:860px">
+            <div class="modal-title" id="th-title">📋 Test history</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 8px;flex-wrap:wrap">
+                <div id="th-stats" style="font-size:.78rem;color:var(--text-2)"></div>
+                <select class="modal-input" id="th-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
+                    <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
+                    <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่ตัดสิน</option>
+                    <option value="correct" data-i18n="modal.testHistory.filterCorrect">✅ ถูกต้อง</option>
+                    <option value="partial" data-i18n="modal.testHistory.filterPartial">⚠️ เกือบถูก</option>
+                    <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">❌ ผิด</option>
+                </select>
+            </div>
+            <div class="modal-error" id="th-error"></div>
+            <div id="th-list" style="max-height:260px;overflow:auto;border:1px solid var(--border-subtle);border-radius:6px"></div>
+            <div id="th-detail" style="display:none;margin-top:10px"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel" onclick="hideModal('modal-test-history')"><span data-i18n="btn.close">ปิด</span></button>
             </div>
         </div>
     </div>
@@ -2671,11 +2699,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.4.1"></script>
-    <script src="js/config.js?v=1.4.2.1"></script>
+    <script src="js/i18n.js?v=1.4.3"></script>
+    <script src="js/config.js?v=1.4.3"></script>
     <script src="js/auth.js?v=1.3.8.2"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.4.1"></script>
+    <script src="js/admin.js?v=1.4.3"></script>
 </body>
 
 </html>
