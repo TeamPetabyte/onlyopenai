@@ -1406,12 +1406,16 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
     const projId = projectId || 'proj_sap_dev';
     try {
         const hash = await bcrypt.hash(password, 10);
-        // Phase 8: any password an admin chose for a user is "temporary" —
+        // Phase 8: any password an admin chose for a USER is "temporary" —
         // force the user to set their own on first login.
+        // Phase 30.1: staff accounts (admin/trainer) are exempt — only a
+        // trainer can create them and the password is chosen deliberately,
+        // so they can log in with it right away (per winn's request).
+        const mustChangePw = roleId === 2;
         const r = await pool.query(`
             INSERT INTO tbl_user (project_id, role_id, username, password, name, surname, created_date, acc_status_id, must_change_password, daily_cap)
-            VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,1,TRUE,$7) RETURNING user_id`,
-            [projId, roleId, username, hash, name, surname, dailyCap]);
+            VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,1,$7,$8) RETURNING user_id`,
+            [projId, roleId, username, hash, name, surname, mustChangePw, dailyCap]);
         const userId = r.rows[0].user_id;
         // Keep a (legacy) tbl_credits row at 0 — not used for billing under
         // Concept B, but some joins still expect one row per user.
