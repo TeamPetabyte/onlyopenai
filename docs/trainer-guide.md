@@ -1,6 +1,7 @@
 # PipekAI Trainer Guide
 
 *How to train the AI by testing and judging its answers — 10-minute read, for SAP/ABAP senior developers.*
+*(ภาษาไทย: [trainer-guide.th.md](trainer-guide.th.md))*
 
 > **Why your judgements matter:** every answer you grade becomes part of the
 > **golden dataset**. The AI doesn't magically learn on its own — your verdicts
