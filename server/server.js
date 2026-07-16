@@ -1395,11 +1395,14 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
         ? null : Number(req.body.dailyCap);
 
     // Phase 30: privilege-escalation guard — only a trainer (superadmin) can
-    // mint privileged accounts; a plain admin creates regular users only.
-    const ROLE_IDS = { admin: 1, user: 2, trainer: 3 };
+    // mint admin accounts; a plain admin creates regular users only.
+    // Phase 30.3: 'trainer' can NOT be created via the API at all (the
+    // schema's roleEnum already rejects it) — superadmins are provisioned
+    // manually when needed.
+    const ROLE_IDS = { admin: 1, user: 2 };
     const roleId = ROLE_IDS[role] || 2;
     if (roleId !== 2 && req.session.role !== 'trainer') {
-        return res.status(403).json({ ok: false, error: 'Only a trainer can create admin/trainer accounts' });
+        return res.status(403).json({ ok: false, error: 'Only a trainer can create admin accounts' });
     }
     const [name, ...rest] = (displayName || req.body.name || username).split(' ');
     const surname = req.body.surname || rest.join(' ') || '';
@@ -1472,11 +1475,12 @@ app.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (req
     }
 
     // Phase 30: same escalation guard as createUser — only a trainer can
-    // grant (or keep assigning) privileged roles via update.
-    const UPD_ROLE_IDS = { admin: 1, user: 2, trainer: 3 };
+    // grant the admin role via update. Phase 30.3: 'trainer' is not
+    // assignable through the API at all (schema roleEnum rejects it).
+    const UPD_ROLE_IDS = { admin: 1, user: 2 };
     const roleId = has('role') ? (UPD_ROLE_IDS[b.role] || 2) : undefined;
     if (roleId !== undefined && roleId !== 2 && req.session.role !== 'trainer') {
-        return res.status(403).json({ ok: false, error: 'Only a trainer can assign admin/trainer roles' });
+        return res.status(403).json({ ok: false, error: 'Only a trainer can assign the admin role' });
     }
     // projectId: null = unassign, string = assign, undefined = no change
     const projValue = has('projectId')

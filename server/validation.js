@@ -26,7 +26,9 @@ const displayStr = z.string().trim().max(128);       // used for name/surname/di
 const longText   = z.string().max(1024);             // description etc.
 const projectId  = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_\-]+$/,
     'projectId must be alphanumeric/_/-');
-const roleEnum   = z.enum(['admin', 'user', 'trainer']);   // Phase 30: trainer (superadmin)
+// Phase 30.3: 'trainer' (superadmin) is deliberately NOT accepted here —
+// superadmin accounts are provisioned manually (SQL), never via the API.
+const roleEnum   = z.enum(['admin', 'user']);
 
 // Numbers may arrive as strings from HTML forms — coerce then clamp.
 const amount     = z.coerce.number().finite()
