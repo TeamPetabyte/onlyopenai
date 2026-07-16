@@ -4,10 +4,26 @@
  */
 
 document.addEventListener('DOMContentLoaded', function () {
-  if (!Auth.check('admin')) return;
+  if (!Auth.check(['admin', 'trainer'])) return;
   var session = Auth.getSession();
   var el = document.getElementById('admin-display-name');
   if (el) el.textContent = session.displayName || session.username;
+  // Phase 30: role badge + tab visibility. Admin manages people/money only —
+  // the training tabs (Skill Prompts / Prompt Lab / Evals) are trainer-only.
+  // Hiding is UX; the real gate is requireTrainer (403) on the backend.
+  var badge = document.getElementById('admin-role-badge');
+  if (badge && session.role === 'trainer') {
+    badge.textContent = 'TRAINER';
+    badge.style.background = 'rgba(55,179,74,0.12)';
+    badge.style.color = '#3fa64d';
+    badge.style.borderColor = 'rgba(55,179,74,0.35)';
+  }
+  if (session.role !== 'trainer') {
+    ['nav-skills', 'nav-lab', 'nav-evals'].forEach(function (id) {
+      var n = document.getElementById(id);
+      if (n) n.style.display = 'none';
+    });
+  }
   admin.init();
 });
 
@@ -128,6 +144,13 @@ var admin = {
   },
 
   navigate: function (view) {
+    // Phase 30: training views are trainer-only. Direct hash entry (#lab etc.)
+    // by an admin bounces to overview — the backend 403s regardless; this
+    // just keeps the UX coherent.
+    if (view === 'skills' || view === 'lab' || view === 'evals') {
+      var _s = (typeof Auth !== 'undefined') && Auth.getSession();
+      if (!_s || _s.role !== 'trainer') view = 'overview';
+    }
     document.querySelectorAll('.view').forEach(function (v) { v.classList.add('hidden'); });
     document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
     // Phase 16.3: 'login-history' is a virtual nav target that maps to the
@@ -2452,7 +2475,7 @@ var admin = {
 
     this.fetchUsersFromDB().then(function (users) {
       self._cachedDBUsers = users;
-      users = users.filter(function (u) { return u.role !== 'admin'; });
+      users = users.filter(function (u) { return u.role !== 'admin' && u.role !== 'trainer'; });
       var totalUsers = users.length;
 
       var filter = self._userProjectFilter;
@@ -3287,6 +3310,14 @@ var admin = {
     if (cap) cap.value = '50';   // sensible default daily cap; clear for unlimited
     var hint = document.getElementById('au-pw-hint');
     if (hint) { hint.style.color = '#555'; hint.textContent = t('hint.pwPolicy', 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)'); }
+    // Phase 30: only a trainer sees the role picker (admins create users only)
+    var roleField = document.getElementById('au-role-field');
+    var roleSel   = document.getElementById('au-role');
+    if (roleSel) roleSel.value = 'user';
+    if (roleField) {
+      var sess30 = Auth.getSession();
+      roleField.style.display = (sess30 && sess30.role === 'trainer') ? '' : 'none';
+    }
     document.getElementById('au-error').textContent = '';
     // Phase 16.14: reset hidden project input + label (custom dropdown)
     var pf = document.getElementById('au-project');
@@ -3349,6 +3380,13 @@ var admin = {
       dailyCap: dailyCap,   // Concept B: per-user daily limit (null = unlimited)
     };
     if (projectId) payload.projectId = projectId;
+    // Phase 30: role from the picker (only rendered for trainers; backend
+    // rejects privileged roles from non-trainers anyway)
+    var roleEl = document.getElementById('au-role');
+    var roleField2 = document.getElementById('au-role-field');
+    if (roleEl && roleField2 && roleField2.style.display !== 'none' && roleEl.value !== 'user') {
+      payload.role = roleEl.value;
+    }
 
     fetch(BASE + '/api/users', {
       method: 'POST',
@@ -4519,7 +4557,7 @@ var admin = {
     if (list) list.innerHTML = '';
     this.fetchUsersFromDB().then(function (users) {
       // ไม่แสดง admin ใน Usage Analytics
-      users = users.filter(function (u) { return u.role !== 'admin'; });
+      users = users.filter(function (u) { return u.role !== 'admin' && u.role !== 'trainer'; });
       var projects = self._projectsList();
 
       // Phase 16.14: custom dropdown — sync the trigger label with state.

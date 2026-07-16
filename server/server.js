@@ -128,11 +128,16 @@ function validateAmount(value, { min = 0, max = MAX_BALANCE, required = true } =
 
 // ── Role normalization ─────────────────────────────────────
 // DB stores tbl_user_role.role_des as 'admin' or 'general user'.
-// Frontend (Auth.check / requireRole) compares against literal 'admin' / 'user'.
-// Normalize at every response boundary so client & middleware never see 'general user'.
+// Frontend (Auth.check / requireRole) compares against literal role names.
+// Normalize at every response boundary so client & middleware never see raw
+// role_des values like 'general user'.
+// Phase 30: added 'trainer' (superadmin) — anything unknown still maps to
+// 'user' so a typo'd role can never gain privileges.
 function normalizeRole(roleDes) {
-    if (!roleDes) return 'user';
-    return String(roleDes).toLowerCase().trim() === 'admin' ? 'admin' : 'user';
+    const r = String(roleDes || '').toLowerCase().trim();
+    if (r === 'admin')   return 'admin';
+    if (r === 'trainer') return 'trainer';
+    return 'user';
 }
 
 // ── Session Store (Phase 7: PostgreSQL-backed; Phase 9: CSRF token) ────
@@ -279,7 +284,11 @@ async function requireAdmin(req, res, next) {
     try {
         const sess = await getSession(token);
         if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        if (sess.role !== 'admin') return res.status(403).json({ ok: false, error: 'Admin access required' });
+        // Phase 30: trainer is a superadmin — people/money admin surfaces
+        // accept both roles. Training surfaces use requireTrainer instead.
+        if (sess.role !== 'admin' && sess.role !== 'trainer') {
+            return res.status(403).json({ ok: false, error: 'Admin access required' });
+        }
         if (sess.mustChangePassword && !_isPwChangeAllowed(req)) {
             return res.status(423).json({ ok: false, mustChangePassword: true,
                 error: 'Password change required before continuing' });
@@ -288,6 +297,32 @@ async function requireAdmin(req, res, next) {
         next();
     } catch (e) {
         console.error('[requireAdmin]', e.message);
+        res.status(500).json({ ok: false, error: 'Auth check failed' });
+    }
+}
+
+// Phase 30: training surfaces (Skill Prompts / Prompt Lab / Evals) are
+// trainer-ONLY. A plain admin gets 403 here by design: verdicts, corrected
+// answers and eval runs are the golden dataset — an admin mis-click must
+// not be able to corrupt it. (UI also hides these tabs, but this is the
+// actual gate.)
+async function requireTrainer(req, res, next) {
+    const token = _extractToken(req);
+    if (!token) return res.status(401).json({ ok: false, error: 'Authentication required' });
+    try {
+        const sess = await getSession(token);
+        if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
+        if (sess.role !== 'trainer') {
+            return res.status(403).json({ ok: false, error: 'Trainer access required' });
+        }
+        if (sess.mustChangePassword && !_isPwChangeAllowed(req)) {
+            return res.status(423).json({ ok: false, mustChangePassword: true,
+                error: 'Password change required before continuing' });
+        }
+        req.session = sess;
+        next();
+    } catch (e) {
+        console.error('[requireTrainer]', e.message);
         res.status(500).json({ ok: false, error: 'Auth check failed' });
     }
 }
@@ -1359,7 +1394,13 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
                        || req.body.dailyCap === '')
         ? null : Number(req.body.dailyCap);
 
-    const roleId = (role === 'admin') ? 1 : 2;
+    // Phase 30: privilege-escalation guard — only a trainer (superadmin) can
+    // mint privileged accounts; a plain admin creates regular users only.
+    const ROLE_IDS = { admin: 1, user: 2, trainer: 3 };
+    const roleId = ROLE_IDS[role] || 2;
+    if (roleId !== 2 && req.session.role !== 'trainer') {
+        return res.status(403).json({ ok: false, error: 'Only a trainer can create admin/trainer accounts' });
+    }
     const [name, ...rest] = (displayName || req.body.name || username).split(' ');
     const surname = req.body.surname || rest.join(' ') || '';
     const projId = projectId || 'proj_sap_dev';
@@ -1418,7 +1459,13 @@ app.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (req
         if (pwErr) return res.json({ ok: false, error: pwErr });
     }
 
-    const roleId = has('role') ? (b.role === 'admin' ? 1 : 2) : undefined;
+    // Phase 30: same escalation guard as createUser — only a trainer can
+    // grant (or keep assigning) privileged roles via update.
+    const UPD_ROLE_IDS = { admin: 1, user: 2, trainer: 3 };
+    const roleId = has('role') ? (UPD_ROLE_IDS[b.role] || 2) : undefined;
+    if (roleId !== undefined && roleId !== 2 && req.session.role !== 'trainer') {
+        return res.status(403).json({ ok: false, error: 'Only a trainer can assign admin/trainer roles' });
+    }
     // projectId: null = unassign, string = assign, undefined = no change
     const projValue = has('projectId')
         ? (b.projectId === null ? null : b.projectId)
@@ -2757,7 +2804,7 @@ function isSkillPlaceholder(content) {
     return false;
 }
 
-app.get('/api/skills', requireAdmin, (req, res) => {
+app.get('/api/skills', requireTrainer, (req, res) => {
     try {
         // Strip the full `content` field — could be many KB; admin UI list
         // only needs name/description/preview. Detail view (future) can
@@ -2778,7 +2825,7 @@ app.get('/api/skills', requireAdmin, (req, res) => {
     }
 });
 
-app.post('/api/skills/reload', requireAdmin, async (req, res) => {
+app.post('/api/skills/reload', requireTrainer, async (req, res) => {
     try {
         await skillPrompts.load();
         const status = skillPrompts.getStatus();
@@ -2795,7 +2842,7 @@ app.post('/api/skills/reload', requireAdmin, async (req, res) => {
 
 // GET /api/skills/:id — full record incl. content (admin edit modal needs it;
 // the list endpoint deliberately strips content to keep the payload small).
-app.get('/api/skills/:id', requireAdmin, (req, res) => {
+app.get('/api/skills/:id', requireTrainer, (req, res) => {
     try {
         const s = skillPrompts.getSkill(req.params.id);
         if (!s) return res.status(404).json({ ok: false, error: 'skill not found' });
@@ -2809,7 +2856,7 @@ app.get('/api/skills/:id', requireAdmin, (req, res) => {
 // Body: { id, label, description, content, openaiPromptId }. Writes
 // skill-prompts.json atomically and hot-reloads the registry so the chat
 // router uses the new prompt immediately.
-app.post('/api/skills', requireAdmin, async (req, res) => {
+app.post('/api/skills', requireTrainer, async (req, res) => {
     try {
         const body = req.body || {};
         const result = await skillPrompts.upsertSkill({
@@ -2834,7 +2881,7 @@ app.post('/api/skills', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/skills/:id — remove a skill from the registry.
-app.delete('/api/skills/:id', requireAdmin, async (req, res) => {
+app.delete('/api/skills/:id', requireTrainer, async (req, res) => {
     try {
         const result = await skillPrompts.deleteSkill(req.params.id, {
             deletedBy: (req.session && (req.session.username || req.session.userId)) || 'admin',
@@ -2919,7 +2966,7 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
 // a live chat UX). Supports a short tool-calling loop since some skills
 // (find_bapi, lookup_auth_object, etc.) only produce a meaningful answer
 // via tool results.
-app.post('/api/skills/:id/test', requireAdmin, async (req, res) => {
+app.post('/api/skills/:id/test', requireTrainer, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
     const skill = skillPrompts.getSkill(req.params.id);
     if (!skill) return res.status(404).json({ ok: false, error: 'skill not found' });
@@ -2984,7 +3031,7 @@ const TEST_VERDICTS = ['correct', 'partial', 'incorrect'];
 // POST /api/skill-test-logs/:logId/verdict — save (or overwrite) a judgement.
 // Body: { verdict, correctedAnswer, note, category }. Re-judging is allowed:
 // the latest judgement wins (judged_by/judged_at overwritten).
-app.post('/api/skill-test-logs/:logId/verdict', requireAdmin, async (req, res) => {
+app.post('/api/skill-test-logs/:logId/verdict', requireTrainer, async (req, res) => {
     const logId = parseInt(req.params.logId, 10);
     if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
 
@@ -3022,7 +3069,7 @@ app.post('/api/skill-test-logs/:logId/verdict', requireAdmin, async (req, res) =
 // judged case into the exam set (⭐). Promotion needs a golden reference:
 // verdict='correct' (the answer itself is the reference) or a
 // corrected_answer supplied by the senior.
-app.post('/api/skill-test-logs/:logId/eval-case', requireAdmin, async (req, res) => {
+app.post('/api/skill-test-logs/:logId/eval-case', requireTrainer, async (req, res) => {
     const logId = parseInt(req.params.logId, 10);
     if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
     const on = !!req.body?.on;
@@ -3053,7 +3100,7 @@ app.post('/api/skill-test-logs/:logId/eval-case', requireAdmin, async (req, res)
 // GET /api/skill-test-logs?skill=<id>&verdict=<correct|partial|incorrect|pending>&limit&offset
 // List rows (question/answer previews only) + verdict stats for the same filter
 // scope (skill), so the history modal renders header counts in one call.
-app.get('/api/skill-test-logs', requireAdmin, async (req, res) => {
+app.get('/api/skill-test-logs', requireTrainer, async (req, res) => {
     const skillId = String(req.query.skill || '').trim();
     const verdict = String(req.query.verdict || '').trim();
     const limit   = Math.min(Math.max(parseInt(req.query.limit, 10)  || 50, 1), 200);
@@ -3096,7 +3143,7 @@ app.get('/api/skill-test-logs', requireAdmin, async (req, res) => {
 });
 
 // GET /api/skill-test-logs/:logId — full record for the detail view.
-app.get('/api/skill-test-logs/:logId', requireAdmin, async (req, res) => {
+app.get('/api/skill-test-logs/:logId', requireTrainer, async (req, res) => {
     const logId = parseInt(req.params.logId, 10);
     if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
     try {
@@ -3222,7 +3269,7 @@ async function executeEvalRun(runId, { userId, skillContent, model, effort, judg
 }
 
 // POST /api/evals — start an exam. Body: { skill, model, effort, judgeModel, judgeEffort }.
-app.post('/api/evals', requireAdmin, async (req, res) => {
+app.post('/api/evals', requireTrainer, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
     if (EVAL_ACTIVE) return res.status(409).json({ ok: false, error: 'มี eval กำลังรันอยู่ — รอให้จบก่อน' });
 
@@ -3279,7 +3326,7 @@ app.post('/api/evals', requireAdmin, async (req, res) => {
 
 // GET /api/evals?skill=<id>&limit=20 — run history (newest first) for the
 // report page: score trend + the table of past sittings.
-app.get('/api/evals', requireAdmin, async (req, res) => {
+app.get('/api/evals', requireTrainer, async (req, res) => {
     const skillId = String(req.query.skill || '').trim();
     const limit   = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
     try {
@@ -3301,7 +3348,7 @@ app.get('/api/evals', requireAdmin, async (req, res) => {
 
 // GET /api/evals/:runId — one run + all its per-case results (poll target
 // while running; full report once done).
-app.get('/api/evals/:runId', requireAdmin, async (req, res) => {
+app.get('/api/evals/:runId', requireTrainer, async (req, res) => {
     const runId = parseInt(req.params.runId, 10);
     if (!Number.isInteger(runId)) return res.status(400).json({ ok: false, error: 'bad runId' });
     try {
@@ -3325,7 +3372,7 @@ app.get('/api/evals/:runId', requireAdmin, async (req, res) => {
 
 // POST /api/evals/:runId/cancel — flag a running exam to stop after the
 // current case (each case is atomic; we never kill mid-request).
-app.post('/api/evals/:runId/cancel', requireAdmin, async (req, res) => {
+app.post('/api/evals/:runId/cancel', requireTrainer, async (req, res) => {
     const runId = parseInt(req.params.runId, 10);
     if (!Number.isInteger(runId)) return res.status(400).json({ ok: false, error: 'bad runId' });
     EVAL_CANCEL.add(runId);

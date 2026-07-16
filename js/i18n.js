@@ -235,6 +235,7 @@
       'm.ph.name': 'กรอกชื่อ',
       'm.ph.surname': 'กรอกนามสกุล',
       'm.field.startDailyCap': 'Daily Cap เริ่มต้น (฿/วัน)',
+      'm.field.role': 'บทบาท (Role)',
       'm.btn.resetPw': '🔑 รีเซ็ต PW',
       'm.btn.deleteUser': '🗑 ลบ User',
       // modal: daily cap
@@ -763,6 +764,7 @@
       'm.ph.name': 'Enter name',
       'm.ph.surname': 'Enter surname',
       'm.field.startDailyCap': 'Initial Daily Cap (฿/day)',
+      'm.field.role': 'Role',
       'm.btn.resetPw': '🔑 Reset PW',
       'm.btn.deleteUser': '🗑 Delete User',
       'm.cap.title': '🎯 Set Daily Cap',

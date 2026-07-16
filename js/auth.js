@@ -335,10 +335,13 @@ const Auth = {
 
     // ── Session ───────────────────────────────────────────────
     // Normalize role from any source (DB returns 'general user', legacy sessions
-    // may contain 'general user' literal). Frontend always works with 'admin'/'user'.
+    // may contain 'general user' literal). Frontend works with
+    // 'admin' / 'trainer' / 'user' (Phase 30: trainer = superadmin).
     _normalizeRole: function (r) {
-        if (!r) return 'user';
-        return String(r).toLowerCase().trim() === 'admin' ? 'admin' : 'user';
+        var v = String(r || '').toLowerCase().trim();
+        if (v === 'admin')   return 'admin';
+        if (v === 'trainer') return 'trainer';
+        return 'user';
     },
     /** Phase 24: true only while the session-scoped `petabyte_active` marker
      *  cookie is alive — i.e. the browser hasn't been closed since login. */
@@ -369,6 +372,8 @@ const Auth = {
         } catch { return null; }
     },
 
+    // Phase 30: requiredRole accepts a string OR an array of roles so the
+    // admin page can allow both 'admin' and 'trainer' (superadmin).
     check(requiredRole) {
         const session = this.getSession();
         if (!session) { window.location.href = '/login'; return false; }
@@ -377,8 +382,9 @@ const Auth = {
             window.location.href = '/change-password';
             return false;
         }
-        if (session.role !== requiredRole) {
-            window.location.href = session.role === 'admin' ? '/admin' : '/';
+        const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+        if (!allowed.includes(session.role)) {
+            window.location.href = (session.role === 'admin' || session.role === 'trainer') ? '/admin' : '/';
             return false;
         }
         return true;
