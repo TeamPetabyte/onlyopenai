@@ -2014,8 +2014,21 @@
         <div class="modal-box" style="max-width:500px">
             <div class="modal-title">Create a new user</div>
 
-            <!-- Project -->
-            <div class="modal-field">
+            <!-- Phase 30.2: Role comes FIRST — it decides which fields below
+                 make sense. Staff accounts (admin/trainer) have no project
+                 binding and no daily cap, so those fields hide. The picker
+                 itself is only rendered for trainers (superadmin). -->
+            <div class="modal-field" id="au-role-field" style="display:none">
+                <label class="modal-label" data-i18n="m.field.role">บทบาท (Role)</label>
+                <select class="modal-input" id="au-role" onchange="admin.onAddUserRoleChange(this.value)">
+                    <option value="user" selected data-i18n="m.role.user">👤 User — ใช้งาน chat</option>
+                    <option value="admin" data-i18n="m.role.admin">🛡️ Admin — จัดการคน+เงิน</option>
+                    <option value="trainer" data-i18n="m.role.trainer">🧪 Trainer — ทุกอย่าง + เทรน AI (superadmin)</option>
+                </select>
+            </div>
+
+            <!-- Project (chat users only — staff accounts aren't project-bound) -->
+            <div class="modal-field" id="au-project-field">
                 <label class="modal-label">Project</label>
                 <input type="hidden" id="au-project" />
                 <button type="button" class="dd-trigger" id="au-project-trigger"
@@ -2123,26 +2136,16 @@
             </div>
 
             <!-- Daily Cap (Concept B) — per-user daily spending limit drawn from
-                 the project pool. Leave blank = no cap (unlimited / pool only). -->
-            <div class="modal-field">
+                 the project pool. Leave blank = no cap (unlimited / pool only).
+                 Chat users only — hidden for staff roles (no chat, no cap). -->
+            <div class="modal-field" id="au-dailycap-field">
                 <label class="modal-label" data-i18n="m.field.startDailyCap">Daily Cap เริ่มต้น (฿/วัน)</label>
                 <input class="modal-input" id="au-dailycap" type="number" step="0.01" min="0"
+                       data-i18n-ph="m.ph.dailyCap"
                        placeholder="เช่น 50 — เว้นว่าง = ไม่จำกัด" value="50" />
-                <div style="font-size:.72rem;color:var(--text-3);margin-top:6px">
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:6px" data-i18n="m.hint.dailyCap">
                     ลิมิตการใช้ต่อวันของ user (หักจาก pool ของ project) · เว้นว่าง = ไม่จำกัด · ปรับภายหลังได้ที่หน้า Cap Management
                 </div>
-            </div>
-
-            <!-- Phase 30: role picker — visible only when the logged-in account
-                 is a trainer (superadmin). Admins create regular users only;
-                 the backend enforces the same rule (403). -->
-            <div class="modal-field" id="au-role-field" style="display:none">
-                <label class="modal-label" data-i18n="m.field.role">บทบาท (Role)</label>
-                <select class="modal-input" id="au-role">
-                    <option value="user" selected>👤 User — ใช้งาน chat</option>
-                    <option value="admin">🛡️ Admin — จัดการคน+เงิน</option>
-                    <option value="trainer">🧪 Trainer — ทุกอย่าง + เทรน AI (superadmin)</option>
-                </select>
             </div>
 
             <div class="modal-error" id="au-error"></div>
@@ -2829,11 +2832,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.6.0"></script>
-    <script src="js/config.js?v=1.6.1"></script>
-    <script src="js/auth.js?v=1.6.0"></script>
+    <script src="js/i18n.js?v=1.6.2"></script>
+    <script src="js/config.js?v=1.6.2"></script>
+    <script src="js/auth.js?v=1.6.2"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.6.0"></script>
+    <script src="js/admin.js?v=1.6.2"></script>
 </body>
 
 </html>

@@ -3318,6 +3318,8 @@ var admin = {
       var sess30 = Auth.getSession();
       roleField.style.display = (sess30 && sess30.role === 'trainer') ? '' : 'none';
     }
+    // Phase 30.2: sync project/daily-cap visibility with the (reset) role
+    this.onAddUserRoleChange('user');
     document.getElementById('au-error').textContent = '';
     // Phase 16.14: reset hidden project input + label (custom dropdown)
     var pf = document.getElementById('au-project');
@@ -3325,6 +3327,17 @@ var admin = {
     var pl = document.getElementById('au-project-label');
     if (pl) pl.textContent = t('dd.selectProject', '— เลือก Project —');
     showModal('modal-add-user');
+  },
+
+  // Phase 30.2: the form adapts to the picked role. Staff accounts
+  // (admin/trainer) are not project-bound and never chat, so Project and
+  // Daily Cap disappear — the form stays honest about what each role needs.
+  onAddUserRoleChange: function (role) {
+    var isUser = !role || role === 'user';
+    var proj = document.getElementById('au-project-field');
+    var cap  = document.getElementById('au-dailycap-field');
+    if (proj) proj.style.display = isUser ? '' : 'none';
+    if (cap)  cap.style.display  = isUser ? '' : 'none';
   },
 
   openAddUserProjectDropdown: function (ev) {
@@ -3356,9 +3369,17 @@ var admin = {
     var dailyCap = capRaw === '' ? null : parseFloat(capRaw);   // blank = no cap (unlimited)
     var errEl = document.getElementById('au-error');
 
+    // Phase 30.2: role decides which fields apply. Staff accounts
+    // (admin/trainer) have no project binding and no daily cap.
+    var roleEl2   = document.getElementById('au-role');
+    var roleField3 = document.getElementById('au-role-field');
+    var pickedRole = (roleEl2 && roleField3 && roleField3.style.display !== 'none')
+      ? roleEl2.value : 'user';
+    var isStaff = pickedRole === 'admin' || pickedRole === 'trainer';
+
     if (!username) { errEl.textContent = '❌ ' + t('err.enterUsername', 'กรุณากรอก Username'); return; }
     if (!firstname || !lastname) { errEl.textContent = '❌ ' + t('err.enterNameSurname', 'กรุณากรอก Name และ Surname'); return; }
-    if (!projectId) { errEl.textContent = '❌ ' + t('err.selectProject', 'กรุณาเลือก Project'); return; }
+    if (!isStaff && !projectId) { errEl.textContent = '❌ ' + t('err.selectProject', 'กรุณาเลือก Project'); return; }
     if (password.length < 8) { errEl.textContent = '❌ ' + t('err.pwMin8', 'Password ต้องมีอย่างน้อย 8 ตัว'); return; }
     if (!/[A-Z]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwUpper', 'Password ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว'); return; }
     if (!/[0-9]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwNumber', 'Password ต้องมีตัวเลขอย่างน้อย 1 ตัว'); return; }
@@ -3375,17 +3396,14 @@ var admin = {
     // projectId is a VARCHAR in DB (e.g. 'proj_sap_dev') — don't parseInt!
     // createUser schema requires string or omitted (null is rejected), so
     // build the payload conditionally: include projectId only when truthy.
-    var payload = {
-      username: safeUsername, password: password, displayName: displayName,
-      dailyCap: dailyCap,   // Concept B: per-user daily limit (null = unlimited)
-    };
-    if (projectId) payload.projectId = projectId;
-    // Phase 30: role from the picker (only rendered for trainers; backend
-    // rejects privileged roles from non-trainers anyway)
-    var roleEl = document.getElementById('au-role');
-    var roleField2 = document.getElementById('au-role-field');
-    if (roleEl && roleField2 && roleField2.style.display !== 'none' && roleEl.value !== 'user') {
-      payload.role = roleEl.value;
+    // Phase 30.2: staff payload carries no project/dailyCap at all — the
+    // backend stores project_id NULL and skips the credits row for them.
+    var payload = { username: safeUsername, password: password, displayName: displayName };
+    if (isStaff) {
+      payload.role = pickedRole;
+    } else {
+      payload.dailyCap = dailyCap;   // Concept B: per-user daily limit (null = unlimited)
+      if (projectId) payload.projectId = projectId;
     }
 
     fetch(BASE + '/api/users', {

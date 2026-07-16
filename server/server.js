@@ -1403,7 +1403,12 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
     }
     const [name, ...rest] = (displayName || req.body.name || username).split(' ');
     const surname = req.body.surname || rest.join(' ') || '';
-    const projId = projectId || 'proj_sap_dev';
+    // Phase 30.2: staff accounts (admin/trainer) are not project-bound and
+    // never chat — no project, no daily cap, no credits row (same shape as
+    // the seeded admin account). Chat users keep the old defaults.
+    const isStaff = roleId !== 2;
+    const projId     = isStaff ? null : (projectId || 'proj_sap_dev');
+    const effDailyCap = isStaff ? null : dailyCap;
     try {
         const hash = await bcrypt.hash(password, 10);
         // Phase 8: any password an admin chose for a USER is "temporary" —
@@ -1415,18 +1420,21 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
         const r = await pool.query(`
             INSERT INTO tbl_user (project_id, role_id, username, password, name, surname, created_date, acc_status_id, must_change_password, daily_cap)
             VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,1,$7,$8) RETURNING user_id`,
-            [projId, roleId, username, hash, name, surname, mustChangePw, dailyCap]);
+            [projId, roleId, username, hash, name, surname, mustChangePw, effDailyCap]);
         const userId = r.rows[0].user_id;
         // Keep a (legacy) tbl_credits row at 0 — not used for billing under
-        // Concept B, but some joins still expect one row per user.
-        await pool.query(`INSERT INTO tbl_credits (user_id, project_id, user_credits) VALUES ($1,$2,0)
-            ON CONFLICT (user_id) DO NOTHING`,
-            [userId, projId]);
+        // Concept B, but some joins still expect one row per user. Staff
+        // accounts have no project → no credits row either.
+        if (projId) {
+            await pool.query(`INSERT INTO tbl_credits (user_id, project_id, user_credits) VALUES ($1,$2,0)
+                ON CONFLICT (user_id) DO NOTHING`,
+                [userId, projId]);
+        }
         logAdminAction(req, {
             action: 'create_user',
             targetType: 'user',
             targetId: userId,
-            after: { username, name, surname, role, projectId: projId, daily_cap: dailyCap },
+            after: { username, name, surname, role, projectId: projId, daily_cap: effDailyCap },
         });
         res.json({ ok: true, id: userId });
     } catch (e) {
