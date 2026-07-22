@@ -5,9 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — AI Assistant</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.7.0" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.7.0" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.7.0" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.7.1" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.7.1" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.7.1" />
     <link
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet" />
@@ -1867,15 +1867,33 @@
             margin-right: 4px;
         }
 
-        /* Phase 33 (v1.7.0): desktop-only sidebar collapse toggle */
+        /* Phase 33.1 (v1.7.1): desktop sidebar collapse — floating circular
+           handle straddling the sidebar/chat boundary (Notion-style), level
+           with the CHAT HISTORY header. Anchored to .main (position:relative)
+           so it stays put when the sidebar slides away. */
         .sidebar-collapse-btn {
-            display: inline-flex; align-items: center;
-            background: transparent; border: none; padding: 6px;
-            cursor: pointer; color: var(--pb-text-2); margin-right: 4px;
-            border-radius: 8px;
+            position: absolute; left: -14px; top: 106px; z-index: 40;
+            width: 28px; height: 28px; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--pb-surface-1, #fff);
+            border: 1px solid var(--pb-border);
+            border-radius: 50%;
+            color: var(--pb-text-2);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+            transition: transform 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
         }
-        .sidebar-collapse-btn:hover { background: rgba(120, 130, 150, 0.12); }
+        .sidebar-collapse-btn:hover {
+            color: var(--pb-accent, #4a7bd6);
+            transform: scale(1.15);
+            box-shadow: 0 5px 16px rgba(15, 23, 42, 0.26);
+        }
+        .sidebar-collapse-btn:active { transform: scale(0.95); }
+        .sidebar-collapse-btn svg { transition: transform 0.2s ease; }
         body.sidebar-collapsed .sidebar-collapse-btn svg { transform: scaleX(-1); }
+        /* When collapsed the sidebar is gone — tuck the handle fully inside
+           the viewport instead of hanging half off-screen. */
+        body.sidebar-collapsed .sidebar-collapse-btn { left: 8px; }
         @media (max-width: 760px) { .sidebar-collapse-btn { display: none; } }
         .sidebar-backdrop {
             display: none;
@@ -2208,17 +2226,17 @@
          (must be set before i18n.js loads/reads it). admin.html leaves this
          unset so it keeps defaulting to Thai. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.7.0"></script>
+    <script src="js/i18n.js?v=1.7.1"></script>
     <!-- Chat UX polish: markdown rendering + XSS sanitization + syntax highlight -->
     <script src="js/vendor/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
-    <script src="js/md.js?v=1.7.0"></script>
-    <script src="js/config.js?v=1.7.0"></script>
-    <script src="js/auth.js?v=1.7.0"></script>
+    <script src="js/md.js?v=1.7.1"></script>
+    <script src="js/config.js?v=1.7.1"></script>
+    <script src="js/auth.js?v=1.7.1"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
-    <script src="js/ai-client.js?v=1.7.0"></script>
+    <script src="js/ai-client.js?v=1.7.1"></script>
     <script>
         // ══════════════════════════════════════════════════════════
         // STATE
