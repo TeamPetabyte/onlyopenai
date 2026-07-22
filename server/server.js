@@ -4587,6 +4587,14 @@ function toResponsesTools(tools) {
 async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, tools, sendEvent, acc, isAborted, setStream }) {
     const MAX_TOOL_TURNS = 3;
     const MAX_LENGTH_CONTINUATIONS = 4;   // Phase 32 analog for Responses
+    // Phase 31.1: reasoning tokens SHARE the max_output_tokens budget. At a
+    // fixed 4000 cap, a hard question on high/xhigh could burn the entire
+    // allowance on internal thinking and stream ZERO visible text (the
+    // blank-bubble bug seen in prod). Scale the ceiling with effort — tokens
+    // are billed by actual use, not by the cap, so bigger ceilings cost
+    // nothing on normal answers.
+    const RESP_MAX_OUT = { none: 4000, low: 6000, medium: 8000, high: 16000, xhigh: 24000, max: 32000 };
+    const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
     let previousResponseId = null;
     let input = userPrompt;               // first turn: plain string prompt
@@ -4653,7 +4661,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     while (toolTurn < MAX_TOOL_TURNS) {
         if (isAborted()) break;
         const args = {
-            model, stream: true, max_output_tokens: 4000,
+            model, stream: true, max_output_tokens: maxOutputTokens,
             tools: rTools, reasoning: { effort }, store: true,
             input,
         };
@@ -4695,7 +4703,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     if (!isAborted() && acc.fullText.length === 0 && previousResponseId) {
         console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`);
         await once({
-            model, stream: true, max_output_tokens: 4000,
+            model, stream: true, max_output_tokens: maxOutputTokens,
             reasoning: { effort }, store: true, tool_choice: 'none',
             previous_response_id: previousResponseId,
             input: 'Based on the tool results above, give the final answer now.',
