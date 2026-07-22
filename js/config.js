@@ -53,7 +53,7 @@
     // Bump this alongside the git tag whenever a release ships — e.g.
     // `git tag -a v1.2.0` → APP_VERSION here should read 'v1.2.0' too, so
     // what the tag says matches what the app shows on screen.
-    const APP_VERSION = 'v1.6.4';
+    const APP_VERSION = 'v1.6.5';
 
     window.AppConfig = {
         API_BASE: API_BASE,

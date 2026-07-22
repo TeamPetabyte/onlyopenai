@@ -4792,6 +4792,15 @@ app.post('/api/thread/message', requireAuth, chatRateLimiter, async (req, res) =
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+    // Phase 31: SSE heartbeat — a comment line every 15s while the model is
+    // silently reasoning (gpt-5.6 high/xhigh can think for minutes emitting
+    // nothing). Keeps every hop alive: nginx proxy_read_timeout, Cloudflare's
+    // idle cutoff, and the client's stall watchdog. The frontend parser only
+    // reads 'data: ' lines, so ': ping' is invisible to it.
+    const sseHeartbeat = setInterval(() => {
+        try { res.write(': ping\n\n'); } catch (_) { /* connection gone */ }
+    }, 15000);
+    res.on('close', () => clearInterval(sseHeartbeat));
 
     const sendEvent = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
     const startTime = Date.now();
@@ -5252,6 +5261,15 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+    // Phase 31: SSE heartbeat — a comment line every 15s while the model is
+    // silently reasoning (gpt-5.6 high/xhigh can think for minutes emitting
+    // nothing). Keeps every hop alive: nginx proxy_read_timeout, Cloudflare's
+    // idle cutoff, and the client's stall watchdog. The frontend parser only
+    // reads 'data: ' lines, so ': ping' is invisible to it.
+    const sseHeartbeat = setInterval(() => {
+        try { res.write(': ping\n\n'); } catch (_) { /* connection gone */ }
+    }, 15000);
+    res.on('close', () => clearInterval(sseHeartbeat));
 
     const sendEvent = (data) => {
         // If the client already hung up (e.g. pressed Stop), writing to

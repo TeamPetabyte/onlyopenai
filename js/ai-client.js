@@ -55,11 +55,24 @@ const AIClient = {
         const inputRate = (rates && rates.inputRate) || 0.50;
         const outputRate = (rates && rates.outputRate) || 1.50;
 
-        // Compose a user-triggerable abort (AIClient.cancel) with the 90s
-        // safety timeout so whichever fires first tears down the fetch.
+        // Compose a user-triggerable abort (AIClient.cancel) with a two-stage
+        // watchdog (Phase 31). The old fixed 90s deadline killed perfectly
+        // healthy requests: gpt-5.6 at high/xhigh effort can THINK silently
+        // for several minutes before the first token. Now:
+        //   stage 1 — 90s until the first byte arrives (catches "server can't
+        //             reach api.openai.com at all");
+        //   stage 2 — after bytes start flowing, a 60s IDLE watchdog that
+        //             resets on every read. The server emits an SSE heartbeat
+        //             every 15s while the model thinks, so a healthy-but-
+        //             thinking stream never trips it, while a genuinely dead
+        //             connection still fails within a minute.
         const userCtrl  = new AbortController();
         this._abortCtrl = userCtrl;
-        const timeoutId = setTimeout(() => userCtrl.abort('timeout'), 90000);
+        let watchdogId = setTimeout(() => userCtrl.abort('timeout'), 90000);
+        const resetWatchdog = () => {
+            clearTimeout(watchdogId);
+            watchdogId = setTimeout(() => userCtrl.abort('timeout'), 60000);
+        };
 
         try {
             // Phase 6.1: include Bearer token (server requires requireAuth on /api/chat)
@@ -115,6 +128,9 @@ const AIClient = {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
+                // Phase 31: any bytes (real chunks OR ': ping' heartbeats)
+                // prove the stream is alive — push the idle deadline out.
+                resetWatchdog();
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
@@ -208,7 +224,7 @@ const AIClient = {
                 blocked: true,
             });
         } finally {
-            clearTimeout(timeoutId);
+            clearTimeout(watchdogId);
             if (this._abortCtrl === userCtrl) this._abortCtrl = null;
         }
     },
