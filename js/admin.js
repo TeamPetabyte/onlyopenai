@@ -151,6 +151,12 @@ var admin = {
       var _s = (typeof Auth !== 'undefined') && Auth.getSession();
       if (!_s || _s.role !== 'trainer') view = 'overview';
     }
+    // v1.7.3: leaving the Evals view? stop the run-progress poller so it
+    // doesn't keep fetching in the background from another tab.
+    if (view !== 'evals' && this._evalPollTimer) {
+      clearTimeout(this._evalPollTimer);
+      this._evalPollTimer = null;
+    }
     document.querySelectorAll('.view').forEach(function (v) { v.classList.add('hidden'); });
     document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
     // Phase 16.3: 'login-history' is a virtual nav target that maps to the

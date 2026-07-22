@@ -3287,10 +3287,17 @@ async function executeEvalRun(runId, { userId, skillContent, model, effort, judg
 // POST /api/evals — start an exam. Body: { skill, model, effort, judgeModel, judgeEffort }.
 app.post('/api/evals', requireTrainer, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
+    // v1.7.3: claim the single-run slot SYNCHRONOUSLY, right after the check,
+    // before any `await`. Otherwise two near-simultaneous requests (double
+    // click / two tabs) both pass the check while EVAL_ACTIVE is still false
+    // and both start a run (TOCTOU). Every early-return below that hasn't
+    // handed off to executeEvalRun must release the slot again; the runner's
+    // own `finally` releases it on normal completion.
     if (EVAL_ACTIVE) return res.status(409).json({ ok: false, error: 'มี eval กำลังรันอยู่ — รอให้จบก่อน' });
+    EVAL_ACTIVE = true;
 
     const skill = skillPrompts.getSkill(String(req.body?.skill || ''));
-    if (!skill) return res.status(404).json({ ok: false, error: 'skill not found' });
+    if (!skill) { EVAL_ACTIVE = false; return res.status(404).json({ ok: false, error: 'skill not found' }); }
 
     const { model: reqModel }  = resolveModel(req.body.model);
     const reqEffort            = resolveEffort(req.body.effort);
@@ -3305,6 +3312,7 @@ app.post('/api/evals', requireTrainer, async (req, res) => {
               WHERE skill_id=$1 AND is_eval_case AND verdict IS NOT NULL
               ORDER BY log_id`, [skill.id]);
         if (!cs.rows.length) {
+            EVAL_ACTIVE = false;
             return res.status(400).json({ ok: false, error: 'skill นี้ยังไม่มีข้อสอบ (⭐) — เข้าหน้า Prompt Lab แล้วกด ⭐ เคสที่ตัดสินแล้วก่อน' });
         }
 
@@ -3317,7 +3325,7 @@ app.post('/api/evals', requireTrainer, async (req, res) => {
              cs.rows.length, req.session.userId]);
         const runId = ins.rows[0].run_id;
 
-        EVAL_ACTIVE = true;
+        // Slot already claimed above; the runner's finally will release it.
         // Fire-and-forget: the loop reports its own progress/errors to the DB.
         executeEvalRun(runId, {
             userId: req.session.userId,
