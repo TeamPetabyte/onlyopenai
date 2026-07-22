@@ -5352,12 +5352,24 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // into tbl_chat_message so the sidebar history is accurate.
         const userId = req.session && req.session.userId;
         if (userId) {
+            // v1.7.4: ALL money-touching writes for this turn run in ONE
+            // transaction — the pool deduction (tbl_balance), the usage rollup
+            // (tbl_daily_usage), the conversation turn (tbl_chat_message /
+            // tbl_chat_session) and the bonus depletion either all land or all
+            // roll back. Previously the deduction + response log were separate
+            // autocommit `pool.query` calls while only the messages/usage were
+            // in a transaction, so a crash between them could desync the pool
+            // from the usage ledger.
+            let client;
             try {
-                const uRow = await pool.query('SELECT project_id FROM tbl_user WHERE user_id=$1', [userId]);
+                client = await pool.connect();
+                await client.query('BEGIN');
+
+                const uRow = await client.query('SELECT project_id FROM tbl_user WHERE user_id=$1', [userId]);
                 const projectId = uRow.rows[0]?.project_id || null;
                 if (projectId) {
-                    const responseId = require('crypto').randomBytes(16).toString('hex');
-                    await pool.query(`
+                    const responseId = crypto.randomBytes(16).toString('hex');
+                    await client.query(`
                         INSERT INTO tbl_response
                             (response_id, project_id, user_id, model, created_at, input_param, output_param,
                              input_tokens, input_cached_tokens, output_tokens, output_reasoning_tokens, total_tokens)
@@ -5372,7 +5384,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                     // enforcement: if the pool would go negative, rowCount=0 and
                     // we log a warning. balance_before/after now snapshot the
                     // project pool (the only real money under Concept B).
-                    const dedRes = await pool.query(
+                    const dedRes = await client.query(
                         `UPDATE tbl_balance SET project_credits = project_credits - $1
                          WHERE project_id=$2 AND project_credits >= $1
                          RETURNING project_credits AS balance_after`,
@@ -5387,8 +5399,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                         // an admin can trace any debit back to the conversation.
                         const balAfter  = parseFloat(dedRes.rows[0].balance_after);
                         const balBefore = balAfter + Number(cost);
+                        // Best-effort audit row: a journal hiccup must not abort
+                        // the real financial write. Inside a transaction a failed
+                        // statement poisons the whole tx, so isolate it in a
+                        // SAVEPOINT and roll back only to here on failure.
+                        await client.query('SAVEPOINT credit_log');
                         try {
-                            await pool.query(`
+                            await client.query(`
                                 INSERT INTO tbl_user_credit_transaction
                                     (user_id, project_id, transaction_type, amount,
                                      balance_before, balance_after,
@@ -5396,22 +5413,21 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                                 VALUES ($1, $2, 'usage', $3, $4, $5, 'chat', $6, NULL)`,
                                 [userId, projectId, -Number(cost),
                                  balBefore, balAfter, chatSessionId]);
+                            await client.query('RELEASE SAVEPOINT credit_log');
                         } catch (logErr) {
-                            // Logging failure shouldn't break the chat reply — the
-                            // financial state (tbl_credits) is already correct.
+                            await client.query('ROLLBACK TO SAVEPOINT credit_log').catch(() => {});
                             console.warn('[chat] credit log INSERT failed:', logErr.message);
                         }
                     }
                 }
 
                 // Phase 12: persist the two-turn exchange into the
-                // conversation store. Either BOTH inserts land (and the
-                // session counters move by +2 / +cost) or we roll back.
+                // conversation store — now part of the same transaction as the
+                // deduction above, so messages/usage and the pool can never
+                // disagree.
                 if (chatSessionId) {
                     const skillId = detectedSkill?.skillId || null;
-                    const client = await pool.connect();
-                    try {
-                        await client.query('BEGIN');
+                    {
                         await client.query(
                             `INSERT INTO tbl_chat_message
                                 (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id)
@@ -5526,16 +5542,15 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                             }
                         }
 
-                        await client.query('COMMIT');
-                    } catch (txErr) {
-                        await client.query('ROLLBACK').catch(() => {});
-                        console.error('[chat] session persist failed:', txErr.message);
-                    } finally {
-                        client.release();
                     }
                 }
-            } catch (dbErr) {
-                console.error('[chat] DB persistence error:', dbErr.message);
+
+                await client.query('COMMIT');
+            } catch (txErr) {
+                if (client) await client.query('ROLLBACK').catch(() => {});
+                console.error('[chat] persist failed:', txErr.message);
+            } finally {
+                if (client) client.release();
             }
         }
 
