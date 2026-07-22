@@ -5,9 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — AI Assistant</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.6.6" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.6.6" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.6.6" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.7.0" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.7.0" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.7.0" />
     <link
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet" />
@@ -1075,6 +1075,16 @@
             max-width: 82%;
         }
 
+        /* Phase 33 (v1.7.0): AI answers are documents (tables, code, long
+           analyses) — give them nearly the full column. User bubbles keep
+           the chat-like 82%. */
+        .chat-msg.assistant { max-width: 95%; }
+        /* .chat-msg is a column flexbox — without this cap a child bubble
+           grows to its content's intrinsic width (a 1400px table pushed the
+           bubble right through the chat area). Cap it so .md-table-wrap is
+           the one that scrolls. */
+        .chat-msg .msg-bubble { max-width: 100%; min-width: 0; box-sizing: border-box; }
+
         .chat-msg.user {
             align-self: flex-end;
             align-items: flex-end;
@@ -1145,12 +1155,32 @@
             border-left: 3px solid #ccc; padding: 0.2em 0 0.2em 0.8em;
             color: var(--text-3); margin: 0.4em 0;
         }
+        /* Phase 33 (v1.7.0): tables live inside a horizontally-scrollable
+           wrapper (added by MD.postProcess) so wide AI tables keep natural
+           column widths instead of being crushed until Thai text wraps
+           letter-by-letter. */
+        .chat-msg.assistant .msg-bubble .md-table-wrap {
+            overflow-x: auto; max-width: 100%; margin: 0.5em 0;
+            border-radius: 8px;
+        }
         .chat-msg.assistant .msg-bubble table {
             border-collapse: collapse; margin: 0.5em 0; font-size: 0.82em;
+        }
+        .chat-msg.assistant .msg-bubble .md-table-wrap table {
+            width: max-content; min-width: 100%; margin: 0;
         }
         .chat-msg.assistant .msg-bubble th,
         .chat-msg.assistant .msg-bubble td {
             border: 1px solid #ddd; padding: 5px 9px;
+        }
+        /* Headers never wrap vertically; cells wrap Thai at word boundaries
+           (word-break:normal) instead of mid-letter (bubble default is
+           break-word, which shatters spaceless Thai in narrow cells). */
+        .chat-msg.assistant .msg-bubble th { white-space: nowrap; }
+        .chat-msg.assistant .msg-bubble td {
+            min-width: 110px; max-width: 340px;
+            word-break: normal; overflow-wrap: normal; line-break: normal;
+            vertical-align: top;
         }
         .chat-msg.assistant .msg-bubble th { background: #eee; font-weight: 600; }
         .chat-msg.assistant .msg-bubble a { color: #2563eb; text-decoration: underline; }
@@ -1836,6 +1866,17 @@
             color: var(--pb-text-2);
             margin-right: 4px;
         }
+
+        /* Phase 33 (v1.7.0): desktop-only sidebar collapse toggle */
+        .sidebar-collapse-btn {
+            display: inline-flex; align-items: center;
+            background: transparent; border: none; padding: 6px;
+            cursor: pointer; color: var(--pb-text-2); margin-right: 4px;
+            border-radius: 8px;
+        }
+        .sidebar-collapse-btn:hover { background: rgba(120, 130, 150, 0.12); }
+        body.sidebar-collapsed .sidebar-collapse-btn svg { transform: scaleX(-1); }
+        @media (max-width: 760px) { .sidebar-collapse-btn { display: none; } }
         .sidebar-backdrop {
             display: none;
             position: fixed;
@@ -1849,6 +1890,16 @@
             display: block;
             opacity: 1;
         }
+
+        /* Phase 33 (v1.7.0): desktop sidebar collapse — slide the 232px
+           history panel away so wide AI tables get the room. Mobile (≤760px)
+           keeps its own drawer mechanics untouched. State persists via
+           localStorage('pipek_sidebar_collapsed'). */
+        @media (min-width: 761px) {
+            .sidebar { transition: margin-left 0.25s ease; }
+            body.sidebar-collapsed .sidebar { margin-left: -232px; }
+        }
+
         @media (max-width: 760px) {
             body {
                 /* allow the chat area to scroll independently of body */
@@ -2001,6 +2052,17 @@
                     <line x1="3" y1="18" x2="21" y2="18"/>
                 </svg>
             </button>
+            <!-- Phase 33 (v1.7.0): desktop collapse — hide the history panel to
+                 give wide AI tables the full width. Hidden on mobile (uses the
+                 hamburger drawer instead). -->
+            <button class="sidebar-collapse-btn" id="sidebar-collapse-btn"
+                    onclick="toggleSidebarCollapsed()"
+                    data-i18n-title="chat.toggleSidebar" title="ซ่อน/แสดงประวัติแชท">
+                <svg id="sidebar-collapse-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <polyline points="14 6 8 12 14 18"/>
+                    <line x1="19" y1="5" x2="19" y2="19"/>
+                </svg>
+            </button>
             <div class="skill-title" style="cursor:default;pointer-events:none;user-select:none">
                 <img class="header-mascot" src="/assets/mascot.png?v=2" alt="" />
                 <span id="current-skill-name">PipekAI</span>
@@ -2146,17 +2208,17 @@
          (must be set before i18n.js loads/reads it). admin.html leaves this
          unset so it keeps defaulting to Thai. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.6.6"></script>
+    <script src="js/i18n.js?v=1.7.0"></script>
     <!-- Chat UX polish: markdown rendering + XSS sanitization + syntax highlight -->
     <script src="js/vendor/marked.min.js"></script>
     <script src="js/vendor/purify.min.js"></script>
     <script src="js/vendor/highlight.min.js"></script>
-    <script src="js/md.js?v=ux-2"></script>
-    <script src="js/config.js?v=1.6.6"></script>
-    <script src="js/auth.js?v=1.6.6"></script>
+    <script src="js/md.js?v=1.7.0"></script>
+    <script src="js/config.js?v=1.7.0"></script>
+    <script src="js/auth.js?v=1.7.0"></script>
     <script src="js/pricing.js?v=pipek"></script>
     <script src="js/mock-ai.js"></script>
-    <script src="js/ai-client.js?v=1.6.6"></script>
+    <script src="js/ai-client.js?v=1.7.0"></script>
     <script>
         // ══════════════════════════════════════════════════════════
         // STATE
@@ -3278,6 +3340,21 @@
             const open = (typeof force === 'boolean') ? force : !document.body.classList.contains('sidebar-open');
             document.body.classList.toggle('sidebar-open', open);
         }
+
+        // Phase 33 (v1.7.0): desktop sidebar collapse — persists across
+        // reloads so a "wide reading mode" preference sticks.
+        function toggleSidebarCollapsed() {
+            const collapsed = !document.body.classList.contains('sidebar-collapsed');
+            document.body.classList.toggle('sidebar-collapsed', collapsed);
+            try { localStorage.setItem('pipek_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+        }
+        // Restore on load (before first paint of the chat area is fine — the
+        // sidebar transition only animates on user toggles thereafter).
+        try {
+            if (localStorage.getItem('pipek_sidebar_collapsed') === '1') {
+                document.body.classList.add('sidebar-collapsed');
+            }
+        } catch (_) {}
 
         // Phase 19.8: light ↔ dark theme. Persist via localStorage (key
         // 'ag_theme' — same as admin so the choice carries across pages).

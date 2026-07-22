@@ -96,6 +96,20 @@
             a.setAttribute('rel', 'noopener noreferrer');
         });
 
+        // Phase 33 (v1.7.0): wrap every <table> in a horizontally-scrollable
+        // container. Wide AI tables (e.g. migration analyses) then keep their
+        // natural column widths and scroll inside their own frame, instead of
+        // being crushed until Thai headers wrap letter-by-letter. Done here so
+        // it applies everywhere markdown renders (live stream finalize,
+        // history reload, regenerate).
+        rootEl.querySelectorAll('table').forEach(tb => {
+            if (tb.parentElement && tb.parentElement.classList.contains('md-table-wrap')) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'md-table-wrap';
+            tb.parentNode.insertBefore(wrap, tb);
+            wrap.appendChild(tb);
+        });
+
         // Syntax highlight every <pre><code>
         rootEl.querySelectorAll('pre > code').forEach(codeEl => {
             // hljs decides the language from a `language-xxx` class if present.
