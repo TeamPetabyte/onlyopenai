@@ -1644,8 +1644,9 @@ var admin = {
   // a verdict from the detail view so the senior keeps their place).
   loadTestHistory: function (keepDetail) {
     var self    = this;
-    var skillId = this._labSkillId;
-    if (!skillId) return;
+    // v1.8.5: history is GLOBAL — all skills in one list, each row tagged
+    // with its skill label. Scoping by the selected skill confused testers
+    // ("my runs disappeared" when the dropdown pointed elsewhere).
     var verdict = (document.getElementById('lab-filter') || {}).value || '';
     var errEl   = document.getElementById('lab-hist-error');
     var listEl  = document.getElementById('lab-list');
@@ -1655,8 +1656,8 @@ var admin = {
     }
     if (listEl) listEl.innerHTML = '<div style="padding:14px;color:var(--text-3);font-size:.8rem">'
       + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
-    fetch(BASE + '/api/skill-test-logs?skill=' + encodeURIComponent(skillId)
-        + (verdict ? '&verdict=' + verdict : ''), { headers: Auth.authHeaders() })
+    fetch(BASE + '/api/skill-test-logs' + (verdict ? '?verdict=' + verdict : ''),
+        { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) { if (errEl) errEl.textContent = d.error || t('err.loadFailed', 'โหลดไม่สำเร็จ'); return; }
@@ -1695,6 +1696,8 @@ var admin = {
         + (r.is_eval_case ? '<span title="อยู่ในชุดข้อสอบ">⭐</span>' : '')
         + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
         + '<span style="font-family:Geist Mono,monospace;font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
+        // v1.8.5: global history — say which skill/prompt this run tested
+        + (r.skill_label ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--surface-3);border:1px solid var(--border-subtle);color:var(--text-2);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(r.skill_label) + '</span>' : '')
         + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
         + '<span style="flex:1;font-size:.78rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
         + '</div>';
@@ -1742,7 +1745,8 @@ var admin = {
       : '';
     det.innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:2px;flex-wrap:wrap">'
-      +   '<span style="font-size:.72rem;color:var(--text-3)">#' + log.log_id + ' · ' + escapeHtml(log.model || '')
+      +   '<span style="font-size:.72rem;color:var(--text-3)">#' + log.log_id
+      +     (log.skill_label ? ' · ' + escapeHtml(log.skill_label) : '') + ' · ' + escapeHtml(log.model || '')
       +     (log.effort ? ' / ' + escapeHtml(log.effort) : '')
       +     ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</span>'
       +   starBtn
