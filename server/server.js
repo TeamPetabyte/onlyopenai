@@ -729,6 +729,20 @@ const PHASE4_TOOLS = [
     },
 ];
 
+// Phase 35.1: appended to EVERY system prompt — live chat, Prompt Lab test,
+// and the eval batch runner alike. One constant so a Lab/eval answer can
+// never drift from what production chat would say with the same prompt.
+const PROMPT_COMMON_APPENDIX = `
+
+## Language rule
+- If the user's message is written entirely in English, respond entirely in English — no Thai words mixed in.
+- If the user's message mixes Thai and English (common for Thai SAP/ABAP developers), respond in Thai with English technical terms mixed in naturally.
+- Match the user's language per message, not the conversation's earlier language.
+
+## Knowledge base
+- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, best-practice notes, and any uploaded documents).
+- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.`;
+
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 
@@ -2943,6 +2957,9 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
         systemPrompt = systemPrompt.replace('{code}', question);
         userPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
     }
+    // Phase 35.1: same appendix as live chat — Lab/eval answers must be
+    // collected under identical conditions to be usable as a baseline.
+    systemPrompt += PROMPT_COMMON_APPENDIX;
 
     const { model: reqModel, path: modelPath } = resolveModel(model);
     const reqEffort = resolveEffort(effort);
@@ -2962,15 +2979,19 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
             { role: 'system', content: systemPrompt },
             { role: 'user',   content: userPrompt },
         ];
-        const MAX_TEST_TOOL_TURNS = 2;
+        // Phase 35.1: 3 turns matches live chat's MAX_TOOL_TURNS. On the last
+        // turn tools are disabled so a tool-happy exchange (e.g. find_bapi →
+        // search_knowledge) can never run out of turns and return ''.
+        const MAX_TEST_TOOL_TURNS = 3;
         for (let turn = 0; turn < MAX_TEST_TOOL_TURNS; turn++) {
+            const lastTurn   = turn === MAX_TEST_TOOL_TURNS - 1;
             const completion = await openai.chat.completions.create({
                 model: reqModel,
                 stream: false,
                 max_completion_tokens: 3000,
                 messages,
                 tools: chatTools,
-                tool_choice: 'auto',
+                tool_choice: lastTurn ? 'none' : 'auto',
             });
             const choice = completion.choices[0];
             const usage  = completion.usage || {};
@@ -5154,21 +5175,10 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             finalUserPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
         }
 
-        // Phase 33: language-matching rule. Skill prompts from tbl_prompt
-        // don't all specify this, and the default fallback above is
-        // Thai-only — so without this, a pure-English question could still
-        // get a Thai-mixed reply. Appended to whatever system prompt was
-        // chosen (default / skill / catalog) so it always applies.
-        finalSystemPrompt += `
-
-## Language rule
-- If the user's message is written entirely in English, respond entirely in English — no Thai words mixed in.
-- If the user's message mixes Thai and English (common for Thai SAP/ABAP developers), respond in Thai with English technical terms mixed in naturally.
-- Match the user's language per message, not the conversation's earlier language.
-
-## Knowledge base
-- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, best-practice notes, and any uploaded documents).
-- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.`;
+        // Phase 33: language-matching rule + Phase 35 knowledge-base nudge.
+        // Appended to whatever system prompt was chosen (default / skill /
+        // catalog) so it always applies — shared with the Lab/eval runner.
+        finalSystemPrompt += PROMPT_COMMON_APPENDIX;
 
         // ── Step 3: Phase 4 — Chat with Tool Use (multi-turn) ────────
         // Function tools เท่านั้น (file_search แบบ built-in ใช้ไม่ได้กับ Chat
