@@ -4740,10 +4740,15 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             tools: rTools, reasoning: { effort }, store: true,
             input,
         };
-        // instructions only seed the first turn; later turns carry context via
-        // previous_response_id (server keeps the transcript — no resend needed).
+        // Phase 35.3: previous_response_id carries the conversation items but
+        // NOT the instructions — the Responses API intentionally drops them on
+        // chained calls. They must be resent on EVERY call, or the entire
+        // system prompt (skill text, {code} substitution, language rule, KB
+        // nudge) vanishes after the first tool turn. Seen live as the model
+        // replying "I don't see any ABAP code" right after a search_knowledge
+        // call, because the code was embedded in the dropped instructions.
+        args.instructions = instructions;
         if (previousResponseId) args.previous_response_id = previousResponseId;
-        else                    args.instructions = instructions;
 
         const { calls, incomplete, respId } = await once(args);
         if (respId) previousResponseId = respId;
@@ -4783,6 +4788,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         await once({
             model, stream: true, max_output_tokens: maxOutputTokens,
             reasoning: { effort }, store: true, tool_choice: 'none',
+            instructions,   // Phase 35.3: not inherited via previous_response_id
             previous_response_id: previousResponseId,
             input: 'Based on the tool results above, give the final answer now.',
         });
