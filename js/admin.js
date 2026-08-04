@@ -1404,6 +1404,19 @@ var admin = {
     this.loadTestHistory();
   },
 
+  // v1.8.8: one-click fresh test — clears the question, answer, meta and the
+  // approval bar so the next Run starts clean (no manual select-all-delete).
+  labNewTest: function () {
+    var box = document.getElementById('lab-question');
+    if (box) box.value = '';
+    this._labUpdateCharCount();
+    var ans  = document.getElementById('lab-answer'); if (ans)  ans.textContent = '';
+    var meta = document.getElementById('lab-meta');   if (meta) meta.textContent = '';
+    var err  = document.getElementById('lab-error');  if (err)  err.textContent = '';
+    this.showVerdictBar('lab', null);
+    if (box) box.focus();
+  },
+
   // Effort only applies to the gpt-5.6 reasoning family — hide it otherwise.
   onLabModelChange: function (v) {
     var f = document.getElementById('lab-effort-field');
