@@ -5,9 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — Admin Dashboard</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.8.3" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.8.3" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.8.3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.8.4" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.8.4" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.8.4" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700;800&display=swap"
@@ -816,6 +816,12 @@
             padding: 10px 12px;
             transition: border-color .2s;
         }
+
+        /* v1.8.4: browsers default textareas to resize:both, which lets the
+           drag handle pull the box wider than its card (it "escapes" the
+           layout). Vertical-only keeps resizing useful — the page reflows
+           with the taller box — while the width stays bound to the column. */
+        textarea.modal-input { resize: vertical; }
 
         .modal-input:focus {
             outline: none;
@@ -1872,8 +1878,11 @@
                     <input type="file" id="lab-file-input" multiple style="display:none"
                         accept=".abap,.txt,.md,.cds,.ddls,.sql,.js,.ts,.xml,.json,.csv,.yaml,.yml,.log,.properties,.ini,.conf,.text"
                         onchange="admin.labAttachFiles(event)" />
-                    <textarea class="modal-input" id="lab-question" rows="14"
-                        style="font-family:'Geist Mono',monospace;font-size:.8rem"
+                    <!-- v1.8.4: wrap="off" + white-space:pre → long ABAP lines keep
+                         their shape with a horizontal scrollbar instead of wrapping;
+                         resize stays vertical-only so the box can't escape the card. -->
+                    <textarea class="modal-input" id="lab-question" rows="14" wrap="off"
+                        style="font-family:'Geist Mono',monospace;font-size:.8rem;white-space:pre;overflow-x:auto;min-height:180px;tab-size:4"
                         data-i18n-ph="lab.questionPh"
                         placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."
                         oninput="admin._labUpdateCharCount()"></textarea>
@@ -2834,11 +2843,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.8.3"></script>
-    <script src="js/config.js?v=1.8.3"></script>
-    <script src="js/auth.js?v=1.8.3"></script>
+    <script src="js/i18n.js?v=1.8.4"></script>
+    <script src="js/config.js?v=1.8.4"></script>
+    <script src="js/auth.js?v=1.8.4"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.8.3"></script>
+    <script src="js/admin.js?v=1.8.4"></script>
 </body>
 
 </html>
