@@ -1,6 +1,14 @@
 # ── Dependencies ─────────────────────────────────────────
 node_modules/
 
+# ── Knowledge-base document binaries (PDF/DOCX manuals) ──
+# Already indexed in the shared OpenAI vector store — deploy
+# machines don't need the raw files, and 30MB+ binaries would
+# bloat the repo forever. The .txt files stay tracked because
+# function tools read them from disk directly.
+server/knowledge/*.pdf
+server/knowledge/*.docx
+
 # ── Secrets / env (never commit) ─────────────────────────
 .env
 .env.local

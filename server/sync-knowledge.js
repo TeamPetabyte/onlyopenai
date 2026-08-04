@@ -1,5 +1,5 @@
 // ╔═══════════════════════════════════════════════════════════╗
-// ║ Sync knowledge/*.txt into the OpenAI vector store         ║
+// ║ Sync knowledge/ docs (txt/md/pdf/docx) → OpenAI v.store   ║
 // ╚═══════════════════════════════════════════════════════════╝
 // One-shot script — uploads any local knowledge file that isn't
 // already in the vector store. Safe to re-run.
@@ -24,7 +24,7 @@ if (!fs.existsSync(KB_DIR)) { console.error('FATAL: knowledge/ dir missing'); pr
 const openai = new OpenAI({ apiKey: API_KEY });
 
 (async () => {
-    const local = fs.readdirSync(KB_DIR).filter(f => f.endsWith('.txt')).sort();
+    const local = fs.readdirSync(KB_DIR).filter(f => /\.(txt|md|pdf|docx)$/i.test(f)).sort();
     console.log(`[local]  ${local.length} files under knowledge/`);
 
     // Resolve filenames currently in the vector store

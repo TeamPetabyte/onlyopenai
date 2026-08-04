@@ -713,6 +713,20 @@ const PHASE4_TOOLS = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'search_knowledge',
+            description: 'ค้นหาเนื้อหาจาก SAP knowledge base ทั้งหมด (เอกสาร คู่มือ training material เช่น BC430 ABAP Dictionary และไฟล์ที่องค์กรอัพโหลดไว้) — ใช้เมื่อคำถามน่าจะมีคำตอบในเอกสาร หรือเมื่อ tool เฉพาะทางตัวอื่นไม่ครอบคลุมหัวข้อนั้น',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'ข้อความค้นหา — คำถามหรือหัวข้อที่ต้องการหาในเอกสาร (ภาษาอังกฤษได้ผลดีสุดเพราะเอกสารส่วนใหญ่เป็นภาษาอังกฤษ)' },
+                },
+                required: ['query'],
+            },
+        },
+    },
 ];
 
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
@@ -800,6 +814,9 @@ async function ensureAssistant(vectorStoreId = null) {
 // ── Phase 3: Vector Store + File Search (RAG) ─────────────
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
+// File types the vector store can parse natively — .txt plus documents
+// (PDF/DOCX/MD) so large manuals can be dropped in without conversion.
+const KB_FILE_RE = /\.(txt|md|pdf|docx)$/i;
 
 async function ensureVectorStore() {
     if (!HAS_API_KEY) return null;
@@ -832,7 +849,7 @@ async function ensureVectorStore() {
 
 async function seedKnowledgeFiles() {
     if (!fs_mod.existsSync(KNOWLEDGE_DIR)) return;
-    const files = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => f.endsWith('.txt'));
+    const files = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => KB_FILE_RE.test(f));
     console.log(`[☁️ RAG] Uploading ${files.length} knowledge files...`);
     const fileIds = [];
     for (const filename of files) {
@@ -867,7 +884,7 @@ async function syncNewKnowledgeFiles() {
     if (!HAS_API_KEY || !VECTOR_STORE_ID) return;
     if (!fs_mod.existsSync(KNOWLEDGE_DIR)) return;
     try {
-        const localFiles = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => f.endsWith('.txt'));
+        const localFiles = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => KB_FILE_RE.test(f));
         // Enumerate vector store → resolve filenames
         const vsList     = await openai.vectorStores.files.list(VECTOR_STORE_ID);
         const existing   = new Set();
@@ -4538,6 +4555,42 @@ function explainTcodeConfig(tcode, module) {
 }
 
 /** Dispatcher — เรียก tool function ที่ถูกต้อง */
+/** Phase 35: semantic search ทั้ง vector store — ครอบคลุมทุกไฟล์รวมเอกสาร
+ *  ที่อัพโหลดใหม่ (PDF/DOCX) โดยไม่ต้องแก้โค้ดเพิ่ม ต่างจาก tool ตัวอื่น
+ *  ที่อ่านไฟล์ .txt แบบระบุชื่อตายตัว */
+async function searchKnowledge(query) {
+    if (!query) return { found: false, error: 'empty query' };
+    if (!HAS_API_KEY || !VECTOR_STORE_ID) {
+        return { found: false, error: 'knowledge base ยังไม่พร้อมใช้งาน (no vector store)' };
+    }
+    try {
+        const page = await openai.vectorStores.search(VECTOR_STORE_ID, {
+            query,
+            max_num_results: 6,
+        });
+        // แต่ละ result: { filename, score, content: [{type:'text', text}] }
+        // จำกัดขนาด chunk กัน context บวม — 6 × 2500 chars ≈ 4k tokens สูงสุด
+        const results = (page?.data || [])
+            .map(r => ({
+                file:  r.filename,
+                score: Math.round((r.score || 0) * 1000) / 1000,
+                text:  (r.content || [])
+                    .filter(c => c.type === 'text')
+                    .map(c => c.text)
+                    .join('\n')
+                    .slice(0, 2500),
+            }))
+            .filter(r => r.text);
+        if (results.length === 0) {
+            return { found: false, note: 'ไม่พบเนื้อหาที่เกี่ยวข้องใน knowledge base — ตอบจากความรู้ทั่วไปได้ แต่ระบุให้ user ทราบ' };
+        }
+        return { found: true, results };
+    } catch (e) {
+        console.warn('[searchKnowledge]', e.message);
+        return { found: false, error: e.message };
+    }
+}
+
 async function executeTool(name, args) {
     console.log(`[🔧 tool] ${name}(${JSON.stringify(args).slice(0, 120)})`);
     switch (name) {
@@ -4549,6 +4602,7 @@ async function executeTool(name, args) {
         case 'explain_abap_dump':    return explainAbapDump(args.error_type || '', args.context || '');
         case 'lookup_auth_object':   return lookupAuthObject(args.object || '', args.intent || '');
         case 'explain_tcode_config': return explainTcodeConfig(args.tcode || '', args.module || '');
+        case 'search_knowledge':     return searchKnowledge(args.query || '');
         default: return { error: `Unknown tool: ${name}` };
     }
 }
@@ -4704,7 +4758,9 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
 
 // multer for file upload
 const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+// 100MB — large SAP training manuals (e.g. BC430 PDF ~37MB) must fit;
+// OpenAI's own per-file cap is 512MB so this stays well inside it.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 // GET /api/knowledge — list files in vector store
 app.get('/api/knowledge', requireAuth, async (req, res) => {
@@ -5108,10 +5164,15 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
 ## Language rule
 - If the user's message is written entirely in English, respond entirely in English — no Thai words mixed in.
 - If the user's message mixes Thai and English (common for Thai SAP/ABAP developers), respond in Thai with English technical terms mixed in naturally.
-- Match the user's language per message, not the conversation's earlier language.`;
+- Match the user's language per message, not the conversation's earlier language.
+
+## Knowledge base
+- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, best-practice notes, and any uploaded documents).
+- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.`;
 
         // ── Step 3: Phase 4 — Chat with Tool Use (multi-turn) ────────
-        // Tools สำหรับ chat completions (ไม่มี file_search — ใช้เฉพาะ function tools)
+        // Function tools เท่านั้น (file_search แบบ built-in ใช้ไม่ได้กับ Chat
+        // Completions — RAG ทำผ่าน search_knowledge ที่ยิง vector store search แทน)
         const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
 
         // Phase 34: route by model. gpt-5.6 family → Responses API path (reasoning
