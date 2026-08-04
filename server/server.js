@@ -750,6 +750,34 @@ const PROMPT_COMMON_APPENDIX = `
 - When correcting user code: preserve the original logic, variable names and structure. Change ONLY what the task requires. Do not introduce new fields, tables, parameters or logic that were not in the original unless explicitly asked — and clearly flag every addition you do make.
 - Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
 
+// Phase 36: {code} skills assumed EVERY message is code. A conversational
+// follow-up ("remove the MARA reference from your code") got substituted
+// into <ABAP_code> and the skill dutifully replied "no code provided".
+// Substitute only when the message actually looks like ABAP; otherwise
+// point the skill at the conversation and pass the question through.
+const ABAP_CODE_RE = /\b(REPORT|FORM|ENDFORM|DATA|TYPES|SELECT|ENDSELECT|LOOP|ENDLOOP|MOVE|PERFORM|APPEND|MODIFY|CLASS|ENDCLASS|METHOD|ENDMETHOD|FUNCTION|ENDFUNCTION|CALL FUNCTION|FIELD-SYMBOLS)\b/i;
+function looksLikeAbapCode(text) {
+    const t = String(text || '');
+    return t.split('\n').length >= 3 && ABAP_CODE_RE.test(t);
+}
+function applyCodePlaceholder(systemPrompt, question) {
+    if (!systemPrompt.includes('{code}')) {
+        return { systemPrompt, userPrompt: question };
+    }
+    if (looksLikeAbapCode(question)) {
+        return {
+            systemPrompt: systemPrompt.replace('{code}', question),
+            userPrompt:   'Please analyze the ABAP code provided above and apply the corrections.',
+        };
+    }
+    return {
+        systemPrompt: systemPrompt.replace('{code}',
+            '(no code was pasted this turn — the user is asking a question or a follow-up; '
+            + 'answer it directly, using any code from the conversation history as context)'),
+        userPrompt: question,
+    };
+}
+
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 
@@ -2958,12 +2986,9 @@ app.delete('/api/skills/:id', requireTrainer, async (req, res) => {
 // otherwise, with a short tool loop). Used by BOTH the admin test endpoint
 // and the eval batch runner so an exam answers exactly like a live test.
 async function runSkillPromptOnce({ userId, skillContent, question, model, effort }) {
-    let systemPrompt = skillContent;
-    let userPrompt   = question;
-    if (systemPrompt.includes('{code}')) {
-        systemPrompt = systemPrompt.replace('{code}', question);
-        userPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
-    }
+    // Phase 36: shared {code} handling — substitutes only when the message
+    // actually looks like ABAP, so plain questions get answered directly.
+    let { systemPrompt, userPrompt } = applyCodePlaceholder(skillContent, question);
     // Phase 35.1: same appendix as live chat — Lab/eval answers must be
     // collected under identical conditions to be usable as a baseline.
     systemPrompt += PROMPT_COMMON_APPENDIX;
@@ -4666,7 +4691,7 @@ function toResponsesTools(tools) {
     }));
 }
 
-async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, tools, sendEvent, acc, isAborted, setStream }) {
+async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, history, tools, sendEvent, acc, isAborted, setStream }) {
     const MAX_TOOL_TURNS = 3;
     const MAX_LENGTH_CONTINUATIONS = 4;   // Phase 32 analog for Responses
     // Phase 31.1: reasoning tokens SHARE the max_output_tokens budget. At a
@@ -4679,7 +4704,13 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
     let previousResponseId = null;
-    let input = userPrompt;               // first turn: plain string prompt
+    // Phase 36: with session history, the first call sends an item array
+    // (prior user/assistant turns + the new prompt); without it, the plain
+    // string keeps the original single-turn shape.
+    let input = (history && history.length)
+        ? [...history.map(m => ({ role: m.role, content: m.content })),
+           { role: 'user', content: userPrompt }]
+        : userPrompt;
     let toolTurn = 0;
     let lengthContinuations = 0;
 
@@ -5093,6 +5124,34 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         console.warn('[chat] session setup skipped:', sessErr.message);
     }
 
+    // Phase 36: conversation memory. Every turn IS persisted, but after the
+    // Assistants stack (whose threads carried context) was removed in v1.7.2
+    // nothing fed the history back — the model answered each request from
+    // the latest message alone. Replay this session's recent turns so
+    // follow-ups work like a real conversation. Only PRIOR turns exist in
+    // the table here — the current prompt is persisted after the answer.
+    let chatHistory = [];
+    if (chatSessionId && sessionId) {   // existing session only — a fresh one has no past
+        try {
+            const HIST_MAX_MSGS  = 12;
+            const HIST_MAX_CHARS = 24000;   // ~6k tokens of replayed context
+            const h = await pool.query(
+                `SELECT role, content FROM tbl_chat_message
+                  WHERE session_id=$1 AND role IN ('user','assistant')
+                  ORDER BY message_id DESC LIMIT $2`, [chatSessionId, HIST_MAX_MSGS]);
+            let used = 0;
+            for (const m of h.rows) {                 // newest → oldest
+                const text = String(m.content || '');
+                if (chatHistory.length && used + text.length > HIST_MAX_CHARS) break;
+                chatHistory.push({ role: m.role, content: text.slice(0, HIST_MAX_CHARS) });
+                used += text.length;
+            }
+            chatHistory.reverse();                    // chronological for the model
+        } catch (e) {
+            console.warn('[chat] history load skipped:', e.message);
+        }
+    }
+
     // (Phase 21.10) — duplicate cap check removed; the single
     // checkChatBudget() gate above covers both pool + cap.
 
@@ -5198,11 +5257,10 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence });
         }
 
-        // ── Step 2: {code} placeholder ───────────────────────────────
-        if (finalSystemPrompt.includes('{code}')) {
-            finalSystemPrompt = finalSystemPrompt.replace('{code}', prompt);
-            finalUserPrompt   = 'Please analyze the ABAP code provided above and apply the corrections.';
-        }
+        // ── Step 2: {code} placeholder (Phase 36: only when it IS code) ──
+        const cp = applyCodePlaceholder(finalSystemPrompt, prompt);
+        finalSystemPrompt = cp.systemPrompt;
+        finalUserPrompt   = cp.userPrompt;
 
         // Phase 33: language-matching rule + Phase 35 knowledge-base nudge.
         // Appended to whatever system prompt was chosen (default / skill /
@@ -5226,6 +5284,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             await runResponsesTurn({
                 oai, userId: req.session.userId, model: reqModel, effort: reqEffort,
                 instructions: finalSystemPrompt, userPrompt: finalUserPrompt,
+                history: chatHistory,   // Phase 36: replay this session's prior turns
                 tools: chatTools, sendEvent, acc,
                 isAborted: () => clientAborted,
                 setStream: (s) => { currentOpenAIStream = s; },
@@ -5237,6 +5296,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
 
         const messages = [
             { role: 'system', content: finalSystemPrompt },
+            ...chatHistory,   // Phase 36: replay this session's prior turns
             { role: 'user',   content: finalUserPrompt },
         ];
 
