@@ -7,6 +7,7 @@ node_modules/
 # bloat the repo forever. The .txt files stay tracked because
 # function tools read them from disk directly.
 server/knowledge/*.pdf
+server/knowledge/*.doc
 server/knowledge/*.docx
 
 # ── Secrets / env (never commit) ─────────────────────────

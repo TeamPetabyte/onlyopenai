@@ -740,8 +740,9 @@ const PROMPT_COMMON_APPENDIX = `
 - Match the user's language per message, not the conversation's earlier language.
 
 ## Knowledge base
-- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, best-practice notes, and any uploaded documents).
-- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.`;
+- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, the org's ABAP development standards, best-practice notes, and any uploaded documents).
+- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.
+- When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.`;
 
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
@@ -829,8 +830,8 @@ async function ensureAssistant(vectorStoreId = null) {
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
 // File types the vector store can parse natively — .txt plus documents
-// (PDF/DOCX/MD) so large manuals can be dropped in without conversion.
-const KB_FILE_RE = /\.(txt|md|pdf|docx)$/i;
+// (PDF/DOC/DOCX/MD) so manuals can be dropped in without conversion.
+const KB_FILE_RE = /\.(txt|md|pdf|docx?)$/i;
 
 async function ensureVectorStore() {
     if (!HAS_API_KEY) return null;
