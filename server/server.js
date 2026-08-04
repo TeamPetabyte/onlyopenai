@@ -742,7 +742,13 @@ const PROMPT_COMMON_APPENDIX = `
 ## Knowledge base
 - You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, the org's ABAP development standards, best-practice notes, and any uploaded documents).
 - Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.
-- When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.`;
+- When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.
+
+## Accuracy rules (SAP objects are facts, not suggestions)
+- NEVER invent SAP object names — tables, fields, BAPIs, function modules, transactions, classes, BAdIs. Only reference objects you can verify via the knowledge base, the tools (find_bapi, get_transaction_info, lookup_auth_object), or that are unambiguously standard SAP.
+- If you cannot verify an object exists, say so explicitly ("ไม่แน่ใจว่า object นี้มีจริง — ตรวจสอบใน SE11/SE37/SE93 ก่อนใช้") instead of presenting a guess as fact.
+- When correcting user code: preserve the original logic, variable names and structure. Change ONLY what the task requires. Do not introduce new fields, tables, parameters or logic that were not in the original unless explicitly asked — and clearly flag every addition you do make.
+- Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
 
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
