@@ -145,6 +145,13 @@ const AIClient = {
                         // Real OpenAI token — send directly to UI (no extra delay)
                         onChunk(event.text);
 
+                    } else if (event.type === 'tool_call' || event.type === 'tool_result') {
+                        // Phase 35.2: tool activity (RAG document search etc.) —
+                        // forwarded so the chat UI can render a live badge.
+                        if (typeof opts.onTool === 'function') {
+                            try { opts.onTool(event); } catch (_) { /* badge is cosmetic — never kill the stream */ }
+                        }
+
                     } else if (event.type === 'done') {
                         sawDone = true;
                         await onDone({

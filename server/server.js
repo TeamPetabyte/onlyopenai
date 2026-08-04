@@ -4612,6 +4612,19 @@ async function searchKnowledge(query) {
     }
 }
 
+// Phase 35.2: RAG visibility — the chat UI shows a badge while the model
+// searches documents. Extract the search query from a pending tool-call
+// batch, and shape the search result into a compact tool_result event
+// (top filenames only — chunks stay server-side).
+function ragQueryOf(name, rawArgs) {
+    if (name !== 'search_knowledge') return null;
+    try { return String((JSON.parse(rawArgs || '{}')).query || ''); } catch (_) { return ''; }
+}
+function ragResultEvent(result) {
+    const files = [...new Set((result?.results || []).map(r => r.file).filter(Boolean))].slice(0, 3);
+    return { type: 'tool_result', name: 'search_knowledge', found: !!result?.found, files };
+}
+
 async function executeTool(name, args) {
     console.log(`[🔧 tool] ${name}(${JSON.stringify(args).slice(0, 120)})`);
     switch (name) {
@@ -4748,12 +4761,15 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         if (calls.length === 0) return;   // plain answer → done
 
         // Tool calls → execute and feed outputs back on the next turn.
-        sendEvent({ type: 'tool_call', tools: calls.map(c => c.name) });
+        // Phase 35.2: attach the document-search query so the UI badge can show it.
+        const rQuery = calls.map(c => ragQueryOf(c.name, c.args)).find(q => q != null);
+        sendEvent({ type: 'tool_call', tools: calls.map(c => c.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
         const outputs = [];
         for (const c of calls) {
             let parsed = {};
             try { parsed = JSON.parse(c.args || '{}'); } catch (_) {}
             const result = await executeTool(c.name, parsed);
+            if (c.name === 'search_knowledge') sendEvent(ragResultEvent(result));
             outputs.push({ type: 'function_call_output', call_id: c.call_id, output: JSON.stringify(result) });
         }
         input = outputs;   // previous_response_id carries the function_call items
@@ -5322,7 +5338,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             if (finishReason !== 'tool_calls' || pendingToolCalls.length === 0) break;
 
             // มี tool calls → execute แล้ว loop ต่อ
-            sendEvent({ type: 'tool_call', tools: pendingToolCalls.map(tc => tc.function.name) });
+            // Phase 35.2: attach the document-search query so the UI badge can show it.
+            const rQuery = pendingToolCalls.map(tc => ragQueryOf(tc.function.name, tc.function.arguments)).find(q => q != null);
+            sendEvent({ type: 'tool_call', tools: pendingToolCalls.map(tc => tc.function.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
 
             messages.push({
                 role:       'assistant',
@@ -5335,6 +5353,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             for (const tc of pendingToolCalls) {
                 const args   = JSON.parse(tc.function.arguments || '{}');
                 const result = await executeTool(tc.function.name, args);
+                if (tc.function.name === 'search_knowledge') sendEvent(ragResultEvent(result));
                 messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
             }
             toolTurn++;
