@@ -5,9 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — Admin Dashboard</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.8.5" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.8.5" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.8.5" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.8.6" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.8.6" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.8.6" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700;800&display=swap"
@@ -1825,7 +1825,7 @@
             <div class="page-header">
                 <div>
                     <h2 class="page-title" data-i18n="page.lab.title">🧪 Prompt Lab</h2>
-                    <p class="page-subtitle" data-i18n="page.lab.sub">ทดสอบคำถามกับ system prompt ของแต่ละ skill → ให้ senior ตัดสินคำตอบ → สะสมเป็นชุดเฉลย (golden dataset)</p>
+                    <p class="page-subtitle" data-i18n="page.lab.sub">ทดสอบคำถามกับ system prompt ของแต่ละ skill → ให้ senior อนุมัติคำตอบ → สะสมเป็นชุดเฉลย (golden dataset)</p>
                 </div>
             </div>
 
@@ -1910,7 +1910,7 @@
                     </div>
                     <select class="modal-input" id="lab-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
                         <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
-                        <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่ตัดสิน</option>
+                        <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่อนุมัติ</option>
                         <option value="correct" data-i18n="modal.testHistory.filterCorrect">✅ ถูกต้อง</option>
                         <option value="partial" data-i18n="modal.testHistory.filterPartial">⚠️ เกือบถูก</option>
                         <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">❌ ผิด</option>
@@ -2843,11 +2843,11 @@
          toggles (must be set before i18n.js loads/reads it) — matches
          index.html so the whole app defaults EN, not just the chat page. -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
-    <script src="js/i18n.js?v=1.8.5"></script>
-    <script src="js/config.js?v=1.8.5"></script>
-    <script src="js/auth.js?v=1.8.5"></script>
+    <script src="js/i18n.js?v=1.8.6"></script>
+    <script src="js/config.js?v=1.8.6"></script>
+    <script src="js/auth.js?v=1.8.6"></script>
     <script src="js/pricing.js?v=pipek"></script>
-    <script src="js/admin.js?v=1.8.5"></script>
+    <script src="js/admin.js?v=1.8.6"></script>
 </body>
 
 </html>

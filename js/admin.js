@@ -1562,7 +1562,7 @@ var admin = {
 
     box.innerHTML =
         '<div style="padding:11px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-3)">'
-      +   '<label class="modal-label" style="margin-bottom:6px">' + escapeHtml(TT('modal.testSkill.verdictLabel', 'คำตัดสิน (senior)')) + '</label>'
+      +   '<label class="modal-label" style="margin-bottom:6px">' + escapeHtml(TT('modal.testSkill.verdictLabel', 'การอนุมัติ (senior)')) + '</label>'
       +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' + btns + '</div>'
       +   '<div id="' + prefix + '-corrected-wrap" style="display:none;margin-bottom:8px">'
       +     '<label class="modal-label">' + escapeHtml(TT('modal.testSkill.correctedLabel', 'เฉลยที่ถูกต้อง')) + '</label>'
@@ -1578,7 +1578,7 @@ var admin = {
       +   '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">'
       +     '<span id="' + prefix + '-verdict-msg" style="font-size:.75rem;color:#3fa64d"></span>'
       +     '<button type="button" class="btn-modal-submit" id="' + prefix + '-verdict-save" onclick="admin.saveVerdict(\'' + prefix + '\')">💾 '
-      +       escapeHtml(TT('modal.testSkill.saveVerdict', 'บันทึกคำตัดสิน')) + '</button>'
+      +       escapeHtml(TT('modal.testSkill.saveVerdict', 'บันทึกการอนุมัติ')) + '</button>'
       +   '</div>'
       + '</div>';
     box.style.display = '';
@@ -1613,7 +1613,7 @@ var admin = {
     var v     = this._verdictPick[prefix];
     var msg   = document.getElementById(prefix + '-verdict-msg');
     if (!logId) return;
-    if (!v) { if (msg) { msg.style.color = '#e25563'; msg.textContent = t('err.pickVerdict', 'เลือกคำตัดสินก่อน'); } return; }
+    if (!v) { if (msg) { msg.style.color = '#e25563'; msg.textContent = t('err.pickVerdict', 'เลือกผลอนุมัติก่อน'); } return; }
     var gv  = function (suffix) { var el = document.getElementById(prefix + suffix); return el ? el.value : ''; };
     var btn = document.getElementById(prefix + '-verdict-save');
     if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
@@ -1737,7 +1737,7 @@ var admin = {
       ? '<button type="button" class="btn-action" style="padding:4px 12px;font-size:.75rem'
         + (log.is_eval_case ? ';background:var(--accent-soft-bg);border-color:var(--accent-soft-border);color:var(--accent)' : '')
         + '" onclick="admin.toggleEvalCase(' + log.log_id + ',' + (!log.is_eval_case) + ')"'
-        + (canStar ? '' : ' disabled title="' + escapeHtml(t('evals.needGolden', 'ต้องมีเฉลย หรือ verdict = ถูกต้อง ก่อน')) + '"')
+        + (canStar ? '' : ' disabled title="' + escapeHtml(t('evals.needGolden', 'ต้องมีเฉลย หรืออนุมัติ = ถูกต้อง ก่อน')) + '"')
         + '>' + (log.is_eval_case
             ? '⭐ ' + escapeHtml(t('evals.inSet', 'อยู่ในชุดข้อสอบ — กดเพื่อเอาออก'))
             : '☆ ' + escapeHtml(t('evals.addToSet', 'เข้าชุดข้อสอบ')))
