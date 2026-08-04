@@ -1381,12 +1381,15 @@ var admin = {
         var sel = d.skills || [];
         var el  = document.getElementById('lab-skill');
         if (!el) return;
-        var want = self._labSkillId || (sel[0] && sel[0].id) || '';
-        el.innerHTML = sel.map(function (s) {
+        // v1.9.1: Auto is the default — the chat router picks the prompt so
+        // seniors don't have to; history shows which skill each run matched.
+        var want = self._labSkillId || 'auto';
+        el.innerHTML = '<option value="auto">' + escapeHtml(t('lab.autoSkill', '🤖 Auto — AI เลือก prompt เอง')) + '</option>'
+          + sel.map(function (s) {
           return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label || s.id) + '</option>';
         }).join('');
         el.value = want;
-        if (!el.value && sel.length) el.value = sel[0].id;
+        if (!el.value) el.value = 'auto';
         self._labSkillId = el.value;
         self.onLabSkillChange();
       })
@@ -1428,6 +1431,15 @@ var admin = {
   _loadLabPrompt: function () {
     var id = this._labSkillId;
     if (!id) return;
+    // v1.9.1: auto mode has no fixed prompt to preview.
+    if (id === 'auto') {
+      var sum = document.getElementById('lab-prompt-summary');
+      var pre = document.getElementById('lab-prompt-preview');
+      if (sum) sum.textContent = '🤖 ' + t('lab.autoSummary', 'Auto — AI เลือก prompt จากคำถามอัตโนมัติ');
+      if (pre) pre.textContent = t('lab.autoPreview',
+        'โหมด Auto: ระบบใช้ router ตัวเดียวกับหน้าแชทจริงเลือก skill prompt ที่เหมาะกับคำถาม\nผลรันและประวัติจะแสดงว่าจับคู่กับ prompt ตัวไหน');
+      return;
+    }
     fetch(BASE + '/api/skills/' + encodeURIComponent(id), { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -1471,7 +1483,8 @@ var admin = {
         if (!d.ok) { errEl.textContent = d.error || t('err.testFailed', 'ทดสอบไม่สำเร็จ'); return; }
         if (ans) ans.textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
-          + (d.model ? ' · ' + d.model : '');
+          + (d.model ? ' · ' + d.model : '')
+          + (d.routed ? ' · 🎯 ' + (d.routed.label || d.routed.skillId || '') : '');   // v1.9.1: which prompt Auto matched
         self.showVerdictBar('lab', d.logId || null);
         // The run itself created a (pending) history row — refresh the list.
         self.loadTestHistory(true);

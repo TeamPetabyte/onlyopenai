@@ -3054,11 +3054,28 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
 // via tool results.
 app.post('/api/skills/:id/test', requireTrainer, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
-    const skill = skillPrompts.getSkill(req.params.id);
-    if (!skill) return res.status(404).json({ ok: false, error: 'skill not found' });
 
     const prompt = String(req.body?.prompt || '').trim();
     if (!prompt) return res.status(400).json({ ok: false, error: 'prompt required' });
+
+    // Phase 37: id "auto" — the same catalog router live chat uses picks the
+    // skill, so seniors don't have to know which prompt fits their question.
+    // The run is logged under the DETECTED skill, so history shows the match.
+    let skill = null, routed = null;
+    if (req.params.id === 'auto') {
+        const pick = await pickSkillFromCatalog(prompt, openai);
+        if (pick.skillId && pick.content) {
+            skill  = skillPrompts.getSkill(pick.skillId)
+                  || { id: pick.skillId, label: pick.label, content: pick.content };
+            routed = { skillId: skill.id, label: skill.label || skill.id, confidence: pick.confidence };
+        } else {
+            skill  = { id: 'general', label: '💬 General', content: 'คุณเป็น AI assistant ที่ช่วยงาน SAP ABAP' };
+            routed = { skillId: null, label: skill.label + ' (no skill matched)', confidence: pick.confidence };
+        }
+    } else {
+        skill = skillPrompts.getSkill(req.params.id);
+        if (!skill) return res.status(404).json({ ok: false, error: 'skill not found' });
+    }
 
     try {
         // Phase 34: model + effort from the request (validated allowlist).
@@ -3098,7 +3115,7 @@ app.post('/api/skills/:id/test', requireTrainer, async (req, res) => {
             console.error('[skills/test] log insert failed:', e2.message);
         }
 
-        res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens, logId });
+        res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens, logId, routed });
     } catch (e) {
         console.error('[skills/test]', e.message);
         res.status(500).json({ ok: false, error: e.message });
