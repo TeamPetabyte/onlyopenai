@@ -871,8 +871,9 @@ async function ensureAssistant(vectorStoreId = null) {
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
 // File types the vector store can parse natively — .txt plus documents
-// (PDF/DOC/DOCX/MD) so manuals can be dropped in without conversion.
-const KB_FILE_RE = /\.(txt|md|pdf|docx?)$/i;
+// (PDF/DOC/DOCX/MD/HTML) so manuals can be dropped in without conversion.
+// HTML added for the SAP offline library (SR13/ABAPHELP exports).
+const KB_FILE_RE = /\.(txt|md|pdf|docx?|html?)$/i;
 
 async function ensureVectorStore() {
     if (!HAS_API_KEY) return null;

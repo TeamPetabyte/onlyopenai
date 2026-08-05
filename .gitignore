@@ -9,6 +9,8 @@ node_modules/
 server/knowledge/*.pdf
 server/knowledge/*.doc
 server/knowledge/*.docx
+server/knowledge/*.htm
+server/knowledge/*.html
 
 # ── Secrets / env (never commit) ─────────────────────────
 .env
