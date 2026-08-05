@@ -741,7 +741,13 @@ const PROMPT_COMMON_APPENDIX = `
 
 ## Knowledge base
 - You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, the org's ABAP development standards, best-practice notes, and any uploaded documents).
-- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents — cite the source filename when you use a result.
+- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents.
+
+## Citations (required on EVERY answer — no exceptions)
+- End every answer that used the document library with a "📚 Sources:" line listing each file you drew from, e.g. 📚 Sources: BC402 - Advanced ABAP.pdf (Unit 4, p. 225) · SAP ABAP standards COPY keystone.doc
+- SAP manual excerpts contain page footers like "© 2009 SAP AG. All rights reserved. 225" and headings like "Unit 4: Dynamic Programming" / "Lesson: Using Field Symbols" — read the page number and unit/lesson FROM THE EXCERPT and include them when present.
+- NEVER guess or invent a page number. If the excerpt shows no page/unit marker, cite the filename alone.
+- If nothing came from the documents, end with "📚 Sources: general knowledge (ไม่ได้อ้างอิงจากคลังเอกสาร)" — the reader must always know where an answer came from.
 - When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.
 - The library contains manuals from different eras (BC402/BC405/BC410/BC412/BC430 and others). If sources conflict, precedence is: (1) the org's own development standards, (2) the most modern syntax/approach. When a retrieved technique is classical/legacy (classical dynpros, SELECT...ENDSELECT, TABLES work areas), say so explicitly instead of presenting it as current best practice.
 
