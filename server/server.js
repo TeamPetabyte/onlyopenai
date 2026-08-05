@@ -941,10 +941,12 @@ async function syncNewKnowledgeFiles() {
     if (!fs_mod.existsSync(KNOWLEDGE_DIR)) return;
     try {
         const localFiles = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => KB_FILE_RE.test(f));
-        // Enumerate vector store → resolve filenames
-        const vsList     = await openai.vectorStores.files.list(VECTOR_STORE_ID);
+        // Enumerate vector store → resolve filenames.
+        // Phase 38: list() returns ONE page (default 20). Past 20 files the
+        // diff saw a truncated set and re-uploaded "missing" files on every
+        // boot, duplicating them in the store. for-await walks ALL pages.
         const existing   = new Set();
-        for (const vf of (vsList?.data || [])) {
+        for await (const vf of openai.vectorStores.files.list(VECTOR_STORE_ID, { limit: 100 })) {
             try {
                 const meta = await openai.files.retrieve(vf.id);
                 if (meta?.filename) existing.add(meta.filename);
@@ -4871,8 +4873,10 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100
 app.get('/api/knowledge', requireAuth, async (req, res) => {
     if (!HAS_API_KEY || !VECTOR_STORE_ID) return res.json({ ok: true, files: [], vectorStoreId: null });
     try {
-        const list = await openai.vectorStores.files.list(VECTOR_STORE_ID);
-        const files = await Promise.all(list.data.map(async f => {
+        // Phase 38: walk all pages — a bare list() truncates at ~20 files.
+        const entries = [];
+        for await (const f of openai.vectorStores.files.list(VECTOR_STORE_ID, { limit: 100 })) entries.push(f);
+        const files = await Promise.all(entries.map(async f => {
             try {
                 const info = await openai.files.retrieve(f.id);
                 return { id: f.id, name: info.filename, size: info.bytes, status: f.status, created: f.created_at };

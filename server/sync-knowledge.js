@@ -27,10 +27,11 @@ const openai = new OpenAI({ apiKey: API_KEY });
     const local = fs.readdirSync(KB_DIR).filter(f => /\.(txt|md|pdf|docx?)$/i.test(f)).sort();
     console.log(`[local]  ${local.length} files under knowledge/`);
 
-    // Resolve filenames currently in the vector store
-    const vsList = await openai.vectorStores.files.list(VS_ID);
+    // Resolve filenames currently in the vector store — for-await walks ALL
+    // pages (a bare list() returns one ~20-item page; the truncated diff was
+    // re-uploading old files as "missing" once the store grew past that).
     const existing = new Set();
-    for (const vf of (vsList?.data || [])) {
+    for await (const vf of openai.vectorStores.files.list(VS_ID, { limit: 100 })) {
         try {
             const meta = await openai.files.retrieve(vf.id);
             if (meta?.filename) existing.add(meta.filename);
