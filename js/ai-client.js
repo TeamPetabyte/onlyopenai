@@ -75,7 +75,8 @@ const AIClient = {
         };
 
         try {
-            // Phase 6.1: include Bearer token (server requires requireAuth on /api/chat)
+            // Phase 39: auth = HttpOnly cookie (auto-attached by the fetch
+            // patch); authHeaders() adds Content-Type + X-CSRF-Token.
             const headers = (typeof Auth !== 'undefined' && Auth.authHeaders)
                 ? Auth.authHeaders()
                 : { 'Content-Type': 'application/json' };

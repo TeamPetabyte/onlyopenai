@@ -13,7 +13,7 @@
 | **จำนวนตาราง** | 15 ตาราง (รวม system table 1 ตัว) |
 | **ขนาดข้อมูลรวม** | ~1.2 MB (ทั้งระบบยังเล็ก, รองรับเติบโตได้อีกหลายเท่า) |
 | **จำนวน Migration** | 23 ไฟล์ (ทุก schema change เก็บประวัติครบ) |
-| **ความปลอดภัย** | AES-256-GCM encrypt API keys, bcrypt hash passwords, CSRF + Bearer auth |
+| **ความปลอดภัย** | AES-256-GCM encrypt API keys, bcrypt hash passwords, CSRF + HttpOnly-cookie auth |
 | **Backup** | _(ยังไม่มี automated — แนะนำใส่ก่อน production)_ |
 
 ---

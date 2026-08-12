@@ -557,7 +557,8 @@ var admin = {
     }
 
     var url = BASE + '/api/transactions/export' + qs;
-    // Use fetch (not <a href>) so we send the Bearer header.
+    // Use fetch (not <a href>) so we can read Content-Disposition for the
+    // filename and surface HTTP errors (auth rides in the cookie either way).
     fetch(url, { headers: Auth.authHeaders() })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);

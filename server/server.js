@@ -216,11 +216,12 @@ const _sessionJanitor = setInterval(() => {
 _sessionJanitor.unref();
 
 function _extractToken(req) {
-    // Phase 9: cookie wins (HttpOnly, can't be stolen by XSS).
-    // Bearer header is fallback for backward compatibility — non-browser
-    // clients (curl, smoke tests) and any old client code keep working.
-    if (req.cookies && req.cookies[SESSION_COOKIE]) return req.cookies[SESSION_COOKIE];
-    return (req.headers['authorization'] || '').replace('Bearer ', '');
+    // Phase 9: HttpOnly cookie (can't be stolen by XSS).
+    // Phase 39: Bearer fallback removed — the cookie is the ONLY auth path.
+    // Non-browser clients (curl, smoke tests) authenticate by sending the
+    // cookie explicitly:  curl -H "Cookie: petabyte_session=<token>" ...
+    // (or use -c/-b cookie jars around /api/auth/login).
+    return (req.cookies && req.cookies[SESSION_COOKIE]) || '';
 }
 
 // Phase 9: CSRF guard — applied to every state-changing request that
@@ -230,8 +231,8 @@ function _extractToken(req) {
 // auth cookie won't ride cross-site requests, so a CSRF attack would
 // have to come from same-site (e.g. an XSS) — at which point it can
 // also read the CSRF token from JS storage, defeating it. We keep the
-// header check anyway as defense-in-depth + protection for the Bearer
-// fallback path (where SameSite doesn't apply).
+// header check anyway as defense-in-depth (Phase 39: the Bearer fallback
+// this also used to protect is gone — cookie is the only auth path).
 const CSRF_EXEMPT_PATHS = new Set([
     '/api/auth/login',     // no session yet
     '/api/health',         // public probe
@@ -1007,7 +1008,8 @@ app.use(cors({
     methods:        ['GET', 'POST', 'PUT', 'DELETE'],
     // Phase 9: X-CSRF-Token must be in the CORS allowlist or browser
     // strips it on preflight before reaching our middleware.
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    // Phase 39: Authorization removed — cookie is the only auth path.
+    allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
     credentials:    true,
 }));
 app.use(express.json({ limit: '2mb' }));
@@ -1065,7 +1067,7 @@ app.use(express.static(path.join(__dirname, '..'), {
 }));
 
 // ── Rate Limiting (per-user token bucket) ──────────────────
-// key by Bearer token if present, otherwise by IP. Applied to expensive AI endpoints.
+// key by session token if present, otherwise by IP. Applied to expensive AI endpoints.
 const chatRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max:      CHAT_RATE_LIMIT_PER_MIN,
@@ -1075,12 +1077,13 @@ const chatRateLimiter = rateLimit({
         // Phase 7: rate-limit keys by token prefix when present (no DB lookup
         // needed in the hot path), otherwise IP. Endpoints that need the real
         // user id are already gated by requireAuth, which populates req.session.
-        const tok = (req.headers['authorization'] || '').replace('Bearer ', '');
+        // Phase 39: token now comes from the session cookie (Bearer removed).
+        const tok = _extractToken(req);
         if (tok) return `t:${tok.slice(0, 16)}`;
         return `ip:${ipKeyGenerator(req, res)}`;
     },
     handler: (req, res) => {
-        const tok = (req.headers['authorization'] || '').replace('Bearer ', '');
+        const tok = _extractToken(req);
         console.warn(`[rate-limit] blocked — token=${tok.slice(0, 8)} ip=${req.ip}`);
         res.status(429).json({ ok: false, error: `Rate limit exceeded. Max ${CHAT_RATE_LIMIT_PER_MIN} requests/min.` });
     },
@@ -1248,7 +1251,9 @@ app.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async (re
         res.cookie(ACTIVE_COOKIE, '1', _markerCookieOpts());
         res.json({
             ok: true,
-            token,                      // Bearer token kept for backward-compat (curl, smoke tests, legacy clients)
+            // Phase 39: `token` no longer returned in the body — the session
+            // rides ONLY in the HttpOnly cookie above. Non-browser clients
+            // read it from Set-Cookie (curl -c jar).
             csrfToken: csrf,            // Phase 9: client must echo this in X-CSRF-Token on POST/PUT/DELETE
             mustChangePassword: !!u.must_change_password,    // Phase 8: client redirects to pw-change page
             user: { id: u.id, username: u.username, displayName: `${u.name} ${u.surname}`.trim(),

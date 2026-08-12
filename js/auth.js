@@ -12,10 +12,16 @@
 //            cookie rides along, and auto-attach the `X-CSRF-Token` header
 //            on POST/PUT/DELETE/PATCH. The server's csrfGuard rejects
 //            state-changing calls without a matching header (double-submit
-//            pattern). Bearer token still works for backward-compat.
+//            pattern).
+//  (Phase 39) Bearer token retired: the cookie is the ONLY auth path. We no
+//            longer store a session token in localStorage (XSS could read
+//            it) and the server no longer accepts Authorization: Bearer.
 (function () {
     if (window.__petabyteFetchPatched) return;
     window.__petabyteFetchPatched = true;
+    // Phase 39: one-time purge of the legacy Bearer token so upgraded
+    // clients don't keep a stealable copy lying around in localStorage.
+    try { localStorage.removeItem('agenthub_token'); } catch (_) {}
     const _origFetch = window.fetch.bind(window);
     const CSRF_KEY = 'agenthub_csrf';
     const STATE_CHANGING = { POST: 1, PUT: 1, DELETE: 1, PATCH: 1 };
@@ -139,28 +145,25 @@
 const Auth = {
     // ── Keys ─────────────────────────────────────────────────
     SESSION_KEY: 'agenthub_session',
-    TOKEN_KEY:   'agenthub_token',     // Phase 6.1: Bearer token (backward compat)
+    TOKEN_KEY:   'agenthub_token',     // Phase 39: no longer issued/stored — kept only so purge sites can clear leftovers
     CSRF_KEY:    'agenthub_csrf',      // Phase 9: double-submit CSRF token
     USERS_KEY: 'agenthub_admin_users',
     PROJECTS_KEY: 'agenthub_projects',
 
-    // ── Token helpers (Phase 6.1 + 9) ────────────────────────
-    getToken: function () {
-        try { return localStorage.getItem(this.TOKEN_KEY) || null; } catch (_) { return null; }
-    },
+    // ── Token helpers (Phase 9 + 39) ─────────────────────────
+    // Auth rides in the HttpOnly session cookie (attached automatically by
+    // the fetch patch above). authHeaders() only adds Content-Type + CSRF.
     getCsrf: function () {
         try { return localStorage.getItem(this.CSRF_KEY) || null; } catch (_) { return null; }
     },
     authHeaders: function (extra) {
         var h = { 'Content-Type': 'application/json' };
-        var t = this.getToken();
-        if (t) h['Authorization'] = 'Bearer ' + t;
         var c = this.getCsrf();
         if (c) h['X-CSRF-Token'] = c;
         if (extra) for (var k in extra) h[k] = extra[k];
         return h;
     },
-    /** Wrapper around fetch() that auto-attaches Authorization header.
+    /** Wrapper around fetch() that auto-attaches auth-related headers.
      *  Usage: Auth.fetch('/api/users')  or  Auth.fetch('/api/users', { method:'POST', body: JSON.stringify(x) })
      *  Returns a normal Response promise — caller handles .json() etc.
      *  Phase 8: intercepts 423 (mustChangePassword) and 401 (session expired)
@@ -292,8 +295,9 @@ const Auth = {
                     loginTime: new Date().toISOString(),
                 };
                 localStorage.setItem(Auth.SESSION_KEY, JSON.stringify(session));
-                // Phase 6.1: persist Bearer token so subsequent fetches can include it
-                if (data.token) localStorage.setItem(Auth.TOKEN_KEY, data.token);
+                // Phase 39: session token lives ONLY in the HttpOnly cookie —
+                // never store it in localStorage (purge any legacy leftover).
+                try { localStorage.removeItem(Auth.TOKEN_KEY); } catch (_) {}
                 // Phase 9: persist CSRF token — echoed back in X-CSRF-Token header
                 if (data.csrfToken) localStorage.setItem(Auth.CSRF_KEY, data.csrfToken);
                 // Mirror balance / project to top-level keys so legacy reads
@@ -431,14 +435,13 @@ const Auth = {
                 this.saveUsers(users);
             }
         }
-        // Phase 6.1 + 9: invalidate token on server (best-effort, non-blocking).
+        // Phase 9: invalidate session on server (best-effort, non-blocking).
         // The HttpOnly cookie rides along via credentials:'include'; server
         // clears it + deletes the session row.
-        const token = this.getToken();
         try {
             fetch(BASE + '/api/logout', {
                 method: 'POST',
-                headers: this.authHeaders(),               // includes Bearer + X-CSRF-Token
+                headers: this.authHeaders(),               // includes X-CSRF-Token
                 credentials: 'include',
                 keepalive: true,                           // survives the navigation below
             });
