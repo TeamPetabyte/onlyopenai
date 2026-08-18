@@ -4743,6 +4743,10 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     // One streaming Responses call. Accumulates text + tool calls, updates acc
     // usage/text, returns { calls, incomplete, respId }.
     async function once(args) {
+        // Phase 40: count the model calls this single answer costs. On a reasoning
+        // model each call is a fresh full-effort think, so the call count is the
+        // number that explains a slow turn — the token totals alone do not.
+        acc.apiCalls = (acc.apiCalls || 0) + 1;
         let stream;
         try {
             stream = await oai.responses.create(args);
@@ -4822,6 +4826,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         if (calls.length === 0 && incomplete?.reason === 'max_output_tokens'
             && lengthContinuations < MAX_LENGTH_CONTINUATIONS) {
             lengthContinuations++;
+            acc.continuations = (acc.continuations || 0) + 1;
             console.warn(`[chat/responses] truncated — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
             input = 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.';
             continue;
@@ -4843,6 +4848,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         }
         input = outputs;   // previous_response_id carries the function_call items
         toolTurn++;
+        acc.toolTurns = (acc.toolTurns || 0) + 1;
     }
 
     // Hit the tool-turn cap with no answer yet → force one tools-off turn so the
@@ -5393,6 +5399,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     const startTime = Date.now();
     // Phase 16.9: track cached + reasoning breakdowns alongside the totals.
     let inputTokens = 0, outputTokens = 0, cachedTokens = 0, reasoningTokens = 0, fullText = '';
+    // Phase 40: per-answer call breakdown, for measuring where a slow turn went.
+    // Populated by the Responses path only; stays 0 on the Chat Completions path.
+    let apiCalls = 0, toolTurns = 0, continuations = 0;
 
     // ── Stop generation support (Tier 1 upgrade) ──────────────
     // When the client closes the fetch (AIClient.cancel()), abort the
@@ -5510,6 +5519,8 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
             cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
             fullText = acc.fullText;
+            apiCalls = acc.apiCalls || 0; toolTurns = acc.toolTurns || 0;
+            continuations = acc.continuations || 0;
         } else {
 
         const messages = [
@@ -5722,7 +5733,14 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         const cost = (nonCachedInputTokens / 1000) * useInput
                    + ((cachedTokens || 0) / 1000) * useCached
                    + ((outputTokens || 0) / 1000) * useOutput;
-        console.log(`[chat] ${detectedSkill ? `[${detectedSkill.intent}] ` : ''}${inputTokens}in(${cachedTokens} cached)/${outputTokens}out(${reasoningTokens} reasoning) | ฿${cost.toFixed(4)} | rates ${pricing.fromDb?'from tbl_pricing':'fallback'} | ${durationMs}ms`);
+        // Phase 40: the line used to say how many tokens a turn burned but never
+        // which model or effort produced it, so a three-minute turn was
+        // indistinguishable from a fast one in the log. Model, effort and the
+        // call breakdown make before/after measurement possible.
+        const callInfo = apiCalls
+            ? ` | ${apiCalls} calls(${toolTurns} tool, ${continuations} cont)`
+            : '';
+        console.log(`[chat] [${reqModel}/${reqEffort}] ${detectedSkill ? `[${detectedSkill.intent}] ` : ''}${inputTokens}in(${cachedTokens} cached)/${outputTokens}out(${reasoningTokens} reasoning) | ฿${cost.toFixed(4)} | rates ${pricing.fromDb?'from tbl_pricing':'fallback'}${callInfo} | ${durationMs}ms`);
 
         // ── Phase 6: server-side persistence + atomic balance deduction ──
         // Previously /api/chat skipped DB write entirely — relying on the client
