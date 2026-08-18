@@ -4853,14 +4853,25 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
 
     // Hit the tool-turn cap with no answer yet → force one tools-off turn so the
     // user gets a summary instead of an empty reply (mirrors the chat path).
+    //
+    // Phase 40 fix: the loop exits on the turn cap immediately AFTER building the
+    // last round's tool outputs, so `input` still holds function_call_output items
+    // that were never sent. previous_response_id carries their function_call items,
+    // and the Responses API refuses a chained call that leaves any of them
+    // unanswered — it returns
+    //     400 No tool output found for function call call_...
+    // and the whole answer dies after the user already watched it search documents.
+    // Send the pending outputs alongside the nudge instead of dropping them.
     if (!isAborted() && acc.fullText.length === 0 && previousResponseId) {
-        console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`);
+        console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`
+            + ` (${Array.isArray(input) ? input.length : 0} pending tool output(s) carried over)`);
+        const nudge = { role: 'user', content: 'Based on the tool results above, give the final answer now.' };
         await once({
             model, stream: true, max_output_tokens: maxOutputTokens,
             reasoning: { effort }, store: true, tool_choice: 'none',
             instructions,   // Phase 35.3: not inherited via previous_response_id
             previous_response_id: previousResponseId,
-            input: 'Based on the tool results above, give the final answer now.',
+            input: Array.isArray(input) ? [...input, nudge] : [nudge],
         });
     }
 }
