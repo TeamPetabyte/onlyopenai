@@ -209,14 +209,51 @@ function getStatus() {
     };
 }
 
-/** Build the router prompt that lists skills for the LLM to pick from. */
-function buildRouterCatalog() {
-    return _cache.skills.map(s => ({
-        id:          s.id,
-        label:       s.label,
-        description: s.description,
-    }));
+/** Phase 40: placeholder detector — "is this skill still an unfinished stub?".
+ *  It lives HERE rather than in server.js so the registry itself can keep
+ *  stubs out of the router catalog, and server.js can share the exact same
+ *  rule instead of maintaining a second copy that drifts. */
+function isPlaceholder(content) {
+    const c = String(content || '');
+    if (c.trim().length < 50) return true;
+    if (/REPLACE WITH FULL CONTENT/i.test(c)) return true;
+    if (/\bTODO\b.*\b(fill|paste|prompt)\b/i.test(c)) return true;
+    if (/\bPLACEHOLDER\b/i.test(c)) return true;
+    if (/\bFIXME\b.*\b(prompt|skill)\b/i.test(c)) return true;
+    return false;
 }
+
+/** Build the router prompt that lists skills for the LLM to pick from.
+ *  Phase 40: half-finished prompts are no longer offered. The router used to
+ *  be able to pick one, and the chat path then dropped it and answered with
+ *  NO skill at all — no second-best, no log the user would see. Not listing
+ *  them is simpler and makes a "none" from the router mean what it says. */
+function buildRouterCatalog() {
+    return _cache.skills
+        .filter(s => !isPlaceholder(s.content))
+        .map(s => ({
+            id:          s.id,
+            label:       s.label,
+            description: s.description,
+        }));
+}
+
+// Phase 40: the skill a generic-but-on-topic question falls back to
+// ("ช่วยรีวิวโค้ดนี้ให้หน่อย") instead of injecting no skill at all. Override
+// per deployment with ROUTER_CATCHALL_SKILL_ID.
+const CATCHALL_ID = process.env.ROUTER_CATCHALL_SKILL_ID || 'abap_best_practice';
+
+/** The configured catch-all, or null when that id is unknown / still a
+ *  placeholder — callers then behave exactly as they did before Phase 40. */
+function getCatchAllSkill() {
+    const s = getSkill(CATCHALL_ID);
+    if (!s || isPlaceholder(s.content)) return null;
+    return s;
+}
+
+/** The configured catch-all id, whether or not it resolves to a usable skill
+ *  (the router prompt names it so the LLM can return it). */
+function getCatchAllId() { return CATCHALL_ID; }
 
 // ── File write-path (fallback only, when no DB pool) ──────────
 function _readDocForWrite() {
@@ -355,4 +392,6 @@ async function deleteSkill(id, opts = {}) {
 module.exports = {
     setPool, load, getSkills, getSkill, getStatus, buildRouterCatalog,
     upsertSkill, deleteSkill,
+    // Phase 40
+    isPlaceholder, getCatchAllSkill, getCatchAllId,
 };

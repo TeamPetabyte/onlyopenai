@@ -153,6 +153,17 @@ const AIClient = {
                             try { opts.onTool(event); } catch (_) { /* badge is cosmetic — never kill the stream */ }
                         }
 
+                    } else if (event.type === 'routed') {
+                        // Phase 40: which Skill prompt the server's router matched
+                        // (or that it matched none), plus HOW it was chosen. The
+                        // server has emitted this since Phase 18, but nothing here
+                        // read it — so the chat showed a 🔍 badge when it searched
+                        // documents and NOTHING when it applied a skill, which read
+                        // as "the skill prompts never run".
+                        if (typeof opts.onRouted === 'function') {
+                            try { opts.onRouted(event); } catch (_) { /* badge is cosmetic — never kill the stream */ }
+                        }
+
                     } else if (event.type === 'done') {
                         sawDone = true;
                         await onDone({
