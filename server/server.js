@@ -4776,7 +4776,23 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
                     case 'response.function_call_arguments.delta':
                         if (fcalls[ev.item_id]) fcalls[ev.item_id].args += ev.delta;
                         break;
+                    // Phase 40: a response truncated by max_output_tokens ends the
+                    // stream with `response.incomplete`, NOT `response.completed`.
+                    // Handling only the latter cost us three things at once:
+                    //   • usage was never read, so those turns were billed and
+                    //     recorded as ~100 output tokens when the model had really
+                    //     produced ~5,000 — under-charging the user and
+                    //     understating our own OpenAI cost;
+                    //   • incomplete_details was never read, so the continuation
+                    //     branch below could not fire — the truncated answer went
+                    //     to the user cut off mid-statement, silently, and every
+                    //     [chat] line reported "0 cont" because a continuation was
+                    //     never even considered;
+                    //   • response.id was lost, breaking the previous_response_id
+                    //     chain for anything that came after.
+                    // Both events carry the same shape, so they share a case.
                     case 'response.completed':
+                    case 'response.incomplete':
                         respId = ev.response?.id;
                         usage = ev.response?.usage;
                         incomplete = ev.response?.incomplete_details;
@@ -4797,6 +4813,14 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             acc.outputTokens    += usage.output_tokens || 0;
             acc.cachedTokens    += usage.input_tokens_details?.cached_tokens     || 0;
             acc.reasoningTokens += usage.output_tokens_details?.reasoning_tokens || 0;
+        } else if (!isAborted()) {
+            // Phase 40: no terminal event carried usage. Everything this call
+            // produced is then invisible to billing and to the cost record, which
+            // is exactly how the missing `response.incomplete` case above went
+            // unnoticed for so long. Say so loudly rather than quietly charging
+            // for a fraction of the work.
+            console.warn('[chat/responses] a call ended with no usage — tokens for it are NOT billed'
+                + ` (text so far ${acc.fullText.length} chars). Unhandled terminal event?`);
         }
         return { calls: Object.values(fcalls), incomplete, respId };
     }
