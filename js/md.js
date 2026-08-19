@@ -40,11 +40,46 @@
     // ─── marked options ─────────────────────────────────────
     if (typeof window.marked !== 'undefined') {
         window.marked.setOptions({
-            gfm:         true,   // GitHub Flavored Markdown (tables, strikethrough, task lists)
+            gfm:         true,   // GitHub Flavored Markdown (tables, task lists)
             breaks:      true,   // treat single \n as <br>  — AI output prefers this
             pedantic:    false,
             smartLists:  true,
         });
+
+        // Phase 41: turn GFM strikethrough OFF. In ABAP, `~` joins a table alias
+        // to a field — `stock~matnr`. GFM reads the text between two tildes as
+        // strikethrough, so a SELECT list containing several aliased fields had
+        // every tilde swallowed:
+        //     SELECT stock~werks, ... stock~matnr    (what the model wrote)
+        //  →  SELECT stockwerks,  ... stockmatnr     (what the user saw)
+        // The reviewer reasonably concluded the AI was inventing field names
+        // that don't exist. It wasn't — we were corrupting correct ABAP on the
+        // way to the screen, and a user could paste the result into SAP.
+        // Strikethrough is worth nothing here; `~` is load-bearing syntax.
+        try {
+            window.marked.use({ tokenizer: { del: () => false } });
+        } catch (e) {
+            console.warn('[md] could not disable strikethrough:', e.message);
+        }
+    }
+
+    // ─── Normalize the model's XML answer wrappers ──────────
+    // Phase 41: the skill prompts ask for <analysis>…</analysis> and
+    // <code>…</code> rather than markdown fences, so the ABAP arrived as plain
+    // prose: inline markdown applied to it, and the whole listing collapsed
+    // onto one line because nothing marked it as code. Rewrite those wrappers
+    // into their markdown equivalents before parsing, which also restores
+    // syntax highlighting and the copy button. Unclosed tags are handled too —
+    // at least one prompt in the catalog never closes the block it opens.
+    function normalizeModelBlocks(text) {
+        let t = String(text);
+        t = t.replace(/<analysis>\s*([\s\S]*?)\s*<\/analysis>/gi, '\n\n$1\n\n');
+        t = t.replace(/<(?:modified\s+)?code>\s*([\s\S]*?)\s*<\/(?:modified\s+)?code>/gi,
+                      '\n\n```abap\n$1\n```\n\n');
+        // opened but never closed → treat the remainder as the code block
+        t = t.replace(/<(?:modified\s+)?code>\s*([\s\S]*)$/i, '\n\n```abap\n$1\n```\n');
+        t = t.replace(/<\/?analysis>/gi, '');
+        return t;
     }
 
     // ─── DOMPurify config ───────────────────────────────────
@@ -78,7 +113,7 @@
         if (text == null) return '';
         if (!libsReady()) return escapeHtml(text);
         try {
-            const raw = window.marked.parse(String(text));
+            const raw = window.marked.parse(normalizeModelBlocks(text));
             return window.DOMPurify.sanitize(raw, PURIFY_CONFIG);
         } catch (e) {
             console.warn('[md] render failed, falling back to escape:', e.message);
