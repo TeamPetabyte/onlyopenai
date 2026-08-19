@@ -752,10 +752,18 @@ const PROMPT_COMMON_APPENDIX = `
 - When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.
 - The library contains manuals from different eras (BC402/BC405/BC410/BC412/BC430 and others). If sources conflict, precedence is: (1) the org's own development standards, (2) the most modern syntax/approach. When a retrieved technique is classical/legacy (classical dynpros, SELECT...ENDSELECT, TABLES work areas), say so explicitly instead of presenting it as current best practice.
 
+## What you may fix, and what you may only report
+Decide with one test: can THIS FILE ALONE prove the change is safe?
+- FIX DIRECTLY — provable from the file, and it does not change what the program produces: performance (SELECT inside a loop, SELECT *, missing WHERE, repeated reads), obsolete syntax (TABLES, LIKE, MOVE...TO, header lines), naming conventions, the org's coding standards, and a local variable that nothing else in the file references.
+- REPORT AND ASK, never apply — anything that changes the program's behaviour or its output (adding, removing or reordering a condition; applying a variable or SELECT-OPTION the original left unused; changing a derivation, key, filter or sort), and anything this file alone cannot settle (an unused FORM or METHOD that another program may still call; a commented-out block whose purpose is not stated; an unclear relationship between fields).
+- If you are unsure which side a change falls on, it is report-and-ask.
+- Put those under a "⚠️ Needs your decision" heading BEFORE the corrected code. Number them, and quote the statement each one is about. For each, ask the developer what it is FOR — what the object, variable, SELECT-OPTION, derivation or commented-out block is meant to support, or how it is meant to be used — phrased so it can be answered in one line. Say that you will apply the change in your next reply once they answer. Ask at most 5; list anything beyond that as observations without questions.
+- Precedence when instructions disagree: what the user asked for in THIS message wins; then an exception a skill states explicitly for its own subject; then these rules. The Accuracy rules below are absolute — no skill overrides them.
+
 ## Accuracy rules (SAP objects are facts, not suggestions)
 - NEVER invent SAP object names — tables, fields, BAPIs, function modules, transactions, classes, BAdIs. Only reference objects you can verify via the knowledge base, the tools (find_bapi, get_transaction_info, lookup_auth_object), or that are unambiguously standard SAP.
 - If you cannot verify an object exists, say so explicitly ("ไม่แน่ใจว่า object นี้มีจริง — ตรวจสอบใน SE11/SE37/SE93 ก่อนใช้") instead of presenting a guess as fact.
-- When correcting user code: preserve the original logic, variable names and structure. Change ONLY what the task requires. Do not introduce new fields, tables, parameters or logic that were not in the original unless explicitly asked — and clearly flag every addition you do make.
+- When correcting user code: preserve the original logic, variable names and structure. Never change behaviour silently — every change you make must be visible in what you write back.
 - Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
 
 // Phase 36: {code} skills assumed EVERY message is code. A conversational
@@ -775,7 +783,12 @@ function applyCodePlaceholder(systemPrompt, question) {
     if (looksLikeAbapCode(question)) {
         return {
             systemPrompt: systemPrompt.replace('{code}', question),
-            userPrompt:   'Please analyze the ABAP code provided above and apply the corrections.',
+            // Phase 41: was "…and apply the corrections." This rides in the USER
+            // turn, which outranks the system prompt — so it was ordering the
+            // model to apply everything while the shared rules were telling it
+            // some findings must only be reported. Neutral wording now; the
+            // rules alone decide what gets applied.
+            userPrompt:   'Please review the ABAP code provided above and respond according to your instructions.',
         };
     }
     return {
@@ -3282,7 +3295,7 @@ const EVAL_JUDGE_SYSTEM = `You are a strict grader for an SAP ABAP AI assistant.
 Compare the CANDIDATE ANSWER against the REFERENCE ANSWER (approved by a senior ABAP developer) for the given QUESTION.
 Scoring rubric:
 - "issues" (0-2): did the candidate identify the same problems as the reference?
-- "fix" (0-2): is the candidate's corrected code / recommendation technically correct and equivalent to the reference?
+- "fix" (0-2): is the candidate's corrected code / recommendation technically correct and equivalent to the reference? A candidate that REPORTS a behaviour-changing finding and asks about it, instead of rewriting the code, is following the assistant's rules — judge whether the finding is right, not whether code was rewritten.
 - "overall" (0-10): holistic quality versus the reference.
 - "pass": true only if overall >= 7 AND the candidate makes no incorrect technical claim.
 Do NOT reward verbosity. Judge technical substance only.
