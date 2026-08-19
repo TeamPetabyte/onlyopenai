@@ -429,7 +429,13 @@ const ALLOWED_MODELS = {
     'gpt-5.5':       { path: 'chat',      label: 'GPT-5.5',       supportsEffort: false },
 };
 const MODEL_ALIASES = { 'gpt-5.6': 'gpt-5.6-sol' };
-const VALID_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+// Phase 43: trimmed to three. `max` measured worse than `xhigh` on every axis
+// — more expensive, slower, and a SHORTER answer — so keeping it only invited
+// someone to pick the worst option. `none` was never evaluated. Old values
+// stored in a browser are mapped to the nearest survivor rather than silently
+// reset, see resolveEffort.
+const VALID_EFFORTS = ['low', 'medium', 'high'];
+const EFFORT_ALIASES = { none: 'low', xhigh: 'high', max: 'high' };
 const DEFAULT_EFFORT = 'medium';
 
 // Resolve the client-supplied model to { model, path }. An EXPLICIT, known
@@ -447,7 +453,8 @@ function resolveModel(requested) {
     return { model: dflt, path: ALLOWED_MODELS[dflt]?.path || 'chat' };
 }
 function resolveEffort(requested) {
-    return VALID_EFFORTS.includes(requested) ? requested : DEFAULT_EFFORT;
+    if (VALID_EFFORTS.includes(requested)) return requested;
+    return EFFORT_ALIASES[requested] || DEFAULT_EFFORT;
 }
 let openai = null;
 let OpenAI = null;
@@ -759,6 +766,18 @@ Decide with one test: can THIS FILE ALONE prove the change is safe?
 - If you are unsure which side a change falls on, it is report-and-ask.
 - Put those under a "⚠️ Needs your decision" heading BEFORE the corrected code. Number them, and quote the statement each one is about. For each, ask the developer what it is FOR — what the object, variable, SELECT-OPTION, derivation or commented-out block is meant to support, or how it is meant to be used — phrased so it can be answered in one line. Say that you will apply the change in your next reply once they answer. Ask at most 5; list anything beyond that as observations without questions.
 - Precedence when instructions disagree: what the user asked for in THIS message wins; then an exception a skill states explicitly for its own subject; then these rules. The Accuracy rules below are absolute — no skill overrides them.
+
+## Depth — finish the answer the first time
+Every finding carries all four, or it is not finished:
+  1. WHERE — quote the statement, and give the line number when you have one.
+  2. WHY IT MATTERS HERE — the concrete consequence in THIS program (how many
+     round trips, which rows, what breaks and when), never a general principle.
+  3. THE REPLACEMENT — written out in full. Do not describe a change in prose
+     and leave the reader to write it.
+  4. THE SOURCE — file, unit and page when it came from the document library.
+If the reader has to ask a follow-up question to be able to act, the finding was
+incomplete. One complete finding is worth more than three thin ones. Length is
+not a concern here; being asked the same thing twice is.
 
 ## Accuracy rules (SAP objects are facts, not suggestions)
 - NEVER invent SAP object names — tables, fields, BAPIs, function modules, transactions, classes, BAdIs. Only reference objects you can verify via the knowledge base, the tools (find_bapi, get_transaction_info, lookup_auth_object), or that are unambiguously standard SAP.
@@ -3016,6 +3035,7 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
     // Phase 42: including the pre-fetched org standards, for the same reason.
     systemPrompt += PROMPT_COMMON_APPENDIX;
     systemPrompt += orgStandardsBlock(await getOrgStandards());
+    systemPrompt += await buildPreAnalysis(question);
 
     const { model: reqModel, path: modelPath } = resolveModel(model);
     const reqEffort = resolveEffort(effort);
@@ -4746,6 +4766,87 @@ async function getOrgStandards() {
     return _orgStandards;
 }
 
+// ── Phase 43: pre-analysis — do the mechanical work before the model runs ──
+// At `medium` the model reasons roughly five times less than at `high`, so the
+// way to keep answer quality is not to demand more thinking — it is to stop
+// making it think about things a rule can settle. Two of those:
+//
+//   1. Finding the defects. checkAbapSyntax already detects TABLES, MOVE...TO,
+//      SELECT *, SELECT...ENDSELECT and friends deterministically, with line
+//      numbers. Making the model hunt for them across 30,000 characters spends
+//      attention and can miss one; handing it the list cannot.
+//   2. Choosing what to look up. The model used to spend a whole round trip
+//      deciding what to search for. The scan already tells us what this code is
+//      guilty of, so the query can be built from that — server side, in seconds,
+//      with no reasoning pass.
+//
+// What is left for the model is the part it is actually good at: deciding what
+// the right fix is and explaining why. Both lookups run on the server, so this
+// adds seconds, not another think-call-think cycle.
+const PREANALYSIS_MAX_CHARS = 4000;
+
+function scanQueryTerms(scan) {
+    const terms = new Set();
+    for (const i of scan.issues || []) {
+        const c = String(i.code || '').toUpperCase();
+        if (/\bTABLES\b/.test(c))      terms.add('obsolete TABLES statement work area');
+        if (/\bMOVE\b/.test(c))        terms.add('MOVE TO obsolete assignment');
+        if (/SELECT\s+\*/.test(c))     terms.add('SELECT * explicit field list performance');
+        if (/ENDSELECT/.test(c))        terms.add('SELECT ENDSELECT loop INTO TABLE');
+        if (/\bWRITE\b/.test(c))       terms.add('WRITE classical list ALV');
+        if (/\bLIKE\b/.test(c))        terms.add('LIKE obsolete data declaration TYPE');
+    }
+    return [...terms];
+}
+
+/** Findings + the documents that speak to them, ready to drop into the prompt. */
+async function buildPreAnalysis(userMessage) {
+    const text = String(userMessage || '');
+    if (!looksLikeAbapCode(text)) return '';
+
+    let block = '';
+    try {
+        const scan = checkAbapSyntax(text);
+        if (scan.issueCount > 0) {
+            block += '\n\n## Detected by a static scan of the code above (line numbers are exact)\n'
+                  + 'These were found mechanically — treat them as given and spend your effort on the fix, not on locating them. This list is not exhaustive; keep looking for anything it cannot see.\n';
+            for (const i of scan.issues) {
+                block += `  line ${i.line} [${i.severity}] ${i.message}\n      ${String(i.code).slice(0, 110)}\n`;
+            }
+        }
+
+        // Documents chosen from what the scan found, plus the user's own words.
+        // The defect terms lead: they are the signal. The question contributes
+        // only its first prose line, capped short — taking 200 characters of
+        // proseOf() dragged in report-header fragments (`LINE-COUNT 65`,
+        // `NO STANDARD PAGE HEADING.`) that diluted the query into noise.
+        const terms = scanQueryTerms(scan);
+        const ask = text.split('\n').map(s => s.trim())
+            .find(s => s && !_isCommentLine(s) && !ABAP_STMT_START_RE.test(s)) || '';
+        const query = [...terms, ask.slice(0, 120)].filter(Boolean).join(' ').trim();
+        if (query) {
+            const r = await searchKnowledge(query);
+            if (r?.found && r.results?.length) {
+                let docs = '', files = [];
+                for (const x of r.results) {
+                    if (docs.length + x.text.length > PREANALYSIS_MAX_CHARS) break;
+                    docs += `\n[${x.file}]\n${x.text}\n`;
+                    files.push(x.file);
+                }
+                if (docs) {
+                    block += '\n## Reference material for exactly these findings (already retrieved)\n'
+                          + docs.trim()
+                          + `\n\nCite the above as: ${[...new Set(files)].join(' · ')}`;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[pre-analysis] skipped:', e.message);
+        return '';
+    }
+    return block;
+}
+
 /** The prompt block carrying the standards, or '' when we have none. */
 function orgStandardsBlock(std) {
     if (!std || !std.text) return '';
@@ -4814,7 +4915,15 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     // blank-bubble bug seen in prod). Scale the ceiling with effort — tokens
     // are billed by actual use, not by the cap, so bigger ceilings cost
     // nothing on normal answers.
-    const RESP_MAX_OUT = { none: 4000, low: 6000, medium: 8000, high: 16000, xhigh: 24000, max: 32000 };
+    // Phase 43: the ceiling used to scale with effort, which conflated two
+    // unrelated things — how hard the model thinks, and how long the answer may
+    // be. The corrected ABAP file is the same size either way, so every level
+    // hit its cap and paid for a continuation round trip. Continuations also
+    // make the model resume without seeing the whole picture. Effort now
+    // controls thinking; these control length, and are generous enough that a
+    // full file fits in one pass. Tokens bill by use, so a higher ceiling costs
+    // nothing on a short answer.
+    const RESP_MAX_OUT = { none: 12000, low: 12000, medium: 16000, high: 24000, xhigh: 24000, max: 32000 };
     const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
     let previousResponseId = null;
@@ -5621,6 +5730,9 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // request of the window. It removes the one tool round trip that fired
         // on literally every answer.
         finalSystemPrompt += orgStandardsBlock(await getOrgStandards());
+        // Phase 43: hand over the static scan and the documents that match what
+        // it found, so the model spends its budget on judgement, not on hunting.
+        finalSystemPrompt += await buildPreAnalysis(prompt);
 
         // ── Step 3: Phase 4 — Chat with Tool Use (multi-turn) ────────
         // Function tools เท่านั้น (file_search แบบ built-in ใช้ไม่ได้กับ Chat
