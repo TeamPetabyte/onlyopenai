@@ -749,7 +749,7 @@ const PROMPT_COMMON_APPENDIX = `
 - SAP manual excerpts contain page footers like "© 2009 SAP AG. All rights reserved. 225" and headings like "Unit 4: Dynamic Programming" / "Lesson: Using Field Symbols" — read the page number and unit/lesson FROM THE EXCERPT and include them when present.
 - NEVER guess or invent a page number. If the excerpt shows no page/unit marker, cite the filename alone.
 - If nothing came from the documents, end with "📚 Sources: general knowledge (ไม่ได้อ้างอิงจากคลังเอกสาร)" — the reader must always know where an answer came from.
-- When you WRITE or REVIEW ABAP code, first search for the org's development standards (naming conventions, error handling, documentation rules) and make the code comply with them.
+- The org's own development standards (naming conventions, error handling, documentation rules) are supplied to you below whenever they are available — comply with them and cite them. Search for them yourself ONLY if no such section is present.
 - The library contains manuals from different eras (BC402/BC405/BC410/BC412/BC430 and others). If sources conflict, precedence is: (1) the org's own development standards, (2) the most modern syntax/approach. When a retrieved technique is classical/legacy (classical dynpros, SELECT...ENDSELECT, TABLES work areas), say so explicitly instead of presenting it as current best practice.
 
 ## What you may fix, and what you may only report
@@ -3013,7 +3013,9 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
     let { systemPrompt, userPrompt } = applyCodePlaceholder(skillContent, question);
     // Phase 35.1: same appendix as live chat — Lab/eval answers must be
     // collected under identical conditions to be usable as a baseline.
+    // Phase 42: including the pre-fetched org standards, for the same reason.
     systemPrompt += PROMPT_COMMON_APPENDIX;
+    systemPrompt += orgStandardsBlock(await getOrgStandards());
 
     const { model: reqModel, path: modelPath } = resolveModel(model);
     const reqEffort = resolveEffort(effort);
@@ -4683,6 +4685,79 @@ async function searchKnowledge(query) {
     }
 }
 
+// ── Phase 42: the org's development standards, fetched once ───────────────
+// The shared appendix used to order a knowledge-base search for the org's
+// standards before writing any ABAP. Every single answer therefore opened with
+// the same query and got the same content back — the logs show it at every
+// effort level, without exception. On a reasoning model a tool round trip is
+// not a cheap lookup: the model thinks, calls, waits, then thinks again from
+// scratch. That one guaranteed round trip was costing a full extra reasoning
+// pass on every request, and wall-clock tracks the number of calls almost
+// linearly (2 calls ≈ 2 min, 3 ≈ 5.5 min, 4 ≈ 8-14 min).
+//
+// So fetch it once, cache it, and hand it to the model in the prompt instead.
+// The tokens are much the same — the tool result landed in the context anyway —
+// but the round trip disappears. Nothing about what the model is told to comply
+// with changes, so this is a latency fix, not a behaviour change.
+//
+// Degrades quietly: if the vector store is unavailable or has no standards, the
+// text stays empty, no block is injected, and the appendix's "search for them
+// if they are not provided" clause takes over exactly as before.
+const ORG_STANDARDS_QUERY     = 'organization ABAP development standards naming conventions error handling documentation';
+const ORG_STANDARDS_TTL_MS    = 6 * 60 * 60 * 1000;   // re-read a few times a day
+const ORG_STANDARDS_MAX_CHARS = 6000;                 // ~1.5k tokens; fits two chunks of the org doc
+// The vector store ranks a generic SAP manual above the org's own standards
+// for this query (0.738 vs 0.704), so filling the budget by score alone took
+// ABAP_Keyword_Documentation and left the org document out entirely — the one
+// thing this block exists to carry. Rank the org's own file first.
+const ORG_STANDARDS_FILE_RE   = /standard|keystone/i;
+let _orgStandards = { text: '', files: [], fetchedAt: 0 };
+
+async function getOrgStandards() {
+    const now = Date.now();
+    if (_orgStandards.fetchedAt && now - _orgStandards.fetchedAt < ORG_STANDARDS_TTL_MS) {
+        return _orgStandards;
+    }
+    // Stamp the time first: a failing lookup must not retry on every message.
+    _orgStandards = { ..._orgStandards, fetchedAt: now };
+    try {
+        const r = await searchKnowledge(ORG_STANDARDS_QUERY);
+        if (r?.found && Array.isArray(r.results) && r.results.length) {
+            let text = '';
+            const files = [];
+            // stable sort: org standards first, search order kept within each group
+            const ranked = [...r.results].sort((a, c) =>
+                (ORG_STANDARDS_FILE_RE.test(a.file) ? 0 : 1) - (ORG_STANDARDS_FILE_RE.test(c.file) ? 0 : 1));
+            for (const x of ranked) {
+                if (text.length + x.text.length > ORG_STANDARDS_MAX_CHARS) break;
+                text += `\n[${x.file}]\n${x.text}\n`;
+                files.push(x.file);
+            }
+            _orgStandards = { text: text.trim(), files: [...new Set(files)], fetchedAt: now };
+            console.log(`[org-standards] cached ${_orgStandards.text.length} chars from ${_orgStandards.files.join(' · ') || '(none)'}`);
+        } else {
+            _orgStandards = { text: '', files: [], fetchedAt: now };
+            console.warn('[org-standards] nothing found — the model will search for them itself');
+        }
+    } catch (e) {
+        console.warn('[org-standards] lookup failed, model will search instead:', e.message);
+        _orgStandards = { text: '', files: [], fetchedAt: now };
+    }
+    return _orgStandards;
+}
+
+/** The prompt block carrying the standards, or '' when we have none. */
+function orgStandardsBlock(std) {
+    if (!std || !std.text) return '';
+    return `
+
+## The org's development standards (already retrieved for you)
+${std.text}
+
+Cite the above as: ${std.files.join(' · ')}
+Do not run a general "development standards" search — you already have it. Search only for something specific that this section does not cover.`;
+}
+
 // Phase 35.2: RAG visibility — the chat UI shows a badge while the model
 // searches documents. Extract the search query from a pending tool-call
 // batch, and shape the search result into a compact tool_result event
@@ -5541,6 +5616,11 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // Appended to whatever system prompt was chosen (default / skill /
         // catalog) so it always applies — shared with the Lab/eval runner.
         finalSystemPrompt += PROMPT_COMMON_APPENDIX;
+        // Phase 42: hand over the org standards rather than making the model
+        // fetch them. Cached, so this is a memory read on all but the first
+        // request of the window. It removes the one tool round trip that fired
+        // on literally every answer.
+        finalSystemPrompt += orgStandardsBlock(await getOrgStandards());
 
         // ── Step 3: Phase 4 — Chat with Tool Use (multi-turn) ────────
         // Function tools เท่านั้น (file_search แบบ built-in ใช้ไม่ได้กับ Chat
