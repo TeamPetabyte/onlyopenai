@@ -783,6 +783,7 @@ not a concern here; being asked the same thing twice is.
 - NEVER invent SAP object names — tables, fields, BAPIs, function modules, transactions, classes, BAdIs. Only reference objects you can verify via the knowledge base, the tools (find_bapi, get_transaction_info, lookup_auth_object), or that are unambiguously standard SAP.
 - If you cannot verify an object exists, say so explicitly ("ไม่แน่ใจว่า object นี้มีจริง — ตรวจสอบใน SE11/SE37/SE93 ก่อนใช้") instead of presenting a guess as fact.
 - When correcting user code: preserve the original logic, variable names and structure. Never change behaviour silently — every change you make must be visible in what you write back.
+- Change only what the fix requires. Do not rename variables, renumber, or reformat lines your correction does not touch. If a line's only difference from the original is naming or layout, leave it exactly as it was — cosmetic edits bury the real changes among noise and give the reader more to verify for nothing.
 - Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
 
 // Phase 36: {code} skills assumed EVERY message is code. A conversational
