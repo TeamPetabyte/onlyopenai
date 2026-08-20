@@ -4314,7 +4314,7 @@ app.get('/api/chat/sessions/:id', requireAuth, async (req, res) => {
     try {
         const m = await pool.query(
             `SELECT message_id AS id, role, content, created_at,
-                    input_tokens, output_tokens, cost, model, skill_id
+                    input_tokens, output_tokens, cost, model, skill_id, duration_ms
              FROM tbl_chat_message
              WHERE session_id=$1
              ORDER BY created_at, message_id`,
@@ -6074,11 +6074,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                             [chatSessionId, prompt || '', skillId]);
                         await client.query(
                             `INSERT INTO tbl_chat_message
-                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id)
-                             VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7)`,
+                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id, duration_ms)
+                             VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7,  $8)`,
                             [chatSessionId, fullText || '',
                              inputTokens || null, outputTokens || null,
-                             cost || null, reqModel, skillId]);
+                             // Phase 43: persist the wall-clock time. Without it the
+                             // badge fell back to "0.0s" on every reload.
+                             cost || null, reqModel, skillId, durationMs || null]);
                         await client.query(
                             `UPDATE tbl_chat_session
                              SET message_count = message_count + 2,
