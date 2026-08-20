@@ -5334,6 +5334,85 @@ function pickSkillFromCodeShape(text) {
     return hits.length === 1 ? hits[0] : null;
 }
 
+/** True when a CALL FUNCTION block still carries commented-out parameters —
+ *  the "* TABLES / * it_data =" left behind when someone disabled a parameter
+ *  instead of deleting it. Scans from CALL FUNCTION to the closing period. */
+function hasCommentedParamsInCall(text) {
+    let inCall = false;
+    for (const raw of String(text || '').split('\n')) {
+        if (/\bCALL\s+FUNCTION\b/i.test(raw)) { inCall = true; continue; }
+        if (!inCall) continue;
+        if (_isCommentLine(raw)) {
+            // a disabled parameter, not a note: "* name = x" or "* TABLES"
+            if (/=/.test(raw) || /^\s*[*"]\s*(TABLES|EXPORTING|IMPORTING|CHANGING|EXCEPTIONS)\b/i.test(raw)) return true;
+            continue;
+        }
+        if (/\.\s*$/.test(raw)) inCall = false;
+    }
+    return false;
+}
+
+// Phase 45: rules used ONLY to gather supporting knowledge, deliberately kept
+// out of ROUTER_CODE_RULES. That list drives the primary pick through
+// pickSkillFromCodeShape, which fires only when exactly one rule matches —
+// adding an overlapping rule there (FOR ALL ENTRIES already belongs to
+// select_best_practice) would turn a confident single hit into no hit at all.
+const ORCHESTRATION_EXTRA_RULES = [
+    { id: 'FAE_CHECK_01',               test: t => /\bFOR\s+ALL\s+ENTRIES\b/i.test(_liveCodeOf(t)) },
+    { id: 'COMMENT_IN_FUNCTION_SYNTAX', test: hasCommentedParamsInCall },
+];
+
+/** Every skill whose check the pasted code trips — not just one. This is the
+ *  measured gap: a router that picks one skill missed the commented-out dead
+ *  code and the disabled CALL FUNCTION parameters on a file that tripped five
+ *  rules at once, because only the chosen skill's knowledge ever arrived. */
+function skillsForCode(text) {
+    const ids = [...ORCHESTRATION_EXTRA_RULES, ...ROUTER_CODE_RULES]
+        .filter(r => { try { return r.test(text); } catch (_) { return false; } })
+        .map(r => r.id);
+    return [...new Set(ids)].filter(id => {
+        const s = skillPrompts.getSkill(id);
+        return s && !isSkillPlaceholder(s.content);
+    });
+}
+
+// Bound the appended knowledge by SIZE, not by how many skills produced it.
+// A count cap of 6 looked reasonable and silently dropped the seventh — which
+// on the test file was COMMENT_IN_FUNCTION_SYNTAX, one of the two checks this
+// whole change exists to stop losing. All 8 skills' knowledge together is
+// ~10.7k chars, so this fits the catalog as it stands and still refuses to grow
+// without limit if it doubles.
+const MAX_SUPPORTING_SKILLS = 8;
+const MAX_SUPPORTING_CHARS  = 14000;
+
+/** The other skills' knowledge, appended to the primary skill's instructions.
+ *  Only the knowledge block travels: each skill also carries its own "answer in
+ *  this format" section, and several of those in one prompt contradict each
+ *  other. The primary skill has already set the format. */
+function supportingKnowledgeBlock(ids) {
+    const parts = [];
+    const dropped = [];
+    let used = 0;
+    for (const id of ids) {
+        const s = skillPrompts.getSkill(id);
+        if (!s) continue;
+        const k = skillPrompts.knowledgeBlockOf(s.content);
+        if (!k) continue;
+        const part = `### ${s.label || id}\n${k}`;
+        if (used + part.length > MAX_SUPPORTING_CHARS) { dropped.push(id); continue; }
+        parts.push(part);
+        used += part.length;
+    }
+    // never drop a check without saying so — a silent cap reads as full coverage
+    if (dropped.length) console.warn('[chat] supporting knowledge over budget, dropped:', dropped.join(', '));
+    if (!parts.length) return '';
+    return '\n\n## Additional checks this code also needs\n'
+        + 'These rules come from other review skills that match the code you were given. '
+        + 'Apply them with the same weight as your main instructions, and report their findings '
+        + 'in the same answer, in the same format. Do not start a separate section for them.\n\n'
+        + parts.join('\n\n');
+}
+
 /** The user's own words, with ABAP statement lines stripped — used to tell a
  *  bare code paste apart from a real instruction. */
 function proseOf(text) {
@@ -5673,6 +5752,7 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
     try {
         // ── Step 1: Intent Detection (Phase 1 — Router) ──────────────
         let detectedSkill = null;
+        let supportingSkillIds = [];
         let finalSystemPrompt = systemPrompt || 'คุณเป็น AI assistant ที่ช่วยงาน SAP ABAP';
         let finalUserPrompt   = prompt;
 
@@ -5726,7 +5806,13 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             // Phase 40: `source` says HOW the skill was chosen (llm / code-shape
             // / catch-all) — the chat UI renders it, so a tester can see the
             // routing decision without reading the server log.
-            sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence, source: detectedSkill.source });
+            // Phase 45: the primary skill sets the format and answers; the code
+            // usually trips several checks at once, so the rest contribute their
+            // knowledge instead of being dropped.
+            supportingSkillIds = skillsForCode(prompt)
+                .filter(id => id !== detectedSkill.skillId)
+                .slice(0, MAX_SUPPORTING_SKILLS);
+            sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence, source: detectedSkill.source, supporting: supportingSkillIds });
         }
 
         // ── Step 2: {code} placeholder (Phase 36: only when it IS code) ──
@@ -5743,6 +5829,10 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // request of the window. It removes the one tool round trip that fired
         // on literally every answer.
         finalSystemPrompt += orgStandardsBlock(await getOrgStandards());
+        // Phase 45: the checks the primary skill does not cover. Appended after
+        // the org standards so a conflict resolves the way it always has — the
+        // org's own document still outranks a generic SAP practice.
+        finalSystemPrompt += supportingKnowledgeBlock(supportingSkillIds);
         // Phase 43: hand over the static scan and the documents that match what
         // it found, so the model spends its budget on judgement, not on hunting.
         finalSystemPrompt += await buildPreAnalysis(prompt);
@@ -5993,7 +6083,10 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         const callInfo = apiCalls
             ? ` | ${apiCalls} calls(${toolTurns} tool, ${continuations} cont)`
             : '';
-        console.log(`[chat] [${reqModel}/${reqEffort}] ${detectedSkill ? `[${detectedSkill.intent}] ` : ''}${inputTokens}in(${cachedTokens} cached)/${outputTokens}out(${reasoningTokens} reasoning) | ฿${cost.toFixed(4)} | rates ${pricing.fromDb?'from tbl_pricing':'fallback'}${callInfo} | ${durationMs}ms`);
+        if (supportingSkillIds.length) {
+            console.log(`[chat] skills: ${detectedSkill?.skillId || 'none'} + ${supportingSkillIds.join(', ')}`);
+        }
+        console.log(`[chat] [${reqModel}/${reqEffort}] ${detectedSkill ? `[${detectedSkill.skillId || detectedSkill.intent}${supportingSkillIds.length ? '+' + supportingSkillIds.length : ''}] ` : ''}${inputTokens}in(${cachedTokens} cached)/${outputTokens}out(${reasoningTokens} reasoning) | ฿${cost.toFixed(4)} | rates ${pricing.fromDb?'from tbl_pricing':'fallback'}${callInfo} | ${durationMs}ms`);
 
         // ── Phase 6: server-side persistence + atomic balance deduction ──
         // Previously /api/chat skipped DB write entirely — relying on the client
@@ -6079,21 +6172,25 @@ app.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                 // disagree.
                 if (chatSessionId) {
                     const skillId = detectedSkill?.skillId || null;
+                    // Phase 45: skill_id still names the skill that answered;
+                    // skills_used names every skill whose knowledge reached the
+                    // model. NULL when none did, so old rows stay meaningful.
+                    const skillsUsed = [skillId, ...supportingSkillIds].filter(Boolean).join(',') || null;
                     {
                         await client.query(
                             `INSERT INTO tbl_chat_message
-                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id)
-                             VALUES ($1, 'user',      $2, NULL, NULL, NULL, NULL, $3)`,
-                            [chatSessionId, prompt || '', skillId]);
+                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id, skills_used)
+                             VALUES ($1, 'user',      $2, NULL, NULL, NULL, NULL, $3, $4)`,
+                            [chatSessionId, prompt || '', skillId, skillsUsed]);
                         await client.query(
                             `INSERT INTO tbl_chat_message
-                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id, duration_ms)
-                             VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7,  $8)`,
+                                (session_id, role, content, input_tokens, output_tokens, cost, model, skill_id, duration_ms, skills_used)
+                             VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7,  $8,  $9)`,
                             [chatSessionId, fullText || '',
                              inputTokens || null, outputTokens || null,
                              // Phase 43: persist the wall-clock time. Without it the
                              // badge fell back to "0.0s" on every reload.
-                             cost || null, reqModel, skillId, durationMs || null]);
+                             cost || null, reqModel, skillId, durationMs || null, skillsUsed]);
                         await client.query(
                             `UPDATE tbl_chat_session
                              SET message_count = message_count + 2,
