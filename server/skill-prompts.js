@@ -180,12 +180,23 @@ async function load() {
                 skills, raw: null, error: null, source: 'db',
             };
             console.log('[skill-prompts] loaded', skills.length, 'skills from tbl_prompt (DB)');
+            _warnMissingKnowledge();
             return _cache;
         } catch (e) {
             console.warn('[skill-prompts] DB load failed → file fallback:', e.message);
         }
     }
-    return _loadFromFile();
+    const c = _loadFromFile();
+    _warnMissingKnowledge();
+    return c;
+}
+
+// Say it at boot rather than letting orchestration quietly skip the skill.
+function _warnMissingKnowledge() {
+    const a = auditKnowledgeBlocks();
+    if (a.missing.length) {
+        console.warn('[skill-prompts] no knowledge block found in:', a.missing.join(', '));
+    }
 }
 
 // ── Sync read API (hot path — reads the cache) ────────────────
@@ -221,6 +232,46 @@ function isPlaceholder(content) {
     if (/\bPLACEHOLDER\b/i.test(c)) return true;
     if (/\bFIXME\b.*\b(prompt|skill)\b/i.test(c)) return true;
     return false;
+}
+
+/** Phase 45: pull just the ABAP knowledge out of a skill prompt.
+ *
+ *  Orchestration needs to combine several skills in one answer, and it cannot
+ *  send whole prompts — each one carries its own "answer in this format"
+ *  instructions, and those contradict each other. So it takes the knowledge
+ *  block and leaves the rest behind.
+ *
+ *  Six skills wrap that block in <best_practices>; the two newest use
+ *  <best_practice>. Both spellings are accepted, and so is a missing closing
+ *  tag, because the tag was never a documented contract — nobody writing a
+ *  skill was told which one to use. Matching only one spelling would drop a
+ *  skill's knowledge silently, which is the failure nobody notices.
+ *
+ *  Returns '' when there is no block to take. */
+const KB_OPEN  = /<best_practices?>/i;
+const KB_CLOSE = /<\/best_practices?>/i;
+// where the knowledge ends when the closing tag is missing: the output-format
+// section that every skill puts after it.
+const KB_STOP  = /<(?:modified\s+code|analysis|code)>/i;
+
+function knowledgeBlockOf(content) {
+    const c = String(content || '');
+    const open = c.match(KB_OPEN);
+    if (!open) return '';
+
+    const after = c.slice(open.index + open[0].length);
+    const close = after.match(KB_CLOSE) || after.match(KB_STOP);
+    return (close ? after.slice(0, close.index) : after).trim();
+}
+
+/** Which skills would contribute nothing to an orchestrated answer.
+ *  Placeholders are excluded — they are already kept out of the router. */
+function auditKnowledgeBlocks() {
+    const usable = _cache.skills.filter(s => !isPlaceholder(s.content));
+    return {
+        ok:      usable.filter(s =>  knowledgeBlockOf(s.content)).map(s => s.id),
+        missing: usable.filter(s => !knowledgeBlockOf(s.content)).map(s => s.id),
+    };
 }
 
 /** Build the router prompt that lists skills for the LLM to pick from.
@@ -394,4 +445,6 @@ module.exports = {
     upsertSkill, deleteSkill,
     // Phase 40
     isPlaceholder, getCatchAllSkill, getCatchAllId,
+    // Phase 45
+    knowledgeBlockOf, auditKnowledgeBlocks,
 };
