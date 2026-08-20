@@ -184,7 +184,17 @@
         return actions;   // caller can append more buttons (e.g. Regenerate)
     }
 
-    // ─── Download button: save the raw AI response as a file ──
+    // Phase 45: when the answer carries a corrected source file, download the
+    // code alone. Saving the whole message put the summary and the ⚠️ section
+    // at the top of a .abap file, so it wouldn't compile.
+    function downloadableBody(rawText) {
+        const t = String(rawText || '');
+        const blocks = [...t.matchAll(/```(?:\w+)?\r?\n([\s\S]*?)```/g)].map(m => m[1]);
+        if (!blocks.length) return t;                       // prose answer — save as-is
+        return blocks.reduce((a, b) => (b.length > a.length ? b : a)).replace(/\s+$/, '') + '\n';
+    }
+
+    // ─── Download button: save the AI response as a file ──
     function attachMessageDownload(actionsEl, rawText, filename) {
         if (!actionsEl) return;
         if (actionsEl.querySelector('.msg-action-download')) return;   // idempotent
@@ -194,7 +204,9 @@
         dlBtn.className = 'msg-action-btn msg-action-download';
         dlBtn.setAttribute('aria-label', 'ดาวน์โหลดคำตอบ');
         dlBtn.innerHTML = '<span class="msg-action-icon">⬇</span><span class="msg-action-label">Download</span>';
-        dlBtn.addEventListener('click', () => downloadText(rawText, filename || guessFilename(rawText)));
+        dlBtn.addEventListener('click', () =>
+            downloadText(downloadableBody(rawText),
+                filename ? withExtension(filename, rawText) : guessFilename(rawText)));
 
         actionsEl.appendChild(dlBtn);
         return dlBtn;
@@ -210,6 +222,14 @@
         c: 'c', cpp: 'cpp', csharp: 'cs', go: 'go', ruby: 'rb', php: 'php',
         markdown: 'md', md: 'md', plaintext: 'txt', text: 'txt',
     };
+    // Uploads often arrive without one ("Zlmmrp29_batch"); take it from the
+    // code block's language so the file opens as ABAP.
+    function withExtension(name, rawText) {
+        if (/\.[A-Za-z0-9]{1,6}$/.test(name)) return name;
+        const m = /^```(\w+)?/m.exec(String(rawText || ''));
+        return name + '.' + (LANG_EXT[(m && m[1] || '').toLowerCase()] || 'txt');
+    }
+
     function guessFilename(rawText) {
         const m = /^```(\w+)?/m.exec(String(rawText || ''));
         const lang = m && m[1] ? m[1].toLowerCase() : '';
