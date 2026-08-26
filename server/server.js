@@ -431,7 +431,6 @@ let _tempUnsupported = false;
 // Phase 46: moved to lib/models.js. resolveModel now takes the deployment
 // default explicitly instead of closing over MODEL, which is what let it move.
 const _models = require('./lib/models');
-const { ALLOWED_MODELS, VALID_EFFORTS, DEFAULT_EFFORT } = _models;
 const resolveModel  = (requested) => _models.resolveModel(requested, MODEL);
 const resolveEffort = _models.resolveEffort;
 
@@ -716,11 +715,6 @@ const PHASE4_TOOLS = [
     },
 ];
 
-// Phase 35.1: appended to EVERY system prompt — live chat, Prompt Lab test,
-// and the eval batch runner alike. One constant so a Lab/eval answer can
-// never drift from what production chat would say with the same prompt.
-// Substitute only when the message actually looks like ABAP; otherwise
-// point the skill at the conversation and pass the question through.
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 
@@ -1031,6 +1025,29 @@ const chatRateLimiter = rateLimit({
 // Phase 7: brute-force protection on login. Per IP+username so an attacker
 // can't burn one user's rate budget for another.
 const LOGIN_MAX_PER_15MIN = parseInt(process.env.LOGIN_MAX_PER_15MIN) || 10;
+// Phase 47: the routes that spend money or hold a big buffer. /api/chat and
+// the login are already limited; these were not, and each one either fires a
+// real OpenAI request (skills test, evals) or takes a 100MB upload. Generous
+// on purpose — this is a backstop against a stuck retry loop or an accidental
+// double-click, not a quota. Shares the chat limiter's key strategy so one
+// user hitting it does not limit everyone behind the same IP.
+const EXPENSIVE_RATE_LIMIT_PER_MIN = Number(process.env.EXPENSIVE_RATE_LIMIT_PER_MIN) || 30;
+const expensiveRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max:      EXPENSIVE_RATE_LIMIT_PER_MIN,
+    standardHeaders: true,
+    legacyHeaders:   false,
+    keyGenerator: (req, res) => {
+        const tok = _extractToken(req);
+        if (tok) return `t:${tok.slice(0, 16)}`;
+        return `ip:${ipKeyGenerator(req, res)}`;
+    },
+    handler: (req, res) => {
+        console.warn(`[rate-limit] expensive route blocked — ${req.method} ${req.path} ip=${req.ip}`);
+        res.status(429).json({ ok: false, error: `Rate limit exceeded. Max ${EXPENSIVE_RATE_LIMIT_PER_MIN} requests/min for this endpoint.` });
+    },
+});
+
 const loginRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: LOGIN_MAX_PER_15MIN,
@@ -2999,7 +3016,7 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
 // a live chat UX). Supports a short tool-calling loop since some skills
 // (find_bapi, lookup_auth_object, etc.) only produce a meaningful answer
 // via tool results.
-app.post('/api/skills/:id/test', requireTrainer, async (req, res) => {
+app.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
 
     const prompt = String(req.body?.prompt || '').trim();
@@ -3319,7 +3336,7 @@ async function executeEvalRun(runId, { userId, skillContent, model, effort, judg
 }
 
 // POST /api/evals — start an exam. Body: { skill, model, effort, judgeModel, judgeEffort }.
-app.post('/api/evals', requireTrainer, async (req, res) => {
+app.post('/api/evals', requireTrainer, expensiveRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
     // v1.7.3: claim the single-run slot SYNCHRONOUSLY, right after the check,
     // before any `await`. Otherwise two near-simultaneous requests (double
@@ -3439,7 +3456,7 @@ app.post('/api/evals/:runId/cancel', requireTrainer, async (req, res) => {
 });
 
 // POST /api/sync-now — manual trigger. Returns the result of THIS run.
-app.post('/api/sync-now', requireAdmin, async (req, res) => {
+app.post('/api/sync-now', requireAdmin, expensiveRateLimiter, async (req, res) => {
     try {
         const result = await runUsageSync('manual:' + (req.session?.username || 'admin'));
         res.json({ ok: true, ...result });
@@ -3639,7 +3656,7 @@ app.get('/api/transactions', requireAdmin, async (req, res) => {
 // a CSV or Excel file. Reuses the v_user_credit_transaction view and the
 // same test-user filter as /api/transactions so the export matches what
 // the admin sees on screen.
-app.get('/api/transactions/export', requireAdmin, async (req, res) => {
+app.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async (req, res) => {
     const format  = (req.query.format === 'xlsx') ? 'xlsx' : 'csv';
     const groupBy = (req.query.groupBy === 'month') ? 'month' : 'day';
 
@@ -4217,7 +4234,8 @@ app.get('/api/chat/sessions/:id', requireAuth, async (req, res) => {
     try {
         const m = await pool.query(
             `SELECT message_id AS id, role, content, created_at,
-                    input_tokens, output_tokens, cost, model, skill_id, duration_ms
+                    input_tokens, output_tokens, cost, model, skill_id, duration_ms,
+                    skills_used
              FROM tbl_chat_message
              WHERE session_id=$1
              ORDER BY created_at, message_id`,
@@ -4692,8 +4710,10 @@ async function buildPreAnalysis(userMessage) {
         // proseOf() dragged in report-header fragments (`LINE-COUNT 65`,
         // `NO STANDARD PAGE HEADING.`) that diluted the query into noise.
         const terms = scanQueryTerms(scan);
-        const ask = text.split('\n').map(s => s.trim())
-            .find(s => s && !abapScan.isCommentLine(s) && !abapScan.ABAP_STMT_START_RE.test(s)) || '';
+        // Phase 47: was a hand-copied duplicate of proseOf's predicate, which is
+        // why the raw regex had to be exported at all. One rule, one place —
+        // two copies of "is this a statement line" would have drifted apart.
+        const ask = abapScan.firstProseLine(text);
         const query = [...terms, ask.slice(0, 120)].filter(Boolean).join(' ').trim();
         if (query) {
             const r = await searchKnowledge(query);
@@ -4966,6 +4986,8 @@ const multer = require('multer');
 // 100MB — large SAP training manuals (e.g. BC430 PDF ~37MB) must fit;
 // OpenAI's own per-file cap is 512MB so this stays well inside it.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+const KNOWLEDGE_EXT_LIST = '.pdf .doc .docx .txt .md .html .htm';
+const KNOWLEDGE_EXT_OK   = /\.(pdf|docx?|txt|md|html?)$/i;
 
 // GET /api/knowledge — list files in vector store
 app.get('/api/knowledge', requireAuth, async (req, res) => {
@@ -4987,9 +5009,14 @@ app.get('/api/knowledge', requireAuth, async (req, res) => {
 });
 
 // POST /api/knowledge/upload — upload doc to vector store
-app.post('/api/knowledge/upload', requireAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/knowledge/upload', requireAdmin, expensiveRateLimiter, upload.single('file'), async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key' });
     if (!req.file) return res.json({ ok: false, error: 'No file provided' });
+    // Match what sync-knowledge.js can actually ingest. Without this the store
+    // accepts anything up to 100MB, including types the pipeline will never read.
+    if (!KNOWLEDGE_EXT_OK.test(req.file.originalname || '')) {
+        return res.json({ ok: false, error: 'Unsupported file type — allowed: ' + KNOWLEDGE_EXT_LIST });
+    }
     try {
         const vsId = VECTOR_STORE_ID || await ensureVectorStore();
         // upload file to OpenAI
@@ -4999,8 +5026,17 @@ app.post('/api/knowledge/upload', requireAdmin, upload.single('file'), async (re
         const uploaded = await openai.files.create({ file: stream, purpose: 'assistants' });
         // add to vector store
         await openai.vectorStores.files.createAndPoll(vsId, { file_id: uploaded.id });
-        // save copy locally for reference
-        const localPath = path_mod.join(KNOWLEDGE_DIR, req.file.originalname);
+        // Save a local copy for reference. The name comes from the client, so
+        // it is a path, not an identifier: path.join(dir, '../../x') resolves
+        // outside dir, verified. basename() drops any directory part, and the
+        // resolved path is checked against the directory anyway — belt and
+        // braces, because this writes to disk under a name someone else chose.
+        const safeName = path_mod.basename(req.file.originalname || 'upload');
+        const localPath = path_mod.join(KNOWLEDGE_DIR, safeName);
+        if (!localPath.startsWith(path_mod.resolve(KNOWLEDGE_DIR) + path_mod.sep)
+            && path_mod.dirname(localPath) !== path_mod.resolve(KNOWLEDGE_DIR)) {
+            return res.json({ ok: false, error: 'Invalid filename' });
+        }
         fs_mod.writeFileSync(localPath, req.file.buffer);
         console.log(`[☁️ RAG] Uploaded: ${req.file.originalname}`);
         res.json({ ok: true, fileId: uploaded.id, name: req.file.originalname });
@@ -5119,10 +5155,20 @@ app.get('/api/version', requireAdmin, async (req, res) => {
 // registry check that used to live inside them — the rules match text, the
 // catalog decides which of those matched skills actually exist.
 function pickSkillFromCodeShape(text) {
-    const id = abapScan.codeShapeSkillId(text);
-    if (!id) return null;
-    const s = skillPrompts.getSkill(id);
-    return (s && !isSkillPlaceholder(s.content)) ? id : null;
+    // Filter FIRST, then require exactly one — the order the pre-v1.11.4 code
+    // used. v1.11.4 swapped it and the commit claimed the filtering was
+    // unchanged, which was wrong: with two rules firing where one names a
+    // placeholder skill, the old code dropped the placeholder and picked the
+    // survivor, and the new code saw "two hits" and gave up. The equivalence
+    // test missed it because every skill in the test catalog was real.
+    const hits = abapScan.ROUTER_CODE_RULES
+        .filter(r => { try { return r.test(text); } catch (_) { return false; } })
+        .map(r => r.id)
+        .filter(id => {
+            const s = skillPrompts.getSkill(id);
+            return s && !isSkillPlaceholder(s.content);
+        });
+    return hits.length === 1 ? hits[0] : null;
 }
 function skillsForCode(text) {
     return abapScan.matchingSkillIds(text).filter(id => {
@@ -6074,6 +6120,20 @@ async function gracefulShutdown(signal) {
     await flushLogger();
     process.exit(0);
 }
+
+// Phase 47: the last stop for anything a route did not catch. 61 handlers were
+// returning e.message straight to the client — a Postgres error names tables
+// and constraints, a filesystem error names server paths. All of it sits
+// behind auth, so this is disclosure rather than a hole, but there is no
+// reason for it. The full error goes to the log with an id; the client gets
+// the id, which is what a person needs in order to report the problem.
+app.use((err, req, res, _next) => {
+    const ref = crypto.randomBytes(6).toString('hex');
+    console.error(`[error ${ref}] ${req.method} ${req.originalUrl}:`, err && err.stack ? err.stack : err);
+    if (res.headersSent) return;
+    res.status(err && err.status ? err.status : 500)
+       .json({ ok: false, error: 'Internal error', ref });
+});
 
 async function boot() {
     // 1. Run migrations first — abort boot if any fail

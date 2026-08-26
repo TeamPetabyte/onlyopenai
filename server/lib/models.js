@@ -42,7 +42,14 @@ function resolveModel(requested, defaultModel) {
 }
 function resolveEffort(requested) {
     if (VALID_EFFORTS.includes(requested)) return requested;
-    return EFFORT_ALIASES[requested] || DEFAULT_EFFORT;
+    // `effort` comes straight from req.body, so a client could send
+    // "constructor" or "__proto__" and get back a function or an object from
+    // Object.prototype instead of an effort. That value went on to the
+    // Responses API as reasoning.effort, where JSON.stringify drops a function
+    // silently — the request simply lost its effort setting. Validating the
+    // RESULT is the check that cannot be got around, whatever the key was.
+    const aliased = EFFORT_ALIASES[requested];
+    return VALID_EFFORTS.includes(aliased) ? aliased : DEFAULT_EFFORT;
 }
 
 module.exports = {

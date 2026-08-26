@@ -85,7 +85,14 @@ function applyCodePlaceholder(systemPrompt, question) {
     }
     if (looksLikeAbapCode(question)) {
         return {
-            systemPrompt: systemPrompt.replace('{code}', question),
+            // A function, not a string. String.replace treats $&, $', $` and $1
+            // in the REPLACEMENT as substitution escapes, so pasted ABAP
+            // containing them was silently rewritten before the model saw it —
+            // WRITE: 'total $& here'. arrived as WRITE: 'total {code} here'.
+            // and $' spliced the rest of the prompt into the user's source.
+            // replaceAll because a skill may carry more than one placeholder;
+            // replace() filled the first and left the others literal.
+            systemPrompt: systemPrompt.replaceAll('{code}', () => question),
             // Phase 41: was "…and apply the corrections." This rides in the USER
             // turn, which outranks the system prompt — so it was ordering the
             // model to apply everything while the shared rules were telling it
@@ -95,9 +102,9 @@ function applyCodePlaceholder(systemPrompt, question) {
         };
     }
     return {
-        systemPrompt: systemPrompt.replace('{code}',
-            '(no code was pasted this turn — the user is asking a question or a follow-up; '
-            + 'answer it directly, using any code from the conversation history as context)'),
+        systemPrompt: systemPrompt.replaceAll('{code}',
+            () => '(no code was pasted this turn — the user is asking a question or a follow-up; '
+                + 'answer it directly, using any code from the conversation history as context)'),
         userPrompt: question,
     };
 }
