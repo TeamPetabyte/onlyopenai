@@ -12,7 +12,6 @@
 // those skills exist — hence codeShapeSkillId and matchingSkillIds take no
 // registry argument. The filtering still happens, in server.js, unchanged.
 
-const ABAP_CODE_RE = /\b(REPORT|FORM|ENDFORM|DATA|TYPES|SELECT|ENDSELECT|LOOP|ENDLOOP|MOVE|PERFORM|APPEND|MODIFY|CLASS|ENDCLASS|METHOD|ENDMETHOD|FUNCTION|ENDFUNCTION|CALL FUNCTION|FIELD-SYMBOLS)\b/i;
 function looksLikeAbapCode(text) {
     const t = String(text || '');
     if (t.split('\n').length < 3) return false;
@@ -41,30 +40,74 @@ function _isCommentLine(line) { return /^\s*[*"]/.test(line); }
  *  continued statement (a DATA: chain, a multi-line SELECT) ends on a comma or
  *  an opening that clearly continues. A sentence ends in a word, a question
  *  mark, or nothing at all. */
-// No `a` or `an`: both are legal ABAP identifiers, and `DATA a TYPE c.` was
-// being read as English. Every word below is one no ABAP statement contains.
-const PROSE_MARKER_RE = /\b(the|this|these|those|please|my|your|you|what|how|why|should|would|could|need|want|help|tell|wrong|through|about|me)\b/i;
+// Listing English words was the wrong shape of rule and it failed twice. The
+// first cut missed "Read through this and tell me what is wrong."; the second
+// still ate "Create a unit test." and "Delete unused variables." — the very
+// defect it was written to fix — because those happen to use none of the
+// twenty listed words. A blocklist of a natural language cannot be finished.
+//
+// So ask the opposite question, about ABAP rather than about English: does
+// this line carry any of the marks a statement has and a sentence does not?
+// An operator, a literal, a colon, an @-escape, an identifier with an
+// underscore or a structure dash, or a second ABAP keyword in a position only
+// code puts one. A sentence has none of them.
+// Marks that are code and nothing else. No English word is on this list, so it
+// can be applied to a line that has not already declared itself ABAP.
+const CODE_MARK_RE = new RegExp([
+    '[=<>]',                       // assignment or comparison
+    "['\u0060]",                   // a quoted or backtick literal
+    '@\\w',                        // an escaped host variable
+    ':\\s',                        // a chained statement
+    '\\w_\\w',                     // lv_total, gt_flight — ABAP naming
+    '\\w-\\w',                     // sy-subrc, wa-matnr
+    '\\b\\d',                       // a numeric literal
+].join('|'), 'i');
+
+// Words that mean code only once the line has ALREADY opened with an ABAP
+// keyword. On their own they are ordinary English — "Refactor into a class"
+// and "Convert from FORM to METHOD" were both read as continuations of a
+// statement because they contain INTO and FROM.
+const CODE_WORD_RE = new RegExp(
+    ',|\\b(TYPE|LIKE|INTO|FROM|WHERE|VALUE|USING|CHANGING|EXPORTING|IMPORTING|'
+    + 'EXCEPTIONS|TABLES|OCCURS|SINGLE|APPENDING|TRANSPORTING|BINARY|STANDARD|'
+    + 'REF|BEGIN\\s+OF|END\\s+OF|ASSIGNING|COMPONENTS)\\b', 'i');
+
+const CODE_SHAPE_RE = new RegExp(CODE_MARK_RE.source + '|' + CODE_WORD_RE.source, 'i');
+
+// English function words that are NOT also ABAP keywords. Unlike verbs this is
+// a closed class, so the list can be short and stay short — and it is only ever
+// a veto, applied after the unambiguous code marks have had their say.
+const ENGLISH_FUNCTION_RE = /\b(a|an|the|this|that|these|those|it|its|my|your|our|their|his|her|please|what|how|why|which|who|would|should|could|can|will|must|have|has|had|been|being|was|were|are|about|than|but|very|just|also|too|again|here|there|now|me|you|we|they|he|she|more|most|each|every|because|however)\b/i;
+
+// A parameter section header standing alone inside a CALL FUNCTION.
+const BARE_PARAM_RE = /^(EXPORTING|IMPORTING|CHANGING|TABLES|EXCEPTIONS|RECEIVING)$/i;
+
+/** How many words the line holds. `REPORT z.` and `ENDLOOP.` are whole
+ *  statements carrying none of the marks above; nothing a person types is that
+ *  short and also opens with an ABAP keyword. */
+function _wordCount(l) { return String(l).trim().split(/\s+/).filter(Boolean).length; }
 
 function isStatementLine(line) {
     const l = String(line || '');
     if (!ABAP_STMT_START_RE.test(l)) return false;
-    // Two gates, and both are needed.
-    //
-    // Prose words alone are not enough: "data type for a currency" — the middle
-    // line of a soft-wrapped English question — contains none of them.
-    // A terminator alone is not enough either: "Create a unit test for this
-    // class." ends in a period. A statement both ends somewhere (a period, or a
-    // comma continuing a chain) AND carries no word an ABAP statement never has.
-    if (PROSE_MARKER_RE.test(l)) return false;
-    return /[.,]\s*(?:"[^"]*)?$/.test(l.replace(/\s+$/, ''));
+    // A statement ends somewhere — a period, or a comma continuing a chain.
+    if (!/[.,]\s*(?:"[^"]*)?$/.test(l.replace(/\s+$/, ''))) return false;
+    return _isCodeShaped(l);
 }
 
-/** Continuation of the statement above — the second line of a DATA: chain, the
- *  EXPORTING block of a CALL FUNCTION, a WHERE clause on its own line. It opens
- *  with no keyword, so isStatementLine says no, but it is still code and must
- *  not be mistaken for something the user typed. Recognised by the shapes only
- *  code has: an assignment, a trailing comma, an ABAP type or parameter
- *  keyword, or an @-escaped host variable. */
+/** Order matters here, and getting it wrong is what let "Select the right data
+ *  type" through: CODE_WORD_RE contains TYPE, so the ambiguous half matched
+ *  before anything had a chance to notice the English.
+ *
+ *  Unambiguous marks decide first. Then English function words veto — they are
+ *  never ABAP, so anything carrying one is a sentence. Only then do the
+ *  ambiguous words get a say. */
+function _isCodeShaped(l) {
+    if (CODE_MARK_RE.test(l)) return true;
+    if (ENGLISH_FUNCTION_RE.test(l)) return false;
+    return _wordCount(l) <= 2 || CODE_WORD_RE.test(l);
+}
+
 /** Opens a statement that finishes on a later line — `SELECT carrid connid`,
  *  `CALL FUNCTION 'Z_X'`, the first line of a multi-line WHERE. It is code, so
  *  proseOf must not hand it back as something the user typed: the bare-paste
@@ -77,16 +120,38 @@ function isStatementLine(line) {
  *  prose" does not. */
 function isStatementOpener(line) {
     const l = String(line || '');
-    return ABAP_STMT_START_RE.test(l) && !PROSE_MARKER_RE.test(l);
+    if (!ABAP_STMT_START_RE.test(l)) return false;
+    if (_isCodeShaped(l)) return true;
+    // `SELECT carrid connid fldate bookid` — the comma-less Open SQL field list,
+    // which is exactly the syntax this product exists to modernise, so it must
+    // read as code. Narrowed to SELECT and to UNTERMINATED lines, because those
+    // two conditions are what make it safe: a comma-less field list happens
+    // only after SELECT, a terminated line is isStatementLine's question
+    // ("Delete unused variables." looks identical there and is not code), and
+    // without the SELECT restriction "Do not use nested queries" qualified too.
+    if (!/^\s*SELECT\b/i.test(l)) return false;
+    if (/[.,]\s*$/.test(l)) return false;
+    if (ENGLISH_FUNCTION_RE.test(l)) return false;
+    return l.trim().split(/\s+/).every(t => /^[A-Za-z][A-Za-z0-9_]*$/.test(t));
 }
 
+/** Continuation of the statement above — the second line of a DATA: chain, the
+ *  EXPORTING block of a CALL FUNCTION, a WHERE clause on its own line. It opens
+ *  with no keyword, so isStatementLine says no, but it is still code and must
+ *  not be mistaken for something the user typed. Recognised by the shapes only
+ *  code has: an assignment, a trailing comma, an ABAP type or parameter
+ *  keyword, or an @-escaped host variable. */
 function isContinuationLine(line) {
     const l = String(line || '').trim();
     if (!l) return false;
-    // The keyword list below includes AND and OR, which are also English words —
-    // "Read through this and tell me what is wrong." tripped it. Same rule as
-    // isStatementLine: prose disqualifies a line no matter what it contains.
-    if (PROSE_MARKER_RE.test(l)) return false;
+    // The keyword list alone matched "optimize and speed up" (AND),
+    // "Refactor into a class" (INTO) and "Convert from FORM to METHOD" (FROM).
+    // Requiring a code mark as well is what separates a continuation from a
+    // sentence that happens to use the same English word.
+    if (BARE_PARAM_RE.test(l)) return true;
+    // CODE_MARK, not CODE_SHAPE: the keyword half is English too, and the
+    // keyword list below would then match it a second time for the same reason.
+    if (!CODE_MARK_RE.test(l)) return false;
     return /,$/.test(l)
         || /^[\w-]+\s*=/.test(l)
         || /\b(TYPE|LIKE|VALUE|EXPORTING|IMPORTING|CHANGING|TABLES|EXCEPTIONS|USING|INTO|FROM|WHERE|FOR\s+ALL\s+ENTRIES|AND|OR|UP\s+TO)\b/i.test(l)
@@ -119,7 +184,11 @@ function hasSelectInsideLoop(text) {
         // "please do this fix" opened a loop that never closed, and every SELECT
         // after it in the message counted as nested — and skillsForCode runs on
         // the whole message, prose included.
-        if (/^\s*LOOP\s+AT\b/.test(l) || /^\s*DO\b/.test(l) || /^\s*WHILE\b/.test(l)) depth++;
+        // Anchoring alone left "Do you see the problem?" opening a loop that
+        // never closed. The line has to BE a statement, which is the same test
+        // the rest of this file uses — the earlier fix stopped one level short.
+        if ((/^\s*LOOP\s+AT\b/.test(l) || /^\s*DO\b/.test(l) || /^\s*WHILE\b/.test(l))
+            && isStatementLine(raw)) depth++;
         if (/^\s*(ENDLOOP|ENDDO|ENDWHILE)\b/.test(l)) depth = Math.max(0, depth - 1);
     }
     return false;
@@ -151,10 +220,19 @@ function hasCommentedOutCode(text) {
         if (!body.trim()) continue;
         // Real disabled code is a whole statement and terminates. "Report ZTEST"
         // does not; "*DATA lv_legacy TYPE c." does.
-        if (isStatementLine(body) && /\.\s*$/.test(body.replace(/\s+$/, '')) && ++n >= 2) return true;
+        // isStatementLine already decides what terminates a statement, and it
+        // deliberately allows a trailing " note. A second, stricter test here
+        // contradicted it and dropped `*DATA lv TYPE c. " old` — a disabled
+        // statement annotated the way people actually annotate them.
+        if (isStatementLine(body) && ++n >= 2) return true;
     }
     return false;
 }
+
+// TABLES as the obsolete declaration: the keyword, table names, end of
+// statement, nothing else. A CALL FUNCTION parameter section is followed by
+// `it = lt`, which this cannot match.
+const TABLES_DECL_RE = /^\s*TABLES\s*:?\s*[a-z_][a-z0-9_]*(\s*,\s*[a-z_][a-z0-9_]*)*\s*\.\s*$/im;
 
 const ROUTER_CODE_RULES = [
     { id: 'select_loop_check',     test: hasSelectInsideLoop },
@@ -164,10 +242,11 @@ const ROUTER_CODE_RULES = [
     // a SQL `WHERE x LIKE y` three lines below it.
     { id: 'like_check',            test: t => /\bLIKE\s+'%/i.test(_liveCodeOf(t))
                                            || /^\s*(DATA|PARAMETERS|SELECT-OPTIONS)\b[^.\n]*\bLIKE\b/im.test(_liveCodeOf(t)) },
-    // TABLES[\s:] to match checkAbapSyntax in this same file — it called
-    // `TABLES mara.` an error while this rule ignored it, so the model was told
-    // the file had a TABLES problem but never given the skill that explains it.
-    { id: 'obsolete_check',        test: t => /^\s*TABLES[\s:]/im.test(_liveCodeOf(t))
+    // The obsolete DECLARATION is `TABLES mara.` or `TABLES: mara, marc.` — it
+    // names tables and then ends. `TABLES` inside a CALL FUNCTION is a parameter
+    // section and perfectly current; TABLES[\s:] matched both, and under /m the
+    // [\s] even matched the newline after a bare TABLES on its own line.
+    { id: 'obsolete_check',        test: t => TABLES_DECL_RE.test(_liveCodeOf(t))
                                            || /\bOCCURS\s+\d/i.test(_liveCodeOf(t))
                                            || /\bENDSELECT\b/i.test(_liveCodeOf(t)) },
     { id: 'select_best_practice',  test: t => /\bSELECT\s+\*/i.test(_liveCodeOf(t))
@@ -230,8 +309,6 @@ function matchingSkillIds(text) {
     return [...new Set(ids)];
 }
 
-/** The user's own words, with ABAP statement lines stripped — used to tell a
- *  bare code paste apart from a real instruction. */
 /** The first line of the message that is a person talking, not code. Used to
  *  seed the document search from what the user actually asked. */
 function firstProseLine(text) {
@@ -239,6 +316,8 @@ function firstProseLine(text) {
         .find(l => l && !_isCommentLine(l) && !isStatementOpener(l) && !isContinuationLine(l)) || '';
 }
 
+/** The user's own words, with ABAP statement lines stripped — used to tell a
+ *  bare code paste apart from a real instruction. */
 function proseOf(text) {
     return String(text || '').split('\n')
         .filter(l => l.trim() && !_isCommentLine(l)
@@ -253,7 +332,7 @@ function checkAbapSyntax(code) {
 
     // Per-line rules. Every one of these is answerable from a single line.
     const LINE_RULES = [
-        { pattern: /^\s*TABLES[\s:]/i,       severity: 'error',   msg: 'Obsolete: TABLES statement — ใช้ DATA declaration แทน' },
+        { pattern: TABLES_DECL_RE,           severity: 'error',   msg: 'Obsolete: TABLES statement — ใช้ DATA declaration แทน' },
         { pattern: /\bMOVE\s+.+\s+TO\s+/i,  severity: 'warning', msg: 'Obsolete: MOVE...TO — ใช้ = assignment แทน' },
         { pattern: /\bSELECT\s+\*/i,         severity: 'warning', msg: 'SELECT * ควร select เฉพาะ fields ที่ใช้จริงเพื่อ performance' },
         { pattern: /\bWRITE\s*:/i,            severity: 'info',    msg: 'WRITE: ใช้ได้สำหรับ classic report แต่ไม่รองรับ Fiori/ALV' },
@@ -269,9 +348,43 @@ function checkAbapSyntax(code) {
     // only two `error` rules and therefore half of what `valid` means. The
     // pre-analysis block was telling the model "no errors found" on a file
     // built around a SELECT...ENDSELECT loop.
+// Walked line by line rather than matched with a regex. A regex finds the
+// LEFTMOST match, so `/SELECT[\s\S]*?ENDSELECT/` opened at the first SELECT in
+// the file even when a correct `SELECT SINGLE ... .` sat above the real loop —
+// and the finding was reported against that correct statement. Lazy matching
+// shortens the match; it does not move where it starts.
+function _findSelectEndselect(live) {
+    const out = [];
+    let openAt = -1;
+    live.forEach((l, i) => {
+        if (/^\s*ENDSELECT\b/i.test(l)) {
+            if (openAt >= 0) out.push(openAt);
+            openAt = -1;
+            return;
+        }
+        // The loop head is simply the LAST SELECT before the ENDSELECT. A
+        // trailing period does not distinguish it — a SELECT...ENDSELECT loop
+        // ends its SELECT with a period exactly like a single-row read does.
+        // What separates them is whether an ENDSELECT ever arrives.
+        if (/^\s*SELECT\b/i.test(l)) openAt = i;
+    });
+    return out;
+}
+
+function _findClearRefresh(live) {
+    const out = [];
+    live.forEach((l, i) => {
+        const m = /^\s*CLEAR\s+(\w+)\s*\.\s*$/i.exec(l);
+        if (!m) return;
+        const next = live[i + 1] || '';
+        if (new RegExp('^\\s*REFRESH\\s+' + m[1] + '\\s*\\.\\s*$', 'i').test(next)) out.push(i);
+    });
+    return out;
+}
+
     const BLOCK_RULES = [
-        { pattern: /^\s*SELECT\b[\s\S]*?^\s*ENDSELECT/im, severity: 'error', msg: 'SELECT...ENDSELECT loop — ใช้ SELECT...INTO TABLE แทน', anchor: /^\s*SELECT\b/i },
-        { pattern: /^\s*CLEAR\s+(\w+)\s*\.[\s\S]{0,80}?^\s*REFRESH\s+\1\s*\./im, severity: 'info', msg: 'ใช้ FREE แทน CLEAR+REFRESH เพื่อคืน memory', anchor: /^\s*CLEAR\b/i },
+        { find: _findSelectEndselect, severity: 'error', msg: 'SELECT...ENDSELECT loop — ใช้ SELECT...INTO TABLE แทน' },
+        { find: _findClearRefresh,    severity: 'info',  msg: 'ใช้ FREE แทน CLEAR+REFRESH เพื่อคืน memory' },
     ];
 
     // Comments are not code. Every router rule in this file strips them with
@@ -290,13 +403,14 @@ function checkAbapSyntax(code) {
         });
     });
 
-    const liveText = live.join('\n');
+    // Every occurrence, each pinned to the line its own block opens on —
+    // buildPreAnalysis tells the model the line numbers are exact.
     BLOCK_RULES.forEach(rule => {
-        if (!rule.pattern.test(liveText)) return;
-        const at = live.findIndex(l => rule.anchor.test(l));
-        issues.push({
-            line: at + 1, severity: rule.severity, message: rule.msg,
-            code: (live[at] || '').trim(),
+        rule.find(live).forEach(at => {
+            issues.push({
+                line: at + 1, severity: rule.severity, message: rule.msg,
+                code: (live[at] || '').trim(),
+            });
         });
     });
 
@@ -314,7 +428,11 @@ function checkAbapSyntax(code) {
 
 
 module.exports = {
-    ABAP_CODE_RE, ABAP_STMT_START_RE,
+    // ABAP_CODE_RE and ABAP_STMT_START_RE are deliberately NOT exported. The
+    // first is unused since isStatementLine replaced it; the second was
+    // exported only for the hand-copied predicate in server.js that
+    // firstProseLine now serves. A published regex nothing answers to reads
+    // like a contract.
     looksLikeAbapCode, proseOf, firstProseLine, isStatementLine,
     isCommentLine: _isCommentLine,
     hasSelectInsideLoop, hasCommentedOutCode, hasCommentedParamsInCall,

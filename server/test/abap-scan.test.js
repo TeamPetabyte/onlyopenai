@@ -55,6 +55,64 @@ test('proseOf: keeps an English instruction that starts with an ABAP keyword', (
     }
 });
 
+test('proseOf: keeps a SHORT instruction that names no giveaway word', () => {
+    // The first two attempts at this listed English words to reject. Both were
+    // incomplete, and the second still ate "Create a unit test." and "Delete
+    // unused variables." — the original defect — while passing its own test,
+    // because the fixture happened to say "for this class". A blocklist of a
+    // natural language cannot be finished; the rule now asks whether the line
+    // carries a mark only ABAP has.
+    for (const ask of [
+        'Create a unit test.',
+        'Delete unused variables.',
+        'Check for performance issues.',
+        'Read it carefully.',
+        'Set up error handling.',
+        'Move to new syntax.',
+        'Write a summary of it.',
+        'Do you see the problem?',
+        'Do not use nested queries',
+        'Select the right data type',
+        'optimize and speed up',
+        'Refactor into a class',
+        'Convert from FORM to METHOD',
+        'add error handling and logging',
+    ]) {
+        assert.notEqual(scan.proseOf(ask + '\nREPORT z.\nDATA x TYPE i.\nWRITE x.'), '',
+            `instruction was eaten: ${JSON.stringify(ask)}`);
+    }
+});
+
+test('looksLikeAbapCode: three English sentences are not a paste', () => {
+    // Three lines of instruction, each opening with an ABAP keyword, were being
+    // substituted into the skill's <ABAP_code> block and statically scanned.
+    assert.equal(scan.looksLikeAbapCode(
+        'Delete unused variables.\nCheck for performance issues.\nWrite a short summary.'), false);
+});
+
+test('proseOf: comma-less Open SQL is still code', () => {
+    // Classic `SELECT a b c FROM t` — no commas, no underscores, no operators.
+    // It is the syntax this product exists to modernise, so it cannot be read
+    // as something the user typed.
+    assert.equal(scan.proseOf(
+        'REPORT z.\nSELECT carrid connid fldate bookid\n  FROM sbook\n  INTO TABLE gb.'), '');
+});
+
+test('hasSelectInsideLoop: a sentence beginning "Do" or "While" is not a loop', () => {
+    // Anchoring to the line start was one level too shallow.
+    assert.equal(scan.hasSelectInsideLoop(
+        'Do you see the problem?\nSELECT * FROM mara INTO TABLE lt.'), false);
+    assert.equal(scan.hasSelectInsideLoop(
+        'While reviewing this note it\nSELECT * FROM mara INTO TABLE lt.'), false);
+});
+
+test('hasCommentedOutCode: a disabled statement may carry a trailing note', () => {
+    // Two terminator rules disagreed: isStatementLine allows a trailing " note,
+    // a second stricter test here rejected it. People annotate disabled code.
+    assert.equal(scan.hasCommentedOutCode(
+        '*DATA lv TYPE c. " old\n*PERFORM x. " disabled 2019\nWRITE 1.'), true);
+});
+
 test('proseOf: keeps a Thai instruction', () => {
     assert.ok(scan.proseOf('ช่วยดูโค้ดนี้ให้หน่อย\nREPORT z.\nDATA x TYPE i.').length > 0);
 });
@@ -294,6 +352,47 @@ test('checkAbapSyntax: ignores commented-out code', () => {
         "REPORT z.\n* MOVE lv_a TO lv_b.\n* SELECT * FROM mara.\nWRITE 1.");
     const onComments = (r.issues || []).filter(i => /^\s*[*"]/.test(i.code || ''));
     assert.deepEqual(onComments, [], 'reported findings on comment lines');
+});
+
+test('checkAbapSyntax: the loop error names the loop, not a correct SELECT above it', () => {
+    // A regex finds the LEFTMOST match, so /SELECT[\s\S]*?ENDSELECT/ opened at
+    // the first SELECT in the file. With a correct `SELECT SINGLE ... .` above
+    // the real loop, the error was pinned to the correct statement — and the
+    // model is told these line numbers are exact and the finding is given.
+    const r = scan.checkAbapSyntax([
+        'REPORT ztest.',
+        'SELECT SINGLE matnr FROM mara INTO lv_m WHERE matnr = 1.',
+        'WRITE lv_m.',
+        'SELECT * FROM vbak INTO wa.',
+        '  WRITE wa-vbeln.',
+        'ENDSELECT.',
+    ].join('\n'));
+    const errs = (r.issues || []).filter(i => i.severity === 'error');
+    assert.equal(errs.length, 1);
+    assert.equal(errs[0].line, 4, 'error was pinned to the wrong line');
+});
+
+test('checkAbapSyntax: reports every SELECT...ENDSELECT, not just the first', () => {
+    const r = scan.checkAbapSyntax([
+        'REPORT z.',
+        'SELECT * FROM a INTO w.', 'WRITE w.', 'ENDSELECT.',
+        'SELECT * FROM b INTO w2.', 'WRITE w2.', 'ENDSELECT.',
+    ].join('\n'));
+    assert.equal((r.issues || []).filter(i => i.severity === 'error').length, 2);
+});
+
+test('checkAbapSyntax: a lone SELECT SINGLE is not a loop', () => {
+    assert.equal(scan.checkAbapSyntax('REPORT z.\nSELECT SINGLE a FROM t INTO v.\nWRITE v.').valid, true);
+});
+
+test('checkAbapSyntax: TABLES inside CALL FUNCTION is not the obsolete statement', () => {
+    // Broadening the pattern to TABLES[\s:] caught the parameter section of
+    // every CALL FUNCTION — current syntax — and told the model a clean call
+    // contained an obsolete declaration.
+    const call = "CALL FUNCTION 'Z_READ'\n  EXPORTING\n    iv = 1\n  TABLES\n    it = lt.";
+    assert.equal(scan.checkAbapSyntax(call).valid, true);
+    assert.ok(!idsFor(call).includes('obsolete_check'));
+    assert.equal(scan.checkAbapSyntax("CALL FUNCTION 'Z'\n  TABLES it = lt.").valid, true);
 });
 
 test('checkAbapSyntax: a clean program is valid', () => {

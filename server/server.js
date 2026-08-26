@@ -1003,13 +1003,18 @@ const chatRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
+        // express-rate-limit v8 takes ipKeyGenerator(ip, ipv6Subnet), not
+        // (req, res). Called the old way it returns the request object, the
+        // key becomes "ip:[object Object]", and every unauthenticated caller
+        // shares one bucket. Its own validator stays quiet because the source
+        // contains the token "ipKeyGenerator" — nothing reports this.
         // Phase 7: rate-limit keys by token prefix when present (no DB lookup
         // needed in the hot path), otherwise IP. Endpoints that need the real
         // user id are already gated by requireAuth, which populates req.session.
         // Phase 39: token now comes from the session cookie (Bearer removed).
         const tok = _extractToken(req);
         if (tok) return `t:${tok.slice(0, 16)}`;
-        return `ip:${ipKeyGenerator(req, res)}`;
+        return `ip:${ipKeyGenerator(req.ip)}`;
     },
     handler: (req, res) => {
         const tok = _extractToken(req);
@@ -1018,6 +1023,26 @@ const chatRateLimiter = rateLimit({
     },
 });
 
+
+// Phase 47: what a caught error is allowed to tell the client.
+//
+// 62 handlers were returning e.message verbatim. A Postgres error names the
+// table, the column and the constraint; an ENOENT names the server path. All
+// of it is behind auth, so this is disclosure rather than a hole — but there
+// was never a reason for it, and the global handler below does NOT cover these
+// because a route that catches its own error never reaches it. The commit that
+// added that handler claimed otherwise; this is the part that was missing.
+//
+// The full error still goes to the log with a reference the user can quote.
+function safeError(e, req) {
+    const ref = crypto.randomBytes(4).toString('hex');
+    const where = req ? `${req.method} ${req.originalUrl}` : '';
+    console.error(`[error ${ref}] ${where}:`, e && e.stack ? e.stack : e);
+    // A message we wrote ourselves is meant for the user and stays; anything
+    // thrown by pg, fs or the OpenAI SDK does not.
+    if (e && e.userFacing) return { ...safeError(e, req), ref };
+    return { error: 'Something went wrong — quote reference ' + ref + ' when reporting it.', ref };
+}
 // ══════════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════════
@@ -1038,9 +1063,13 @@ const expensiveRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
-        const tok = _extractToken(req);
-        if (tok) return `t:${tok.slice(0, 16)}`;
-        return `ip:${ipKeyGenerator(req, res)}`;
+        // Keyed by PATH as well as caller. One rateLimit() instance owns one
+        // store, so without this the five routes share a single 30/min budget
+        // and the 429 says "for this endpoint" when it measured all of them —
+        // 30 CSV exports would block an upload.
+        const who = _extractToken(req) ? `t:${_extractToken(req).slice(0, 16)}`
+                                       : `ip:${ipKeyGenerator(req.ip)}`;
+        return `${who}|${req.path}`;
     },
     handler: (req, res) => {
         console.warn(`[rate-limit] expensive route blocked — ${req.method} ${req.path} ip=${req.ip}`);
@@ -1058,7 +1087,7 @@ const loginRateLimiter = rateLimit({
         // Phase 10: coerce with String() — attacker may send non-string shapes
         // that crash toLowerCase. Clamp length so huge input doesn't grow keys.
         const u = String(req.body?.username || '').toLowerCase().slice(0, 64);
-        return `${ipKeyGenerator(req, res)}:${u}`;
+        return `${ipKeyGenerator(req.ip)}:${u}`;
     },
     handler: (req, res) => {
         console.warn(`[login-rate-limit] blocked ip=${req.ip} user=${req.body?.username}`);
@@ -1213,7 +1242,7 @@ app.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async (re
                     balance: parseFloat(u.balance), projectId: u.project_id,
                     mustChangePassword: !!u.must_change_password },
         });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // ── Helper: บันทึก admin/user action (Phase 14 extended) ─────
@@ -1388,7 +1417,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
             ORDER BY u.user_id ASC`);
         const users = r.rows.map(u => ({ ...u, role: normalizeRole(u.role) }));
         res.json({ ok: true, users });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // GET /api/users/:id  — single user with balance. Phase 7: hide soft-deleted.
@@ -1410,7 +1439,7 @@ app.get('/api/users/:id', requireAuth, async (req, res) => {
         if (r.rows.length === 0) return res.json({ ok: false, error: 'User not found' });
         const user = { ...r.rows[0], role: normalizeRole(r.rows[0].role) };
         res.json({ ok: true, user });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // POST /api/users  — create user. Phase 7: enforce password policy on create.
@@ -1475,7 +1504,7 @@ app.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, r
         res.json({ ok: true, id: userId });
     } catch (e) {
         if (e.code === '23505') return res.json({ ok: false, error: 'Username already exists' });
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -1607,7 +1636,7 @@ app.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (req
             after:  Object.keys(diffAfter).length  ? diffAfter  : undefined,
         });
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // PUT /api/users/:id/password  — change own password (auth + self-only)
@@ -1645,7 +1674,7 @@ app.put('/api/users/:id/password', requireAuth, validate(schemas.changePassword)
             extra: { self: isSelf, must_change_password_cleared: isSelf },
         });
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // PUT /api/users/:id/balance  — set user's credit allocation.
@@ -1781,7 +1810,7 @@ app.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance), as
         });
     } catch (e) {
         try { await client.query('ROLLBACK'); } catch (_) {}
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     } finally {
         client.release();
     }
@@ -1835,7 +1864,7 @@ app.get('/api/credits', requireAdmin, async (req, res) => {
              ORDER BY u.user_id ASC`);
         res.json({ ok: true, credits: r.rows });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -1868,7 +1897,7 @@ app.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap), as
             after:  { daily_cap: capVal },
         });
         res.json({ ok: true, dailyCap: r.rows[0].daily_cap });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // Phase 21 A2 — today's spend now reads from tbl_daily_usage, which is
@@ -2030,7 +2059,7 @@ app.get('/api/users/:id/daily-cap-status', requireAuth, async (req, res) => {
         const remaining  = cap === null ? null : Math.max(0, cap - spent);
         const exhausted  = cap !== null && spent >= cap;
         res.json({ ok: true, dailyCap: cap, spentToday: spent, remaining, exhausted });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // DELETE /api/users/:id  — Phase 7: soft-delete + kill all sessions
@@ -2063,7 +2092,7 @@ app.delete('/api/users/:id', requireAdmin, async (req, res) => {
             extra: { sessions_revoked: sessRows.rowCount || 0 },
         });
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // ══════════════════════════════════════════════════════════
@@ -2103,7 +2132,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
             };
         });
         res.json({ ok: true, projects });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // POST /api/projects
@@ -2209,7 +2238,7 @@ app.post('/api/projects', requireAdmin, validate(schemas.createProject), async (
         });
     } catch (e) {
         if (e.code === '23505') return res.json({ ok: false, error: 'Project ID already exists' });
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2300,7 +2329,7 @@ app.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), asyn
             extra:  { project_id: req.params.id },
         });
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // DELETE /api/projects/:id  — Phase 7: soft-delete
@@ -2378,7 +2407,7 @@ app.delete('/api/projects/:id', requireAdmin, async (req, res) => {
         res.json({ ok: true, openaiArchiveStatus });
     } catch (e) {
         try { await client.query('ROLLBACK'); } catch (_) {}
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     } finally {
         client.release();
     }
@@ -2472,7 +2501,7 @@ app.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), async 
         res.json({ ok: true, newBalance: newBal, lifetimeAmount: newLifetime });
     } catch (e) {
         try { await client.query('ROLLBACK'); } catch (_) {}
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     } finally {
         client.release();
     }
@@ -2514,7 +2543,7 @@ app.get('/api/topup-history', requireAdmin, async (req, res) => {
         );
         res.json({ ok: true, data: r.rows });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2551,7 +2580,7 @@ app.get('/api/audit-log', requireAdmin, async (req, res) => {
             ORDER BY a.log_in_date DESC, a.log_in_time DESC
             LIMIT $${params.length}`, params);
         res.json({ ok: true, logs: r.rows });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // GET /api/action-log  — ประวัติ admin actions (Phase 14: filter + details)
@@ -2590,7 +2619,7 @@ app.get('/api/action-log', requireAdmin, async (req, res) => {
             ORDER BY a.edit_date DESC, a.edit_time DESC
             LIMIT $${params.length}`, params);
         res.json({ ok: true, logs: r.rows });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // ── Phase 11 B4: /api/cost-by-day ───────────────────────────
@@ -2830,7 +2859,7 @@ app.get('/api/sync-status', requireAdmin, async (req, res) => {
             projects: projects.rows,
         });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2864,7 +2893,7 @@ app.get('/api/skills', requireTrainer, (req, res) => {
         }));
         res.json({ ok: true, status, skills });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2879,7 +2908,7 @@ app.post('/api/skills/reload', requireTrainer, async (req, res) => {
         });
         res.json({ ok: true, status });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2891,7 +2920,7 @@ app.get('/api/skills/:id', requireTrainer, (req, res) => {
         if (!s) return res.status(404).json({ ok: false, error: 'skill not found' });
         res.json({ ok: true, skill: s });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2919,7 +2948,7 @@ app.post('/api/skills', requireTrainer, async (req, res) => {
         });
         res.json({ ok: true, created: result.created, status: skillPrompts.getStatus() });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -2937,7 +2966,7 @@ app.delete('/api/skills/:id', requireTrainer, async (req, res) => {
         });
         res.json({ ok: true, status: skillPrompts.getStatus() });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3082,7 +3111,7 @@ app.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async (re
         res.json({ ok: true, answer, model: reqModel, effort: reqEffort, inputTokens, outputTokens, logId, routed });
     } catch (e) {
         console.error('[skills/test]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3128,7 +3157,7 @@ app.post('/api/skill-test-logs/:logId/verdict', requireTrainer, async (req, res)
         res.json({ ok: true, logId, verdict, judgedAt: upd.rows[0].judged_at });
     } catch (e) {
         console.error('[skill-test-logs/verdict]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3160,7 +3189,7 @@ app.post('/api/skill-test-logs/:logId/eval-case', requireTrainer, async (req, re
         res.json({ ok: true, logId, isEvalCase: on });
     } catch (e) {
         console.error('[skill-test-logs/eval-case]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3205,7 +3234,7 @@ app.get('/api/skill-test-logs', requireTrainer, async (req, res) => {
         res.json({ ok: true, rows: rows.rows, stats: stats.rows[0] });
     } catch (e) {
         console.error('[skill-test-logs]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3219,7 +3248,7 @@ app.get('/api/skill-test-logs/:logId', requireTrainer, async (req, res) => {
         res.json({ ok: true, log: r.rows[0] });
     } catch (e) {
         console.error('[skill-test-logs/:id]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3395,7 +3424,7 @@ app.post('/api/evals', requireTrainer, expensiveRateLimiter, async (req, res) =>
     } catch (e) {
         EVAL_ACTIVE = false;
         console.error('[evals/start]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3417,7 +3446,7 @@ app.get('/api/evals', requireTrainer, async (req, res) => {
         res.json({ ok: true, runs: r.rows, active: EVAL_ACTIVE });
     } catch (e) {
         console.error('[evals/list]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3441,7 +3470,7 @@ app.get('/api/evals/:runId', requireTrainer, async (req, res) => {
         res.json({ ok: true, run: run.rows[0], results: results.rows });
     } catch (e) {
         console.error('[evals/:id]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3461,7 +3490,7 @@ app.post('/api/sync-now', requireAdmin, expensiveRateLimiter, async (req, res) =
         const result = await runUsageSync('manual:' + (req.session?.username || 'admin'));
         res.json({ ok: true, ...result });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3522,7 +3551,7 @@ app.get('/api/cost-by-day', requireAdmin, async (req, res) => {
             cost:         s.cost         + x.cost,
         }), { requests: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0, cost: 0 });
         res.json({ ok: true, days, userId, total, rows });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // ══════════════════════════════════════════════════════════
@@ -3647,7 +3676,7 @@ app.get('/api/transactions', requireAdmin, async (req, res) => {
         });
     } catch (e) {
         console.error('[transactions]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3823,7 +3852,7 @@ app.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async (r
         res.end();
     } catch (e) {
         console.error('[transactions/export]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3878,7 +3907,7 @@ app.post('/api/quota-requests', requireAuth, async (req, res) => {
         res.json({ ok: true, request: r.rows[0] });
     } catch (e) {
         console.error('[quota-request:create]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3916,7 +3945,7 @@ app.get('/api/quota-requests', requireAuth, async (req, res) => {
         res.json({ ok: true, requests: r.rows, count: r.rowCount });
     } catch (e) {
         console.error('[quota-request:list]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -3992,7 +4021,7 @@ app.post('/api/quota-requests/:id/resolve', requireAdmin, async (req, res) => {
     } catch (e) {
         try { await client.query('ROLLBACK'); } catch (_) {}
         console.error('[quota-request:resolve]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     } finally { client.release(); }
 });
 
@@ -4024,7 +4053,7 @@ app.get('/api/quota-status', requireAuth, async (req, res) => {
         });
     } catch (e) {
         console.error('[quota-status]', e.message);
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -4106,7 +4135,7 @@ app.get('/api/history', requireAuth, async (req, res) => {
                 ORDER BY r.created_at DESC LIMIT 200`);
         }
         res.json({ ok: true, history: r.rows });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // DELETE /api/history  — ล้าง log (admin)
@@ -4114,7 +4143,7 @@ app.delete('/api/history', requireAdmin, async (req, res) => {
     try {
         await pool.query('DELETE FROM tbl_response');
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // POST /api/history  — บันทึกหลังรัน skill
@@ -4224,7 +4253,7 @@ app.get('/api/chat/sessions', requireAuth, async (req, res) => {
             isFavorite: !!r.is_favorite,
         }));
         res.json({ ok: true, sessions: rows });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // GET /api/chat/sessions/:id   → { session, messages }
@@ -4250,7 +4279,7 @@ app.get('/api/chat/sessions/:id', requireAuth, async (req, res) => {
             },
             messages: m.rows,
         });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // POST /api/chat/sessions   body: { title? }
@@ -4269,7 +4298,7 @@ app.post('/api/chat/sessions', requireAuth, async (req, res) => {
             messageCount: 0, totalCost: 0,
             createdAt: r.rows[0].created_at, updatedAt: r.rows[0].updated_at,
         } });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // PATCH /api/chat/sessions/:id   body: { title? , favorite? }
@@ -4307,7 +4336,7 @@ app.patch('/api/chat/sessions/:id', requireAuth, async (req, res) => {
                 [!!body.favorite, sess.session_id]);
         }
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // DELETE /api/chat/sessions/:id   → soft delete
@@ -4320,7 +4349,7 @@ app.delete('/api/chat/sessions/:id', requireAuth, async (req, res) => {
              WHERE session_id=$1`,
             [sess.session_id]);
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // GET /api/chat/sessions/:id/export   → plain markdown file
@@ -4347,7 +4376,7 @@ app.get('/api/chat/sessions/:id/export', requireAuth, async (req, res) => {
         res.setHeader('Content-Disposition',
             `attachment; filename="${fname}.md"`);
         res.send(md);
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
 // NOTE (v1.7.2): the legacy Assistants-API chat stack (POST /api/thread/create,
@@ -4986,8 +5015,10 @@ const multer = require('multer');
 // 100MB — large SAP training manuals (e.g. BC430 PDF ~37MB) must fit;
 // OpenAI's own per-file cap is 512MB so this stays well inside it.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
-const KNOWLEDGE_EXT_LIST = '.pdf .doc .docx .txt .md .html .htm';
-const KNOWLEDGE_EXT_OK   = /\.(pdf|docx?|txt|md|html?)$/i;
+// KB_FILE_RE is the same allowlist, already driving the boot and local sync.
+// A second copy 4,000 lines away would have to be kept in step by eye — and
+// v1.9.5 added .html to exactly one of the two places it then existed.
+const KNOWLEDGE_EXT_LIST = '.txt .md .pdf .doc .docx .html .htm';
 
 // GET /api/knowledge — list files in vector store
 app.get('/api/knowledge', requireAuth, async (req, res) => {
@@ -5004,7 +5035,7 @@ app.get('/api/knowledge', requireAuth, async (req, res) => {
         }));
         res.json({ ok: true, vectorStoreId: VECTOR_STORE_ID, files });
     } catch (e) {
-        res.json({ ok: false, error: e.message, files: [] });
+        res.json({ ok: false, ...safeError(e, req), files: [] });
     }
 });
 
@@ -5014,7 +5045,7 @@ app.post('/api/knowledge/upload', requireAdmin, expensiveRateLimiter, upload.sin
     if (!req.file) return res.json({ ok: false, error: 'No file provided' });
     // Match what sync-knowledge.js can actually ingest. Without this the store
     // accepts anything up to 100MB, including types the pipeline will never read.
-    if (!KNOWLEDGE_EXT_OK.test(req.file.originalname || '')) {
+    if (!KB_FILE_RE.test(req.file.originalname || '')) {
         return res.json({ ok: false, error: 'Unsupported file type — allowed: ' + KNOWLEDGE_EXT_LIST });
     }
     try {
@@ -5037,12 +5068,15 @@ app.post('/api/knowledge/upload', requireAdmin, expensiveRateLimiter, upload.sin
             && path_mod.dirname(localPath) !== path_mod.resolve(KNOWLEDGE_DIR)) {
             return res.json({ ok: false, error: 'Invalid filename' });
         }
-        fs_mod.writeFileSync(localPath, req.file.buffer);
+        // await, not writeFileSync: multer holds up to 100MB in memory by
+        // design (SAP manuals), and a synchronous write of that blocks the
+        // event loop — every chat stream on the process stalls with it.
+        await fs_mod.promises.writeFile(localPath, req.file.buffer);
         console.log(`[☁️ RAG] Uploaded: ${req.file.originalname}`);
         res.json({ ok: true, fileId: uploaded.id, name: req.file.originalname });
     } catch (e) {
         console.error('[knowledge/upload]', e.message);
-        res.json({ ok: false, error: e.message });
+        res.json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -5054,7 +5088,7 @@ app.delete('/api/knowledge/:fileId', requireAdmin, async (req, res) => {
         await openai.files.del(req.params.fileId);
         res.json({ ok: true });
     } catch (e) {
-        res.json({ ok: false, error: e.message });
+        res.json({ ok: false, ...safeError(e, req) });
     }
 });
 
@@ -5093,7 +5127,7 @@ app.get('/api/version', requireAdmin, async (req, res) => {
             modifiedFiles: s.modified,
         };
     } catch (e) {
-        migrations = { error: e.message };
+        migrations = { ...safeError(e, req) };
     }
     res.json({
         ok:          true,
@@ -6130,7 +6164,10 @@ async function gracefulShutdown(signal) {
 app.use((err, req, res, _next) => {
     const ref = crypto.randomBytes(6).toString('hex');
     console.error(`[error ${ref}] ${req.method} ${req.originalUrl}:`, err && err.stack ? err.stack : err);
-    if (res.headersSent) return;
+    // Express needs the error passed on once headers are out, so its default
+    // handler destroys the socket. Returning here left an SSE response — and
+    // /api/chat writes headers immediately — open until something timed out.
+    if (res.headersSent) return _next(err);
     res.status(err && err.status ? err.status : 500)
        .json({ ok: false, error: 'Internal error', ref });
 });
