@@ -17,7 +17,13 @@ const { runMigrations, migrationStatus } = require('./migrate-schema'); // Phase
 const { logger, httpLogger, flushLogger } = require('./logger');        // Phase 11 C
 const openaiAdmin           = require('./openai-admin');                // Phase 15
 const cryptoStore           = require('./crypto');                       // Phase 17
-const skillPrompts          = require('./skill-prompts');               // Phase 18
+const skillPrompts          = require('./skill-prompts');
+// Phase 46: pure logic lifted out of this file. No pool, no OpenAI client —
+// each of these can be exercised by a test directly.
+const abapScan              = require('./lib/abap-scan');                // Phase 46
+const promptLib             = require('./lib/prompt');                  // Phase 46
+const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = promptLib;
+const { looksLikeAbapCode, proseOf, checkAbapSyntax } = abapScan;               // Phase 18
 const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -422,40 +428,13 @@ let _tempUnsupported = false;
 // Completions loop (dual-path, safe rollback). Single source for request-side
 // validation. Per-model pricing lives in tbl_pricing (phase27-001). The bare
 // `gpt-5.6` alias resolves to sol (see resolveModel below).
-const ALLOWED_MODELS = {
-    'gpt-5.6-sol':   { path: 'responses', label: 'GPT-5.6 Sol',   supportsEffort: true },
-    'gpt-5.6-terra': { path: 'responses', label: 'GPT-5.6 Terra', supportsEffort: true },
-    'gpt-5.6-luna':  { path: 'responses', label: 'GPT-5.6 Luna',  supportsEffort: true },
-    'gpt-5.5':       { path: 'chat',      label: 'GPT-5.5',       supportsEffort: false },
-};
-const MODEL_ALIASES = { 'gpt-5.6': 'gpt-5.6-sol' };
-// Phase 43: trimmed to three. `max` measured worse than `xhigh` on every axis
-// — more expensive, slower, and a SHORTER answer — so keeping it only invited
-// someone to pick the worst option. `none` was never evaluated. Old values
-// stored in a browser are mapped to the nearest survivor rather than silently
-// reset, see resolveEffort.
-const VALID_EFFORTS = ['low', 'medium', 'high'];
-const EFFORT_ALIASES = { none: 'low', xhigh: 'high', max: 'high' };
-const DEFAULT_EFFORT = 'medium';
+// Phase 46: moved to lib/models.js. resolveModel now takes the deployment
+// default explicitly instead of closing over MODEL, which is what let it move.
+const _models = require('./lib/models');
+const { ALLOWED_MODELS, VALID_EFFORTS, DEFAULT_EFFORT } = _models;
+const resolveModel  = (requested) => _models.resolveModel(requested, MODEL);
+const resolveEffort = _models.resolveEffort;
 
-// Resolve the client-supplied model to { model, path }. An EXPLICIT, known
-// model from the request is honored (with its API path); anything else falls
-// back to the env default MODEL on whichever path it belongs to — so if the
-// request omits a model, behavior is unchanged from today (e.g. gpt-4o/gpt-5.5
-// keep running on the Chat Completions loop). This keeps the rollout safe:
-// only an explicit gpt-5.6-* request ever reaches the Responses API path.
-function resolveModel(requested) {
-    const aliased = MODEL_ALIASES[requested] || requested;
-    if (aliased && ALLOWED_MODELS[aliased]) {
-        return { model: aliased, path: ALLOWED_MODELS[aliased].path };
-    }
-    const dflt = MODEL_ALIASES[MODEL] || MODEL;
-    return { model: dflt, path: ALLOWED_MODELS[dflt]?.path || 'chat' };
-}
-function resolveEffort(requested) {
-    if (VALID_EFFORTS.includes(requested)) return requested;
-    return EFFORT_ALIASES[requested] || DEFAULT_EFFORT;
-}
 let openai = null;
 let OpenAI = null;
 // Optional corporate egress proxy + fail-fast timeout for OpenAI calls.
@@ -740,97 +719,8 @@ const PHASE4_TOOLS = [
 // Phase 35.1: appended to EVERY system prompt — live chat, Prompt Lab test,
 // and the eval batch runner alike. One constant so a Lab/eval answer can
 // never drift from what production chat would say with the same prompt.
-const PROMPT_COMMON_APPENDIX = `
-
-## Language rule
-- If the user's message is written entirely in English, respond entirely in English — no Thai words mixed in.
-- If the user's message mixes Thai and English (common for Thai SAP/ABAP developers), respond in Thai with English technical terms mixed in naturally.
-- Match the user's language per message, not the conversation's earlier language.
-
-## What this interface can and cannot do
-- The user can type text and attach TEXT files (.abap, .txt, .sql and similar). There is NO image support. Never ask for a screenshot, a photo, or a picture of anything — ask for the text instead, pasted or attached.
-- You cannot run code, open a SAP system, read a transaction, or do anything outside this conversation. Never offer to.
-
-## Knowledge base
-- You have a search_knowledge tool backed by the org's SAP document library (training manuals like BC430 ABAP Dictionary, the org's ABAP development standards, best-practice notes, and any uploaded documents).
-- Call it BEFORE answering from general knowledge whenever the question could be covered by those documents.
-
-## Citations (required on EVERY answer — no exceptions)
-- End every answer that used the document library with a "📚 Sources:" line listing each file you drew from, e.g. 📚 Sources: BC402 - Advanced ABAP.pdf (Unit 4, p. 225) · SAP ABAP standards COPY keystone.doc
-- SAP manual excerpts contain page footers like "© 2009 SAP AG. All rights reserved. 225" and headings like "Unit 4: Dynamic Programming" / "Lesson: Using Field Symbols" — read the page number and unit/lesson FROM THE EXCERPT and include them when present.
-- NEVER guess or invent a page number. If the excerpt shows no page/unit marker, cite the filename alone.
-- If nothing came from the documents, end with "📚 Sources: general knowledge (ไม่ได้อ้างอิงจากคลังเอกสาร)" — the reader must always know where an answer came from.
-- The org's own development standards (naming conventions, error handling, documentation rules) are supplied to you below whenever they are available — comply with them and cite them. Search for them yourself ONLY if no such section is present.
-- The library contains manuals from different eras (BC402/BC405/BC410/BC412/BC430 and others). If sources conflict, precedence is: (1) the org's own development standards, (2) the most modern syntax/approach. When a retrieved technique is classical/legacy (classical dynpros, SELECT...ENDSELECT, TABLES work areas), say so explicitly instead of presenting it as current best practice.
-
-## What you may fix, and what you may only report
-Decide with one test: can THIS FILE ALONE prove the change is safe?
-- FIX DIRECTLY — provable from the file, and it does not change what the program produces: performance (SELECT inside a loop, SELECT *, missing WHERE, repeated reads), obsolete syntax (TABLES, LIKE, MOVE...TO, header lines), naming conventions, the org's coding standards, and a local variable that nothing else in the file references.
-- REPORT AND ASK, never apply — anything that changes the program's behaviour or its output (adding, removing or reordering a condition; applying a variable or SELECT-OPTION the original left unused; changing a derivation, key, filter or sort), and anything this file alone cannot settle (an unused FORM or METHOD that another program may still call; a commented-out block whose purpose is not stated; an unclear relationship between fields).
-- If you are unsure which side a change falls on, it is report-and-ask.
-- Put those under a "⚠️ Needs your decision" heading BEFORE the corrected code. Number them, and quote the statement each one is about. For each, ask the developer what it is FOR — what the object, variable, SELECT-OPTION, derivation or commented-out block is meant to support, or how it is meant to be used — phrased so it can be answered in one line. Say that you will apply the change in your next reply once they answer. Ask at most 5; list anything beyond that as observations without questions.
-- Precedence when instructions disagree: what the user asked for in THIS message wins; then an exception a skill states explicitly for its own subject; then these rules. The Accuracy rules below are absolute — no skill overrides them.
-
-## Answer format for a code fix
-The chat stays short; the detail goes into the file the user downloads.
-- Open with a summary of a few lines: how many issues, of what kinds, on which lines. Not a report.
-- Then "⚠️ Needs your decision", if there is anything to ask.
-- Then ONE fenced \`\`\`abap block holding the complete corrected file.
-- Put the reasoning INSIDE that file, as a comment line starting \`*###\` in column 1, on its own line directly above the statement it explains. One line each, two at most — these land in the user's source and long blocks clutter it. Never put a comment inside a statement.
-- The four things a finding must carry (below) are split: WHERE and the kind of fix go in the summary; WHY and the SOURCE go in the \`*###\` comment; the replacement is the corrected line itself.
-
-## Depth — finish the answer the first time
-Every finding carries all four, or it is not finished:
-  1. WHERE — quote the statement, and give the line number when you have one.
-  2. WHY IT MATTERS HERE — the concrete consequence in THIS program (how many
-     round trips, which rows, what breaks and when), never a general principle.
-  3. THE REPLACEMENT — written out in full. Do not describe a change in prose
-     and leave the reader to write it.
-  4. THE SOURCE — file, unit and page when it came from the document library.
-If the reader has to ask a follow-up question to be able to act, the finding was
-incomplete. One complete finding is worth more than three thin ones. Length is
-not a concern here; being asked the same thing twice is.
-
-## Accuracy rules (SAP objects are facts, not suggestions)
-- NEVER invent SAP object names — tables, fields, BAPIs, function modules, transactions, classes, BAdIs. Only reference objects you can verify via the knowledge base, the tools (find_bapi, get_transaction_info, lookup_auth_object), or that are unambiguously standard SAP.
-- If you cannot verify an object exists, say so explicitly ("ไม่แน่ใจว่า object นี้มีจริง — ตรวจสอบใน SE11/SE37/SE93 ก่อนใช้") instead of presenting a guess as fact.
-- When correcting user code: preserve the original logic, variable names and structure. Never change behaviour silently — every change you make must be visible in what you write back.
-- Change only what the fix requires. Do not rename variables, renumber, or reformat lines your correction does not touch. If a line's only difference from the original is naming or layout, leave it exactly as it was — cosmetic edits bury the real changes among noise and give the reader more to verify for nothing.
-- Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
-
-// Phase 36: {code} skills assumed EVERY message is code. A conversational
-// follow-up ("remove the MARA reference from your code") got substituted
-// into <ABAP_code> and the skill dutifully replied "no code provided".
 // Substitute only when the message actually looks like ABAP; otherwise
 // point the skill at the conversation and pass the question through.
-const ABAP_CODE_RE = /\b(REPORT|FORM|ENDFORM|DATA|TYPES|SELECT|ENDSELECT|LOOP|ENDLOOP|MOVE|PERFORM|APPEND|MODIFY|CLASS|ENDCLASS|METHOD|ENDMETHOD|FUNCTION|ENDFUNCTION|CALL FUNCTION|FIELD-SYMBOLS)\b/i;
-function looksLikeAbapCode(text) {
-    const t = String(text || '');
-    return t.split('\n').length >= 3 && ABAP_CODE_RE.test(t);
-}
-function applyCodePlaceholder(systemPrompt, question) {
-    if (!systemPrompt.includes('{code}')) {
-        return { systemPrompt, userPrompt: question };
-    }
-    if (looksLikeAbapCode(question)) {
-        return {
-            systemPrompt: systemPrompt.replace('{code}', question),
-            // Phase 41: was "…and apply the corrections." This rides in the USER
-            // turn, which outranks the system prompt — so it was ordering the
-            // model to apply everything while the shared rules were telling it
-            // some findings must only be reported. Neutral wording now; the
-            // rules alone decide what gets applied.
-            userPrompt:   'Please review the ABAP code provided above and respond according to your instructions.',
-        };
-    }
-    return {
-        systemPrompt: systemPrompt.replace('{code}',
-            '(no code was pasted this turn — the user is asking a question or a follow-up; '
-            + 'answer it directly, using any code from the conversation history as context)'),
-        userPrompt: question,
-    };
-}
-
 // ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 
@@ -4483,38 +4373,6 @@ function findBapi(task, module) {
 }
 
 /** ตรวจสอบ ABAP syntax และ obsolete patterns */
-function checkAbapSyntax(code) {
-    const issues = [];
-    const lines  = code.split('\n');
-
-    const RULES = [
-        { pattern: /^\s*TABLES[\s:]/i,       severity: 'error',   msg: 'Obsolete: TABLES statement — ใช้ DATA declaration แทน' },
-        { pattern: /\bMOVE\s+.+\s+TO\s+/i,  severity: 'warning', msg: 'Obsolete: MOVE...TO — ใช้ = assignment แทน' },
-        { pattern: /\bSELECT\s+\*/i,         severity: 'warning', msg: 'SELECT * ควร select เฉพาะ fields ที่ใช้จริงเพื่อ performance' },
-        { pattern: /\bWRITE\s*:/i,            severity: 'info',    msg: 'WRITE: ใช้ได้สำหรับ classic report แต่ไม่รองรับ Fiori/ALV' },
-        { pattern: /\bSELECT\b[\s\S]+?ENDSELECT/im, severity: 'error', msg: 'SELECT...ENDSELECT loop — ใช้ SELECT...INTO TABLE แทน' },
-        { pattern: /\bCLEAR\s+\w+\.\s*REFRESH\s+\w+/i, severity: 'info', msg: 'ใช้ FREE แทน CLEAR+REFRESH เพื่อคืน memory' },
-        { pattern: /\bAND\s+RETURN\b/i,       severity: 'warning', msg: 'AND RETURN เป็น obsolete — ใช้ CALL METHOD แทน' },
-    ];
-
-    lines.forEach((line, i) => {
-        RULES.forEach(rule => {
-            if (rule.pattern.test(line)) {
-                issues.push({ line: i + 1, severity: rule.severity, message: rule.msg, code: line.trim() });
-            }
-        });
-    });
-
-    return {
-        valid:      issues.filter(x => x.severity === 'error').length === 0,
-        issueCount: issues.length,
-        issues:     issues.slice(0, 10),
-        summary:    issues.length === 0
-            ? '✅ ไม่พบปัญหา syntax'
-            : `พบ ${issues.length} ปัญหา (${issues.filter(x => x.severity === 'error').length} error, ${issues.filter(x => x.severity === 'warning').length} warning)`,
-    };
-}
-
 /** ดูข้อมูล SAP Transaction Code */
 function getTransactionInfo(tcode) {
     try {
@@ -4835,7 +4693,7 @@ async function buildPreAnalysis(userMessage) {
         // `NO STANDARD PAGE HEADING.`) that diluted the query into noise.
         const terms = scanQueryTerms(scan);
         const ask = text.split('\n').map(s => s.trim())
-            .find(s => s && !_isCommentLine(s) && !ABAP_STMT_START_RE.test(s)) || '';
+            .find(s => s && !abapScan.isCommentLine(s) && !abapScan.ABAP_STMT_START_RE.test(s)) || '';
         const query = [...terms, ask.slice(0, 120)].filter(Boolean).join(' ').trim();
         if (query) {
             const r = await searchKnowledge(query);
@@ -4861,17 +4719,6 @@ async function buildPreAnalysis(userMessage) {
 }
 
 /** The prompt block carrying the standards, or '' when we have none. */
-function orgStandardsBlock(std) {
-    if (!std || !std.text) return '';
-    return `
-
-## The org's development standards (already retrieved for you)
-${std.text}
-
-Cite the above as: ${std.files.join(' · ')}
-Do not run a general "development standards" search — you already have it. Search only for something specific that this section does not cover.`;
-}
-
 // Phase 35.2: RAG visibility — the chat UI shows a badge while the model
 // searches documents. Extract the search query from a pending tool-call
 // batch, and shape the search result into a compact tool_result event
@@ -5268,158 +5115,26 @@ app.get('/api/version', requireAdmin, async (req, res) => {
 //   • after the LLM returned nothing, or settled for the catch-all → upgraded.
 // It never overrides a confident LLM pick, so "generate a unit test for this"
 // can't be hijacked into "cleanup commented code" by the shape of the code.
-function _isCommentLine(line) { return /^\s*[*"]/.test(line); }
-
-/** The code with comment lines removed. The statement rules below must not
- *  read commented-out code as live code — a dead `* SELECT * FROM mara.` used
- *  to trip the SELECT rule as well as the commented-code rule, two hits, and
- *  the whole pick was thrown away as "ambiguous". */
-function _liveCodeOf(text) {
-    return String(text || '').split('\n').filter(l => !_isCommentLine(l)).join('\n');
-}
-
-// A line that is an ABAP STATEMENT rather than something a person typed.
-// Keyed on how the line STARTS: statements open with a keyword, prose (Thai or
-// English) does not. Matching a keyword anywhere in the line — the first cut of
-// this — silently ate real instructions, because "unit test class" contains
-// CLASS and "generate a report" contains REPORT.
-const ABAP_STMT_START_RE = /^\s*(REPORT|PROGRAM|INCLUDE|TABLES|TYPES|DATA|CONSTANTS|STATICS|FIELD-SYMBOLS|PARAMETERS|SELECT-OPTIONS|CLASS|ENDCLASS|METHOD|ENDMETHOD|INTERFACE|FORM|ENDFORM|FUNCTION|ENDFUNCTION|MODULE|ENDMODULE|START-OF-SELECTION|END-OF-SELECTION|INITIALIZATION|SELECT|ENDSELECT|INSERT|UPDATE|DELETE|MODIFY|APPEND|COLLECT|READ|LOOP|ENDLOOP|DO|ENDDO|WHILE|ENDWHILE|IF|ELSEIF|ELSE|ENDIF|CASE|WHEN|ENDCASE|TRY|CATCH|CLEANUP|ENDTRY|RAISE|MESSAGE|WRITE|MOVE|CLEAR|REFRESH|FREE|CONCATENATE|SPLIT|CONDENSE|TRANSLATE|CALL|PERFORM|SUBMIT|EXPORT|IMPORT|COMMIT|ROLLBACK|CHECK|EXIT|RETURN|SORT|ASSIGN|CREATE|SET|GET|AT|WHERE|AND|OR|INTO|FROM|VALUES|BEGIN|END)\b/i;
-
-/** True when a SELECT sits inside a LOOP/DO/WHILE block (comments ignored). */
-function hasSelectInsideLoop(text) {
-    let depth = 0;
-    for (const raw of String(text || '').split('\n')) {
-        if (_isCommentLine(raw)) continue;
-        const l = raw.toUpperCase();
-        if (depth > 0 && /\bSELECT\b/.test(l)) return true;
-        if (/\bLOOP\s+AT\b/.test(l) || /\bDO\b/.test(l) || /\bWHILE\b/.test(l)) depth++;
-        if (/\b(ENDLOOP|ENDDO|ENDWHILE)\b/.test(l)) depth = Math.max(0, depth - 1);
-    }
-    return false;
-}
-
-/** True when the paste carries commented-OUT ABAP — 3+ comment lines that
- *  still contain real statements, i.e. dead code rather than explanation. */
-function hasCommentedOutCode(text) {
-    let n = 0;
-    for (const raw of String(text || '').split('\n')) {
-        if (_isCommentLine(raw) && ABAP_CODE_RE.test(raw) && ++n >= 3) return true;
-    }
-    return false;
-}
-
-const ROUTER_CODE_RULES = [
-    { id: 'select_loop_check',     test: hasSelectInsideLoop },
-    { id: 'delete_commented_code', test: hasCommentedOutCode },
-    { id: 'like_check',            test: t => /\bLIKE\s+'%/i.test(_liveCodeOf(t))
-                                           || /^\s*(DATA|PARAMETERS|SELECT-OPTIONS)\b[^.]*\bLIKE\b/im.test(_liveCodeOf(t)) },
-    { id: 'obsolete_check',        test: t => /^\s*TABLES\s*:/im.test(_liveCodeOf(t))
-                                           || /\bOCCURS\s+\d/i.test(_liveCodeOf(t))
-                                           || /\bENDSELECT\b/i.test(_liveCodeOf(t)) },
-    { id: 'select_best_practice',  test: t => /\bSELECT\s+\*/i.test(_liveCodeOf(t))
-                                           || /\bFOR\s+ALL\s+ENTRIES\b/i.test(_liveCodeOf(t)) },
-];
-
-/** A skill id when EXACTLY ONE rule fires and that skill is usable. Two rules
- *  firing means the code has several problems at once — a judgement call, so
- *  it goes back to the LLM / catch-all instead of us guessing. */
+// Phase 46: the rules moved to lib/abap-scan.js. These two wrappers keep the
+// registry check that used to live inside them — the rules match text, the
+// catalog decides which of those matched skills actually exist.
 function pickSkillFromCodeShape(text) {
-    const hits = ROUTER_CODE_RULES
-        .filter(r => { try { return r.test(text); } catch (_) { return false; } })
-        .map(r => r.id)
-        .filter(id => {
-            const s = skillPrompts.getSkill(id);
-            return s && !isSkillPlaceholder(s.content);
-        });
-    return hits.length === 1 ? hits[0] : null;
+    const id = abapScan.codeShapeSkillId(text);
+    if (!id) return null;
+    const s = skillPrompts.getSkill(id);
+    return (s && !isSkillPlaceholder(s.content)) ? id : null;
 }
-
-/** True when a CALL FUNCTION block still carries commented-out parameters —
- *  the "* TABLES / * it_data =" left behind when someone disabled a parameter
- *  instead of deleting it. Scans from CALL FUNCTION to the closing period. */
-function hasCommentedParamsInCall(text) {
-    let inCall = false;
-    for (const raw of String(text || '').split('\n')) {
-        if (/\bCALL\s+FUNCTION\b/i.test(raw)) { inCall = true; continue; }
-        if (!inCall) continue;
-        if (_isCommentLine(raw)) {
-            // a disabled parameter, not a note: "* name = x" or "* TABLES"
-            if (/=/.test(raw) || /^\s*[*"]\s*(TABLES|EXPORTING|IMPORTING|CHANGING|EXCEPTIONS)\b/i.test(raw)) return true;
-            continue;
-        }
-        if (/\.\s*$/.test(raw)) inCall = false;
-    }
-    return false;
-}
-
-// Phase 45: rules used ONLY to gather supporting knowledge, deliberately kept
-// out of ROUTER_CODE_RULES. That list drives the primary pick through
-// pickSkillFromCodeShape, which fires only when exactly one rule matches —
-// adding an overlapping rule there (FOR ALL ENTRIES already belongs to
-// select_best_practice) would turn a confident single hit into no hit at all.
-const ORCHESTRATION_EXTRA_RULES = [
-    { id: 'FAE_CHECK_01',               test: t => /\bFOR\s+ALL\s+ENTRIES\b/i.test(_liveCodeOf(t)) },
-    { id: 'COMMENT_IN_FUNCTION_SYNTAX', test: hasCommentedParamsInCall },
-];
-
-/** Every skill whose check the pasted code trips — not just one. This is the
- *  measured gap: a router that picks one skill missed the commented-out dead
- *  code and the disabled CALL FUNCTION parameters on a file that tripped five
- *  rules at once, because only the chosen skill's knowledge ever arrived. */
 function skillsForCode(text) {
-    const ids = [...ORCHESTRATION_EXTRA_RULES, ...ROUTER_CODE_RULES]
-        .filter(r => { try { return r.test(text); } catch (_) { return false; } })
-        .map(r => r.id);
-    return [...new Set(ids)].filter(id => {
+    return abapScan.matchingSkillIds(text).filter(id => {
         const s = skillPrompts.getSkill(id);
         return s && !isSkillPlaceholder(s.content);
     });
 }
 
-// Bound the appended knowledge by SIZE, not by how many skills produced it.
-// A count cap of 6 looked reasonable and silently dropped the seventh — which
-// on the test file was COMMENT_IN_FUNCTION_SYNTAX, one of the two checks this
-// whole change exists to stop losing. All 8 skills' knowledge together is
-// ~10.7k chars, so this fits the catalog as it stands and still refuses to grow
-// without limit if it doubles.
-const MAX_SUPPORTING_SKILLS = 8;
-const MAX_SUPPORTING_CHARS  = 14000;
-
-/** The other skills' knowledge, appended to the primary skill's instructions.
- *  Only the knowledge block travels: each skill also carries its own "answer in
- *  this format" section, and several of those in one prompt contradict each
- *  other. The primary skill has already set the format. */
-function supportingKnowledgeBlock(ids) {
-    const parts = [];
-    const dropped = [];
-    let used = 0;
-    for (const id of ids) {
-        const s = skillPrompts.getSkill(id);
-        if (!s) continue;
-        const k = skillPrompts.knowledgeBlockOf(s.content);
-        if (!k) continue;
-        const part = `### ${s.label || id}\n${k}`;
-        if (used + part.length > MAX_SUPPORTING_CHARS) { dropped.push(id); continue; }
-        parts.push(part);
-        used += part.length;
-    }
-    // never drop a check without saying so — a silent cap reads as full coverage
-    if (dropped.length) console.warn('[chat] supporting knowledge over budget, dropped:', dropped.join(', '));
-    if (!parts.length) return '';
-    return '\n\n## Additional checks this code also needs\n'
-        + 'These rules come from other review skills that match the code you were given. '
-        + 'Apply them with the same weight as your main instructions, and report their findings '
-        + 'in the same answer, in the same format. Do not start a separate section for them.\n\n'
-        + parts.join('\n\n');
-}
-
-/** The user's own words, with ABAP statement lines stripped — used to tell a
- *  bare code paste apart from a real instruction. */
-function proseOf(text) {
-    return String(text || '').split('\n')
-        .filter(l => l.trim() && !_isCommentLine(l) && !ABAP_STMT_START_RE.test(l))
-        .join(' ').trim();
-}
+// Phase 46: supportingKnowledgeBlock moved to lib/prompt.js. The registry is
+// passed in rather than reached for, so the builder is testable without a DB.
+const MAX_SUPPORTING_SKILLS   = promptLib.MAX_SUPPORTING_SKILLS;
+const supportingKnowledgeBlock = (ids) => promptLib.supportingKnowledgeBlock(ids, skillPrompts);
 
 const ROUTER_HEAD_CHARS     = 1500;
 const ROUTER_TAIL_CHARS     = 1500;
