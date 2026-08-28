@@ -6,7 +6,10 @@ import { readFileSync } from 'fs';
 const PAGES = {
     'index.html': ['js/i18n.js', 'js/md.js', 'js/config.js', 'js/auth.js',
         'js/pricing.js', 'js/mock-ai.js', 'js/ai-client.js', 'js/chat.js'],
-    'admin.html': ['js/i18n.js', 'js/config.js', 'js/auth.js', 'js/pricing.js', 'js/admin.js'],
+    'admin.html': ['js/i18n.js', 'js/config.js', 'js/auth.js', 'js/pricing.js', 'js/admin.js',
+        'js/admin/helpers.js', 'js/admin/core.js', 'js/admin/overview.js', 'js/admin/sync.js',
+        'js/admin/skills-lab.js', 'js/admin/credits.js', 'js/admin/users.js',
+        'js/admin/projects.js', 'js/admin/activity.js', 'js/admin/usage.js'],
     'login.html': ['js/config.js', 'js/auth.js', 'js/login.js'],
     'change-password.html': ['js/config.js', 'js/auth.js', 'js/change-password.js'],
 };
