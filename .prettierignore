@@ -1,0 +1,21 @@
+node_modules/
+server/node_modules/
+server/logs/
+server/knowledge/
+backups/
+_archive/
+_ux-mockup/
+dist/
+
+# Third-party bundles — never reformat
+js/vendor/
+css/vendor/
+
+# Generated / machine-written
+server/package-lock.json
+package-lock.json
+server/schema-exports/
+docs/schema-current.sql
+
+# Phase 48 restructures these; formatting them now would collide with that work
+*.html

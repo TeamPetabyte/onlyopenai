@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs the same checks CI runs. Needed because we are not pushing yet, so
+# GitHub Actions never fires — this hook is the only gate right now.
+# Bypass once with: git commit --no-verify
+
+set -e
+
+echo "[pre-commit] lint"
+npm run --silent lint
+
+echo "[pre-commit] test"
+npm test --silent
+
+echo "[pre-commit] ok"

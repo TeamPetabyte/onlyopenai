@@ -1,0 +1,19 @@
+{
+  "endOfLine": "auto",
+  "singleQuote": true,
+  "semi": true,
+  "printWidth": 100,
+  "tabWidth": 4,
+  "arrowParens": "always",
+  "trailingComma": "es5",
+  "overrides": [
+    {
+      "files": ["js/admin.js", "js/i18n.js", "js/pricing.js"],
+      "options": { "tabWidth": 2 }
+    },
+    {
+      "files": ["*.json", "*.md"],
+      "options": { "tabWidth": 2 }
+    }
+  ]
+}
