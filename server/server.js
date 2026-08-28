@@ -104,253 +104,14 @@ if (!IS_PROD && ALLOWED_ORIGINS.length === 0) {
     console.log(`[cors] whitelist: ${ALLOWED_ORIGINS.join(', ')}`);
 }
 
-/** Phase 7: stricter password policy. Returns null if OK, error string if bad. */
-function validatePasswordStrength(pw) {
-    if (!pw || typeof pw !== 'string') return 'password is required';
-    if (pw.length < 8)              return 'password must be at least 8 characters';
-    if (pw.length > 128)            return 'password must be at most 128 characters';
-    if (!/[A-Za-z]/.test(pw))       return 'password must contain at least one letter';
-    if (!/[0-9]/.test(pw))          return 'password must contain at least one digit';
-    return null;
-}
 
 // Phase 8: Account lockout policy. Persistent (DB-backed) so it
 // survives restart and complements the in-memory rate limiter.
 const LOCKOUT_THRESHOLD = parseInt(process.env.LOCKOUT_THRESHOLD) || 5;
 const LOCKOUT_MINUTES   = parseInt(process.env.LOCKOUT_MINUTES)   || 15;
 
-/** Validate balance/credit number. Returns number (safe) or throws. */
-function validateAmount(value, { min = 0, max = MAX_BALANCE, required = true } = {}) {
-    if (value === undefined || value === null || value === '') {
-        if (required) throw new Error('amount required');
-        return null;
-    }
-    const n = Number(value);
-    if (!Number.isFinite(n)) throw new Error('amount must be a number');
-    if (n < min) throw new Error(`amount must be >= ${min}`);
-    if (n > max) throw new Error(`amount must be <= ${max}`);
-    return n;
-}
 
-// ── Role normalization ─────────────────────────────────────
-// DB stores tbl_user_role.role_des as 'admin' or 'general user'.
-// Frontend (Auth.check / requireRole) compares against literal role names.
-// Normalize at every response boundary so client & middleware never see raw
-// role_des values like 'general user'.
-// Phase 30: added 'trainer' (superadmin) — anything unknown still maps to
-// 'user' so a typo'd role can never gain privileges.
-function normalizeRole(roleDes) {
-    const r = String(roleDes || '').toLowerCase().trim();
-    if (r === 'admin')   return 'admin';
-    if (r === 'trainer') return 'trainer';
-    return 'user';
-}
 
-// ── Session Store (Phase 7: PostgreSQL-backed; Phase 9: CSRF token) ────
-// Survives server restart, supports multi-instance scale, gives admins
-// a real "who's logged in" / "logout-all" capability later.
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-const SESSION_COOKIE = 'petabyte_session';
-// Phase 24: readable (non-HttpOnly) session-scoped marker cookie. Lets the
-// frontend tell whether the browser session is still alive. Dies when the
-// browser closes (no maxAge) → drives "close browser = logout".
-const ACTIVE_COOKIE = 'petabyte_active';
-const CSRF_HEADER    = 'x-csrf-token';
-
-async function createSession(user) {
-    const token = crypto.randomBytes(32).toString('hex');
-    const csrf  = crypto.randomBytes(32).toString('hex');    // Phase 9
-    const role  = normalizeRole(user.role);
-    const expires = new Date(Date.now() + SESSION_TTL_MS);
-    await pool.query(
-        `INSERT INTO tbl_session (token, user_id, role, expires_at, csrf_token)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [token, user.id, role, expires, csrf]
-    );
-    return { token, csrf };
-}
-
-/** Look up an active (unexpired) session by token. Touches last_seen_at. */
-async function getSession(token) {
-    if (!token) return null;
-    const r = await pool.query(
-        `SELECT s.token, s.user_id AS "userId", s.role, s.expires_at,
-                s.csrf_token AS "csrfToken",
-                u.username, u.must_change_password AS "mustChangePassword"
-         FROM tbl_session s
-         JOIN tbl_user u ON s.user_id = u.user_id
-         WHERE s.token = $1 AND s.expires_at > NOW() AND u.is_deleted = FALSE`,
-        [token]
-    );
-    if (r.rows.length === 0) return null;
-    // best-effort touch — not awaited
-    pool.query('UPDATE tbl_session SET last_seen_at = NOW() WHERE token = $1', [token])
-        .catch(() => {});
-    return r.rows[0];
-}
-
-// Phase 9: cookie option helper — single source of truth so login/logout match
-function _sessionCookieOpts(maxAge) {
-    return {
-        httpOnly: true,
-        sameSite: 'strict',           // browser refuses to send on cross-site nav
-        secure:   IS_PROD,            // dev = http://, prod = https://
-        path:     '/',
-        ...(maxAge !== undefined ? { maxAge } : {}),
-    };
-}
-
-// Phase 24: options for the readable marker cookie — NOT HttpOnly (JS must read
-// it) and NO maxAge (session-scoped: the browser drops it when it closes).
-function _markerCookieOpts() {
-    return { httpOnly: false, sameSite: 'strict', secure: IS_PROD, path: '/' };
-}
-
-async function deleteSession(token) {
-    if (!token) return;
-    try { await pool.query('DELETE FROM tbl_session WHERE token = $1', [token]); }
-    catch (e) { console.warn('[session] delete failed:', e.message); }
-}
-
-// Janitor: prune expired sessions every 10 minutes
-// Phase 11: captured so graceful shutdown can clear it.
-const _sessionJanitor = setInterval(() => {
-    pool.query('DELETE FROM tbl_session WHERE expires_at <= NOW()')
-        .then(r => { if (r.rowCount > 0) console.log(`[sessions] pruned ${r.rowCount} expired`); })
-        .catch(e => console.warn('[sessions] janitor failed:', e.message));
-}, 10 * 60 * 1000);
-_sessionJanitor.unref();
-
-function _extractToken(req) {
-    // Phase 9: HttpOnly cookie (can't be stolen by XSS).
-    // Phase 39: Bearer fallback removed — the cookie is the ONLY auth path.
-    // Non-browser clients (curl, smoke tests) authenticate by sending the
-    // cookie explicitly:  curl -H "Cookie: petabyte_session=<token>" ...
-    // (or use -c/-b cookie jars around /api/auth/login).
-    return (req.cookies && req.cookies[SESSION_COOKIE]) || '';
-}
-
-// Phase 9: CSRF guard — applied to every state-changing request that
-// already has a session. GET/HEAD/OPTIONS are safe by spec.
-// Login is whitelisted (no session yet to compare against).
-// Reasoning for double-submit-only: with HttpOnly + SameSite=Strict the
-// auth cookie won't ride cross-site requests, so a CSRF attack would
-// have to come from same-site (e.g. an XSS) — at which point it can
-// also read the CSRF token from JS storage, defeating it. We keep the
-// header check anyway as defense-in-depth (Phase 39: the Bearer fallback
-// this also used to protect is gone — cookie is the only auth path).
-const CSRF_EXEMPT_PATHS = new Set([
-    '/api/auth/login',     // no session yet
-    '/api/health',         // public probe
-    '/api/logout',         // best-effort cleanup; idempotent
-]);
-function _isCsrfMethod(m) { return m === 'POST' || m === 'PUT' || m === 'DELETE' || m === 'PATCH'; }
-
-async function csrfGuard(req, res, next) {
-    if (!_isCsrfMethod(req.method)) return next();
-    if (CSRF_EXEMPT_PATHS.has(req.path)) return next();
-    const token = _extractToken(req);
-    if (!token) return next();   // no session → requireAuth will 401 later
-    try {
-        const sess = await getSession(token);
-        if (!sess) return next(); // requireAuth will 401
-        const headerCsrf = req.headers[CSRF_HEADER];
-        if (!headerCsrf || headerCsrf !== sess.csrfToken) {
-            // Phase 19.7.2: keep a one-line note so a future stale-CSRF
-            // mismatch is at least visible in the server log (e.g. after
-            // a deploy that rotates session secrets). No header dump.
-            console.warn('[csrf] reject', req.method, req.path,
-                '— browser CSRF stale; user needs to logout/login');
-            return res.status(403).json({ ok: false, error: 'CSRF token missing or invalid' });
-        }
-        next();
-    } catch (e) {
-        console.error('[csrf]', e.message);
-        res.status(500).json({ ok: false, error: 'CSRF check failed' });
-    }
-}
-// app.use(csrfGuard) is registered later — AFTER cors() + body parser —
-// so CORS headers ride along on the 403 reply.
-
-// Phase 8: When must_change_password=true the only endpoints that work
-// are the user changing their OWN password and logging out. Everything
-// else returns 423 with a hint so the client can redirect to /change-pw.
-// Path-based allowlist keeps the rule in one place rather than
-// sprinkling checks through every route.
-const PW_CHANGE_ALLOWED = [
-    /^\/api\/users\/\d+\/password$/,    // PUT — self password change
-    /^\/api\/logout$/,                   // POST — sign out
-];
-function _isPwChangeAllowed(req) {
-    return PW_CHANGE_ALLOWED.some(rx => rx.test(req.path));
-}
-
-async function requireAdmin(req, res, next) {
-    const token = _extractToken(req);
-    if (!token) return res.status(401).json({ ok: false, error: 'Authentication required' });
-    try {
-        const sess = await getSession(token);
-        if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        // Phase 30: trainer is a superadmin — people/money admin surfaces
-        // accept both roles. Training surfaces use requireTrainer instead.
-        if (sess.role !== 'admin' && sess.role !== 'trainer') {
-            return res.status(403).json({ ok: false, error: 'Admin access required' });
-        }
-        if (sess.mustChangePassword && !_isPwChangeAllowed(req)) {
-            return res.status(423).json({ ok: false, mustChangePassword: true,
-                error: 'Password change required before continuing' });
-        }
-        req.session = sess;
-        next();
-    } catch (e) {
-        console.error('[requireAdmin]', e.message);
-        res.status(500).json({ ok: false, error: 'Auth check failed' });
-    }
-}
-
-// Phase 30: training surfaces (Skill Prompts / Prompt Lab / Evals) are
-// trainer-ONLY. A plain admin gets 403 here by design: verdicts, corrected
-// answers and eval runs are the golden dataset — an admin mis-click must
-// not be able to corrupt it. (UI also hides these tabs, but this is the
-// actual gate.)
-async function requireTrainer(req, res, next) {
-    const token = _extractToken(req);
-    if (!token) return res.status(401).json({ ok: false, error: 'Authentication required' });
-    try {
-        const sess = await getSession(token);
-        if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        if (sess.role !== 'trainer') {
-            return res.status(403).json({ ok: false, error: 'Trainer access required' });
-        }
-        if (sess.mustChangePassword && !_isPwChangeAllowed(req)) {
-            return res.status(423).json({ ok: false, mustChangePassword: true,
-                error: 'Password change required before continuing' });
-        }
-        req.session = sess;
-        next();
-    } catch (e) {
-        console.error('[requireTrainer]', e.message);
-        res.status(500).json({ ok: false, error: 'Auth check failed' });
-    }
-}
-
-async function requireAuth(req, res, next) {
-    const token = _extractToken(req);
-    if (!token) return res.status(401).json({ ok: false, error: 'Authentication required' });
-    try {
-        const sess = await getSession(token);
-        if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        if (sess.mustChangePassword && !_isPwChangeAllowed(req)) {
-            return res.status(423).json({ ok: false, mustChangePassword: true,
-                error: 'Password change required before continuing' });
-        }
-        req.session = sess;
-        next();
-    } catch (e) {
-        console.error('[requireAuth]', e.message);
-        res.status(500).json({ ok: false, error: 'Auth check failed' });
-    }
-}
 
 // ── PostgreSQL Database ────────────────────────────────────
 const { Pool } = require('pg');
@@ -405,6 +166,19 @@ function connectWithRetry(attempt = 1, maxAttempts = 3) {
         });
 }
 connectWithRetry();
+
+// Phase 49: โครงสร้างพื้นฐานย้ายไปเป็นโมดูล — ชื่อเดิมทั้งหมด destructure กลับมา
+// validateAmount ไม่ import — zod แทนที่ไปนานแล้ว (ใน validation.js)
+const { validatePasswordStrength, normalizeRole } = require('./lib/validators');
+const sessionStore = require('./services/session-store')({ pool, isProd: IS_PROD });
+const { SESSION_COOKIE, ACTIVE_COOKIE,
+        createSession, getSession, deleteSession,
+        _sessionCookieOpts, _markerCookieOpts, _extractToken } = sessionStore;
+const { csrfGuard, requireAdmin, requireTrainer, requireAuth } =
+    require('./middleware/auth')({ sessionStore });
+const { logAdminAction, logAuthEvent } = require('./services/audit')({ pool });
+const { spentToday, getEffectiveDailyCap, getProjectPool,
+        checkChatBudget, getActivePricing } = require('./services/billing')({ pool });
 
 // ── OpenAI ─────────────────────────────────────────────────
 const HAS_API_KEY = !!(
@@ -1245,92 +1019,6 @@ app.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async (re
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// ── Helper: บันทึก admin/user action (Phase 14 extended) ─────
-// tbl_action_admin.project_id was NOT NULL in older schemas; phase11-003
-// relaxes it, and we pass the admin's project_id (may be NULL) so rows
-// with a project still record it for reporting.
-//
-// Phase 14 adds structured detail: action_type, target_type, target_id,
-// and a before/after change snapshot (JSONB). All detail params are
-// optional for back-compat — the two-arg form `logAdminAction(req)` is
-// still valid. Prefer the object form:
-//
-//   logAdminAction(req, {
-//     action: 'update_balance',
-//     targetType: 'user', targetId: 42,
-//     before: { balance: 100 },
-//     after:  { balance: 500 },
-//   });
-//
-// SECURITY: never pass `password`, `password_hash`, CSRF tokens,
-// or session tokens inside before/after. The redactor below strips
-// them defensively, but the caller is the primary gate.
-const REDACT_KEYS = new Set([
-    'password', 'password_hash', 'pw', 'pw_hash',
-    'csrf_token', 'csrf', 'token', 'bearer', 'session_token',
-]);
-function _redactSecrets(obj) {
-    if (!obj || typeof obj !== 'object') return obj;
-    const out = {};
-    for (const [k, v] of Object.entries(obj)) {
-        if (REDACT_KEYS.has(String(k).toLowerCase())) continue;
-        out[k] = v;
-    }
-    return out;
-}
-
-async function logAdminAction(req, detail = {}) {
-    const sess = req.session;     // populated by requireAuth/requireAdmin
-    if (!sess) return;
-    try {
-        const uRow = await pool.query(
-            'SELECT role_id, project_id FROM tbl_user WHERE user_id=$1', [sess.userId]);
-        const roleId    = uRow.rows[0]?.role_id    || 1;
-        const projectId = uRow.rows[0]?.project_id || null;
-
-        const actionType = detail.action     ? String(detail.action).slice(0, 40)     : null;
-        const targetType = detail.targetType ? String(detail.targetType).slice(0, 20) : null;
-        const targetId   = Number.isInteger(detail.targetId) ? detail.targetId : null;
-
-        // Build change_json only if either before or after was provided.
-        let changeJson = null;
-        if (detail.before || detail.after) {
-            changeJson = {};
-            if (detail.before) changeJson.before = _redactSecrets(detail.before);
-            if (detail.after)  changeJson.after  = _redactSecrets(detail.after);
-            // Optional free-form extras (e.g. reason, notes)
-            if (detail.extra && typeof detail.extra === 'object') {
-                changeJson.extra = _redactSecrets(detail.extra);
-            }
-        } else if (detail.extra && typeof detail.extra === 'object') {
-            changeJson = { extra: _redactSecrets(detail.extra) };
-        }
-
-        await pool.query(
-            `INSERT INTO tbl_action_admin
-                (user_id, project_id, role_id, edit_date, edit_time,
-                 action_type, target_type, target_id, change_json)
-             VALUES ($1, $2, $3, CURRENT_DATE, NOW(), $4, $5, $6, $7)`,
-            [sess.userId, projectId, roleId,
-             actionType, targetType, targetId,
-             changeJson ? JSON.stringify(changeJson) : null]);
-    } catch (e) { console.error('[action-log]', e.message); }
-}
-
-// ── Helper: audit-log event (Phase 14) ──────────────────────
-// Records non-action events (failed login, lockout, logout) in
-// tbl_audit_log. user_id may be NULL when the username was unknown.
-async function logAuthEvent(eventType, userId, req, detail = {}) {
-    try {
-        const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || '').toString().slice(0, 45);
-        await pool.query(
-            `INSERT INTO tbl_audit_log
-                (user_id, log_in_date, log_in_time, event_type, detail, ip)
-             VALUES ($1, CURRENT_DATE, NOW(), $2, $3, $4)`,
-            [userId || null, String(eventType).slice(0, 20),
-             detail ? JSON.stringify(_redactSecrets(detail)) : null, ip]);
-    } catch (e) { console.error('[audit-log]', e.message); }
-}
 
 // POST /api/logout
 // Phase 16.6: defensive wrap — every DB call in this handler is best-effort.
@@ -1900,145 +1588,6 @@ app.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap), as
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// Phase 21 A2 — today's spend now reads from tbl_daily_usage, which is
-// already pre-aggregated per (date, user, session, model). Replaces the
-// older JOIN over tbl_response × tbl_project rates (slower; required
-// re-computing cost on every read; missed turns that didn't write to
-// tbl_response). The rollup table is updated atomically inside the chat
-// transaction so it's always in sync with what user was actually charged.
-async function spentToday(userId) {
-    const r = await pool.query(`
-        SELECT COALESCE(SUM(total_price), 0)::numeric(12,4) AS spent
-        FROM tbl_daily_usage
-        WHERE user_id = $1
-          AND usage_date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date`,
-        [userId]);
-    return parseFloat(r.rows[0].spent) || 0;
-}
-
-// ════════════════════════════════════════════════════════════
-// Phase 21.10 — Concept B credit gates
-// ════════════════════════════════════════════════════════════
-// One pool per project (`tbl_balance.project_credits`) is the only real
-// money. Per-user `daily_cap` is a SPENDING LIMIT, not a wallet. A user
-// can request a one-day bonus → admin approves → an entry in
-// `tbl_daily_cap_bonus` raises today's effective cap.
-//
-//   effective_cap(user, today) = daily_cap + Σ today's approved bonuses
-//
-// `checkChatBudget` is the single gate; the chat endpoint calls it before
-// touching OpenAI. It distinguishes two failure modes so the UX can show
-// different messages (pool empty needs admin top-up; cap reached can be
-// waited out or escalated to a quota request).
-
-async function getEffectiveDailyCap(userId) {
-    // Phase 21.12 — bonus is now a PERSISTENT balance (tbl_user.bonus_balance),
-    // not a today-only sum. effective_cap = daily_cap + bonus_balance.
-    // Returns null when the user has no daily_cap configured (unlimited).
-    const r = await pool.query(
-        `SELECT daily_cap AS base, COALESCE(bonus_balance, 0) AS bonus
-           FROM tbl_user
-          WHERE user_id = $1 AND is_deleted = FALSE`,
-        [userId]);
-    if (!r.rowCount) return null;
-    const base = r.rows[0].base;
-    if (base === null || base === undefined) return null;
-    const baseNum  = parseFloat(base);
-    const bonusNum = parseFloat(r.rows[0].bonus) || 0;
-    return { base: baseNum, bonus: bonusNum, effective: baseNum + bonusNum };
-}
-
-async function getProjectPool(projectId) {
-    if (!projectId) return 0;
-    const r = await pool.query(
-        `SELECT COALESCE(project_credits, 0)::numeric AS pool
-           FROM tbl_balance WHERE project_id = $1`,
-        [projectId]);
-    return r.rowCount ? parseFloat(r.rows[0].pool) : 0;
-}
-
-async function checkChatBudget(userId) {
-    // Returns { ok: true, pool, cap, projectId }  on success,
-    //   or   { ok: false, error, message, ... }   on block.
-    // Errors:
-    //   'project_pool_empty'  — pool ≤ 0 → admin must top up.
-    //   'daily_cap_exceeded'  — usage_today ≥ effective cap → wait/request more.
-    const u = await pool.query(
-        `SELECT project_id FROM tbl_user WHERE user_id=$1 AND is_deleted=FALSE`,
-        [userId]);
-    const projectId = u.rows[0]?.project_id || null;
-
-    const pool_ = await getProjectPool(projectId);
-    if (pool_ <= 0) {
-        return {
-            ok: false,
-            error: 'project_pool_empty',
-            message: '⛔ เครดิตโครงการหมด กรุณาติดต่อผู้ดูแลเติมเงิน',
-            projectPool: pool_,
-            projectId,
-        };
-    }
-
-    const cap = await getEffectiveDailyCap(userId);
-    if (cap !== null) {
-        const spent = await spentToday(userId);
-        if (spent >= cap.effective) {
-            return {
-                ok: false,
-                error: 'daily_cap_exceeded',
-                message: `⛔ คุณใช้ครบโควต้ารายวันแล้ว (฿${spent.toFixed(2)} / ฿${cap.effective.toFixed(2)}) — reset เที่ยงคืน หรือกด "ขอเพิ่มโควต้า"`,
-                spentToday:   spent,
-                dailyCap:     cap.base,
-                bonusBalance: cap.bonus,
-                effective:    cap.effective,
-                canRequestMore: true,
-                projectPool: pool_,
-                projectId,
-            };
-        }
-    }
-    return { ok: true, projectPool: pool_, cap, projectId };
-}
-
-// Phase 21 A1 — active pricing lookup for a model.
-// Returns the currently effective price row (input/cached/output) from
-// tbl_pricing. Falls back to caller-provided defaults if no row exists
-// (e.g. brand-new model not yet seeded). The fallback path also keeps
-// older / unit-test callers working when the migration hasn't been
-// applied yet. Cached: 30 s in-process map, plenty for a chat workload
-// while keeping latency stable when admin edits a price.
-const _pricingCache = new Map();   // model → { row, expiresAt }
-const PRICING_TTL_MS = 30 * 1000;
-async function getActivePricing(model, fallback = {}) {
-    const now = Date.now();
-    const c = _pricingCache.get(model);
-    if (c && c.expiresAt > now) return c.row;
-
-    let row = null;
-    try {
-        const r = await pool.query(
-            `SELECT input_price, cached_price, output_price
-             FROM tbl_pricing
-             WHERE model = $1
-               AND effective_from <= NOW()
-               AND (effective_to IS NULL OR effective_to > NOW())
-             ORDER BY effective_from DESC LIMIT 1`,
-            [model]);
-        row = r.rows[0] || null;
-    } catch (e) {
-        console.warn('[pricing] lookup failed for', model, '—', e.message);
-    }
-    const fallbackInput  = Number(fallback.inputRate  ?? 0.50);
-    const fallbackOutput = Number(fallback.outputRate ?? 1.50);
-    const active = {
-        inputPrice:  Number(row?.input_price  ?? fallbackInput),
-        cachedPrice: Number(row?.cached_price ?? fallbackInput * 0.5),
-        outputPrice: Number(row?.output_price ?? fallbackOutput),
-        fromDb: !!row,
-    };
-    _pricingCache.set(model, { row: active, expiresAt: now + PRICING_TTL_MS });
-    return active;
-}
 
 // GET /api/users/:id/daily-cap-status
 //   → { ok, dailyCap, spentToday, remaining, exhausted }
@@ -6134,7 +5683,7 @@ async function gracefulShutdown(signal) {
         }));
     }
     // Clear intervals (session janitor)
-    try { clearInterval(_sessionJanitor); } catch (_) {}
+    try { sessionStore.stopJanitor(); } catch (_) {}
     // Close DB pool
     try {
         await pool.end();
