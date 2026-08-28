@@ -593,3 +593,6 @@ const Auth = {
         return this.getProjects().find(p => p.id === id) || null;
     },
 };
+
+// ES module แล้ว — global ต้องขึ้น window เอง (HTML และไฟล์อื่นเรียกผ่านชื่อเปล่า)
+window.Auth = Auth;

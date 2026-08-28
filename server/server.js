@@ -209,7 +209,8 @@ app.get(['/login.html', '/admin.html', '/change-password.html', '/index.html'], 
     res.redirect(301, clean + query);
 });
 
-app.use(express.static(path.join(__dirname, '..'), {
+// HTML ห้าม cache เสมอ; ไฟล์อื่นใช้ค่า default (ตัว build ใส่ hash ในชื่อแล้ว)
+const STATIC_OPTS = {
     extensions: ['html'],
     setHeaders: function (res, filePath) {
         if (filePath.toLowerCase().endsWith('.html')) {
@@ -218,7 +219,15 @@ app.use(express.static(path.join(__dirname, '..'), {
             res.setHeader('Expires', '0');
         }
     },
-}));
+};
+// Phase 50: build แล้วเสิร์ฟ dist ก่อน — ของที่ไม่ได้ build (js/vendor, /assets รูป)
+// ตกลงมาที่ source tree ข้างล่าง; ยังไม่ build ก็ยังรันได้เพราะหน้าเป็น native ESM
+const DIST_DIR = path.join(__dirname, '..', 'dist');
+if (require('fs').existsSync(DIST_DIR)) {
+    app.use(express.static(DIST_DIR, STATIC_OPTS));
+    console.log('[static] dist/ (built) first, source tree as fallback');
+}
+app.use(express.static(path.join(__dirname, '..'), STATIC_OPTS));
 
 // ── Rate Limiting (per-user token bucket) ──────────────────
 // key by session token if present, otherwise by IP. Applied to expensive AI endpoints.

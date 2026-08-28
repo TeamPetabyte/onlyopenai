@@ -1,6 +1,5 @@
 // login.js — ลอกอิน (ย้ายมาจาก login.html)
 
-/* exported handleLogin */
 
         // เวอร์ชันที่ footer — source of truth คือ AppConfig.VERSION
         (function () {
@@ -92,3 +91,8 @@
         }
 
         // ช่องเริ่มว่าง — ปล่อยให้ browser autocomplete เสนอเอง
+
+// ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window
+Object.assign(window, {
+    handleLogin,
+});

@@ -259,3 +259,5 @@ const AIClient = {
     getMode() { return this._mode; },
     getModelName() { return this._modelName; },
 };
+
+window.AIClient = AIClient;

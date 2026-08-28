@@ -1,4 +1,4 @@
-﻿/**
+/**
  * admin.js — Admin Dashboard Logic for PetabyteAi
  * Features: User Management (add/edit/delete), Project Management, Rate Config, Activity Log
  */
@@ -4978,3 +4978,7 @@ var admin = {
   },
 
 };
+
+// onclick ใน admin.html และ HTML ที่ JS สร้าง เรียกผ่าน window
+window.admin = admin;
+window.hideModal = hideModal;

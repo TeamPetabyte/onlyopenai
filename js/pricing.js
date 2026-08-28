@@ -1124,3 +1124,5 @@ ENDIF.
     return '฿' + amount.toFixed(2);
   },
 };
+
+window.PRICING = PRICING;

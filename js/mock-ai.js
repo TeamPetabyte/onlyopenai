@@ -78,3 +78,5 @@ const MockAI = {
         return new Promise(resolve => setTimeout(resolve, ms));
     },
 };
+
+window.MockAI = MockAI;

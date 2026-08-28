@@ -5,16 +5,20 @@
   "description": "Dev tooling only. Runtime deps live in server/package.json.",
   "scripts": {
     "lint": "eslint .",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write",
     "format:check": "prettier --check .",
     "test": "npm --prefix server test",
-    "check": "npm run lint && npm test"
+    "check": "npm run lint && node scripts/check-globals.mjs && npm test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.9.1",
     "globals": "^17.11.0",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "vite": "^8.2.2"
   }
 }

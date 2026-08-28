@@ -400,3 +400,20 @@ sudo crontab -e
 
 ใช้เวลารวมประมาณ **30-60 นาที** สำหรับการ deploy ครั้งแรก
 ครั้งต่อๆ ไปแค่ `git pull && systemctl restart` ใช้เวลา ~30 วินาที
+
+## Phase 50 (ยังไม่ push): deploy ต้องมี build step
+
+ตั้งแต่ Phase 50 หน้าเว็บเป็น ES module + Vite. คำสั่ง deploy บนเครื่อง server
+เปลี่ยนจากเดิม **เพิ่มสองบรรทัดก่อน restart**:
+
+```powershell
+cd C:\petabyte\onlyopenai-master
+git fetch
+git reset --hard origin/master
+npm ci                # devDependencies ที่ root (vite/eslint) — ครั้งแรกหรือเมื่อ package.json เปลี่ยน
+npm run build         # สร้าง dist/ — express เสิร์ฟ dist ก่อน แล้วตกลงมาที่ source tree
+nssm restart PetabyteAi
+```
+
+ข้อกันพลาด: ถ้าลืม build — แอป **ยังทำงาน** เพราะหน้า source เป็น native ESM
+และ express fallback ไปที่ source tree ให้เอง แค่ไม่ได้ไฟล์ minify/hash เท่านั้น

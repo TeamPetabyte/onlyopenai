@@ -1,6 +1,5 @@
 // chat.js — หน้าแชททั้งหมด (ย้ายมาจาก index.html)
 
-/* exported autoResize, cancelDeleteChat, changePassword, clearSearch, closeOverlay, confirmDeleteChat, deleteSession, enterRenameMode, exportSession, handleFileSelect, handleInputKey, handleSessionKey, newChat, onEffortChange, onModelChange, onSearchInput, onSearchKey, onSendBtnClick, openChangePassword, openQuotaRequestModal, openUsage, overlayClick, toggleFavorite, toggleSidebar, toggleSidebarCollapsed, toggleTheme, toggleUserMenu */
 
         // ── STATE ──
         const State = {
@@ -1344,3 +1343,36 @@
             c.appendChild(t);
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2800);
         }
+
+// ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window
+Object.assign(window, {
+    loadSession,
+    removeFile,
+    autoResize,
+    cancelDeleteChat,
+    changePassword,
+    clearSearch,
+    closeOverlay,
+    confirmDeleteChat,
+    deleteSession,
+    enterRenameMode,
+    exportSession,
+    handleFileSelect,
+    handleInputKey,
+    handleSessionKey,
+    newChat,
+    onEffortChange,
+    onModelChange,
+    onSearchInput,
+    onSearchKey,
+    onSendBtnClick,
+    openChangePassword,
+    openQuotaRequestModal,
+    openUsage,
+    overlayClick,
+    toggleFavorite,
+    toggleSidebar,
+    toggleSidebarCollapsed,
+    toggleTheme,
+    toggleUserMenu,
+});

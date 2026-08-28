@@ -1,6 +1,5 @@
 // change-password.js — เปลี่ยนรหัส (ย้ายมาจาก change-password.html)
 
-/* exported handleChange, signOut, updateRules */
 
         // Guard: must be logged in to be here
         (function () {
@@ -63,3 +62,10 @@
         function signOut() {
             Auth.logout();    // also clears token + redirects to login.html
         }
+
+// ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window
+Object.assign(window, {
+    handleChange,
+    signOut,
+    updateRules,
+});

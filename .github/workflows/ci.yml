@@ -31,5 +31,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Global contract
+        run: node scripts/check-globals.mjs
+
       - name: Test
         run: npm test
+
+      - name: Build
+        run: npm run build

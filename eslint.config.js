@@ -51,13 +51,23 @@ module.exports = [
         },
     },
 
-    // Frontend: classic scripts sharing globals, not modules.
+    // Frontend: ES modules since Phase 50 (Vite) — cross-file names still ride
+    // on window, so the shared globals list stays.
     {
         files: ['js/**/*.js'],
         languageOptions: {
             ecmaVersion: 2023,
-            sourceType: 'script',
+            sourceType: 'module',
             globals: { ...globals.browser, ...SHARED_BROWSER_GLOBALS },
+        },
+    },
+    // Build tooling runs in node as ESM.
+    {
+        files: ['vite.config.mjs', 'scripts/**/*.mjs'],
+        languageOptions: {
+            ecmaVersion: 2023,
+            sourceType: 'module',
+            globals: { ...globals.node },
         },
     },
 
