@@ -1,0 +1,5 @@
+# Scoped to .githooks on purpose. core.autocrlf=true would check these out as
+# CRLF, and "#!/bin/sh\r" is not a valid interpreter on Linux or macOS.
+# Deliberately NOT repo-wide: the rest of the tree is CRLF on disk and a global
+# rule would renormalise all 19,405 lines in one commit.
+.githooks/** text eol=lf
