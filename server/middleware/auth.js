@@ -2,15 +2,8 @@
 
 module.exports = function createAuthMiddleware({ sessionStore }) {
 const { getSession, _extractToken, CSRF_HEADER } = sessionStore;
-// Phase 9: CSRF guard — applied to every state-changing request that
-// already has a session. GET/HEAD/OPTIONS are safe by spec.
-// Login is whitelisted (no session yet to compare against).
-// Reasoning for double-submit-only: with HttpOnly + SameSite=Strict the
-// auth cookie won't ride cross-site requests, so a CSRF attack would
-// have to come from same-site (e.g. an XSS) — at which point it can
-// also read the CSRF token from JS storage, defeating it. We keep the
-// header check anyway as defense-in-depth (Phase 39: the Bearer fallback
-// this also used to protect is gone — cookie is the only auth path).
+// CSRF double-submit บน method ที่เปลี่ยน state — cookie เป็น SameSite=Strict อยู่แล้ว นี่คือชั้นเสริม
+// login ยกเว้น (ยังไม่มี session ให้เทียบ)
 const CSRF_EXEMPT_PATHS = new Set([
     '/api/auth/login',     // no session yet
     '/api/health',         // public probe
@@ -28,9 +21,7 @@ async function csrfGuard(req, res, next) {
         if (!sess) return next(); // requireAuth will 401
         const headerCsrf = req.headers[CSRF_HEADER];
         if (!headerCsrf || headerCsrf !== sess.csrfToken) {
-            // Phase 19.7.2: keep a one-line note so a future stale-CSRF
-            // mismatch is at least visible in the server log (e.g. after
-            // a deploy that rotates session secrets). No header dump.
+            // log ไว้หนึ่งบรรทัด — CSRF ค้างหลัง deploy จะได้เห็นในบันทึก ไม่ dump header
             console.warn('[csrf] reject', req.method, req.path,
                 '— browser CSRF stale; user needs to logout/login');
             return res.status(403).json({ ok: false, error: 'CSRF token missing or invalid' });
@@ -44,11 +35,7 @@ async function csrfGuard(req, res, next) {
 // app.use(csrfGuard) is registered later — AFTER cors() + body parser —
 // so CORS headers ride along on the 403 reply.
 
-// Phase 8: When must_change_password=true the only endpoints that work
-// are the user changing their OWN password and logging out. Everything
-// else returns 423 with a hint so the client can redirect to /change-pw.
-// Path-based allowlist keeps the rule in one place rather than
-// sprinkling checks through every route.
+// must_change_password=true → ทำได้แค่เปลี่ยนรหัสตัวเอง/logout ที่เหลือ 423
 const PW_CHANGE_ALLOWED = [
     /^\/api\/users\/\d+\/password$/,    // PUT — self password change
     /^\/api\/logout$/,                   // POST — sign out
@@ -63,7 +50,7 @@ async function requireAdmin(req, res, next) {
     try {
         const sess = await getSession(token);
         if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        // Phase 30: trainer is a superadmin — people/money admin surfaces
+        // trainer is a superadmin — people/money admin surfaces
         // accept both roles. Training surfaces use requireTrainer instead.
         if (sess.role !== 'admin' && sess.role !== 'trainer') {
             return res.status(403).json({ ok: false, error: 'Admin access required' });
@@ -80,11 +67,7 @@ async function requireAdmin(req, res, next) {
     }
 }
 
-// Phase 30: training surfaces (Skill Prompts / Prompt Lab / Evals) are
-// trainer-ONLY. A plain admin gets 403 here by design: verdicts, corrected
-// answers and eval runs are the golden dataset — an admin mis-click must
-// not be able to corrupt it. (UI also hides these tabs, but this is the
-// actual gate.)
+// trainer เท่านั้น — verdict/เฉลย/eval คือ golden dataset, admin ธรรมดาห้ามแตะ (UI ซ่อนแท็บ แต่เกตจริงอยู่นี่)
 async function requireTrainer(req, res, next) {
     const token = _extractToken(req);
     if (!token) return res.status(401).json({ ok: false, error: 'Authentication required' });

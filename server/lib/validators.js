@@ -23,13 +23,7 @@ function validateAmount(value, { min = 0, max = Infinity, required = true } = {}
     return n;
 }
 
-// ── Role normalization ─────────────────────────────────────
-// DB stores tbl_user_role.role_des as 'admin' or 'general user'.
-// Frontend (Auth.check / requireRole) compares against literal role names.
-// Normalize at every response boundary so client & middleware never see raw
-// role_des values like 'general user'.
-// Phase 30: added 'trainer' (superadmin) — anything unknown still maps to
-// 'user' so a typo'd role can never gain privileges.
+// map role_des จาก DB เป็น 'admin'|'trainer'|'user' — ไม่รู้จัก = 'user' (typo ห้ามได้สิทธิ์เพิ่ม)
 function normalizeRole(roleDes) {
     const r = String(roleDes || '').toLowerCase().trim();
     if (r === 'admin')   return 'admin';

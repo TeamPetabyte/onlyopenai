@@ -13,6 +13,8 @@ const {
     safeError,
     spentToday,
 } = ctx;
+
+// flow: user ชน cap → POST ขอ → admin resolve; approve = bonus ของวันนี้ (Bangkok) ทำ cap ขยับ — pending ได้วันละหนึ่ง
 // POST /api/quota-requests   — user requests a temporary cap increase
 router.post('/api/quota-requests', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
@@ -57,9 +59,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
     }
 });
 
-// GET /api/quota-requests        — list (admin sees all, user sees own)
-//   ?status=pending|approved|denied   (default: all)
-//   ?limit=50
+// list: admin เห็นหมด user เห็นของตัวเอง — ?status ?limit
 router.get('/api/quota-requests', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
     const role = req.session?.role;

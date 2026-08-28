@@ -19,12 +19,7 @@ const {
 // GET /api/users — admin only (user list is sensitive). Phase 7: hide soft-deleted.
 router.get('/api/users', requireAdmin, async (req, res) => {
     try {
-        // Phase 16.10: auto-lock from failed-login attempts only flips
-        // `locked_until` — it doesn't change `acc_status_id`. To keep the
-        // admin UI honest we expose an `effective_status` derived from BOTH
-        // columns: if locked_until is in the future, the user IS effectively
-        // locked regardless of their admin-set status. The raw acc_status is
-        // still returned so the Edit User modal can show the underlying state.
+        // effective_status รวม acc_status_id กับ locked_until — auto-lock ไม่ได้แตะ acc_status
         const r = await pool.query(`
             SELECT u.user_id AS id, u.username, u.name, u.surname,
                    (u.name || ' ' || u.surname) AS display_name,
@@ -87,11 +82,7 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
                        || req.body.dailyCap === '')
         ? null : Number(req.body.dailyCap);
 
-    // Phase 30: privilege-escalation guard — only a trainer (superadmin) can
-    // mint admin accounts; a plain admin creates regular users only.
-    // Phase 30.3: 'trainer' can NOT be created via the API at all (the
-    // schema's roleEnum already rejects it) — superadmins are provisioned
-    // manually when needed.
+    // เฉพาะ trainer สร้าง admin ได้; role 'trainer' สร้างผ่าน API ไม่ได้เลย
     const ROLE_IDS = { admin: 1, user: 2 };
     const roleId = ROLE_IDS[role] || 2;
     if (roleId !== 2 && req.session.role !== 'trainer') {
@@ -99,28 +90,20 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
     }
     const [name, ...rest] = (displayName || req.body.name || username).split(' ');
     const surname = req.body.surname || rest.join(' ') || '';
-    // Phase 30.2: staff accounts (admin/trainer) are not project-bound and
-    // never chat — no project, no daily cap, no credits row (same shape as
-    // the seeded admin account). Chat users keep the old defaults.
+    // staff (admin/trainer) ไม่ผูก project ไม่มี cap/credits
     const isStaff = roleId !== 2;
     const projId     = isStaff ? null : (projectId || 'proj_sap_dev');
     const effDailyCap = isStaff ? null : dailyCap;
     try {
         const hash = await bcrypt.hash(password, 10);
-        // Phase 8: any password an admin chose for a USER is "temporary" —
-        // force the user to set their own on first login.
-        // Phase 30.1: staff accounts (admin/trainer) are exempt — only a
-        // trainer can create them and the password is chosen deliberately,
-        // so they can log in with it right away (per winn's request).
+        // รหัสที่ admin ตั้งให้ user = ชั่วคราว บังคับเปลี่ยนตอน login แรก; staff ยกเว้น
         const mustChangePw = roleId === 2;
         const r = await pool.query(`
             INSERT INTO tbl_user (project_id, role_id, username, password, name, surname, created_date, acc_status_id, must_change_password, daily_cap)
             VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,1,$7,$8) RETURNING user_id`,
             [projId, roleId, username, hash, name, surname, mustChangePw, effDailyCap]);
         const userId = r.rows[0].user_id;
-        // Keep a (legacy) tbl_credits row at 0 — not used for billing under
-        // Concept B, but some joins still expect one row per user. Staff
-        // accounts have no project → no credits row either.
+        // คง tbl_credits ไว้ที่ 0 — Concept B ไม่ใช้แล้ว แต่บาง join ยังคาดหวังแถว
         if (projId) {
             await pool.query(`INSERT INTO tbl_credits (user_id, project_id, user_credits) VALUES ($1,$2,0)
                 ON CONFLICT (user_id) DO NOTHING`,
@@ -141,10 +124,7 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
 
 // PUT /api/users/:id  — edit user
 router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (req, res) => {
-    // Phase 14.2 fix — PARTIAL update. Previously this route rewrote every
-    // column with defaults when a field was missing (e.g. sending just
-    // {projectId:null} would blank out name/surname/role). Now we only touch
-    // columns whose keys actually appear in req.body.
+    // PARTIAL update — แตะเฉพาะ key ที่มากับ body (เคยเขียนทับทุกคอลัมน์ด้วย default)
     const b = req.body;
     const has = k => Object.prototype.hasOwnProperty.call(b, k);
 
@@ -167,9 +147,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         if (pwErr) return res.json({ ok: false, error: pwErr });
     }
 
-    // Phase 30: same escalation guard as createUser — only a trainer can
-    // grant the admin role via update. Phase 30.3: 'trainer' is not
-    // assignable through the API at all (schema roleEnum rejects it).
+    // เกตเดียวกับ createUser — เฉพาะ trainer มอบ role admin ได้
     const UPD_ROLE_IDS = { admin: 1, user: 2 };
     const roleId = has('role') ? (UPD_ROLE_IDS[b.role] || 2) : undefined;
     if (roleId !== undefined && roleId !== 2 && req.session.role !== 'trainer') {
@@ -203,10 +181,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         if (projValue   !== undefined) addSet('project_id',    projValue);
         if (accStatusId !== undefined) {
             addSet('acc_status_id', accStatusId);
-            // Phase 16.10: switching the account back to active also clears
-            // auto-lock state (locked_until + failed_attempts). Without this,
-            // an admin who flips the badge from "Locked" → "Active" would still
-            // see Locked because `locked_until > NOW()` overrides acc_status.
+            // กลับเป็น active ต้องล้าง locked_until/failed_attempts ไม่งั้น badge ค้างที่ Locked
             if (accStatusId === 1) {
                 addSet('locked_until',    null);
                 addSet('failed_attempts', 0);
@@ -215,7 +190,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         if (b.password) {
             const hash = await bcrypt.hash(b.password, 10);
             addSet('password', hash);
-            // Phase 8: force the target user to pick their own pw next login,
+            // force the target user to pick their own pw next login,
             // unless admin is editing their own row (avoids self-lockout).
             const flipFlag = req.session.userId !== parseInt(req.params.id, 10);
             addSet('must_change_password', flipFlag);
@@ -229,9 +204,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         }
 
         if (balanceNum !== undefined && balanceNum !== null) {
-            // Use the project_id the user will have AFTER this update (projValue
-            // if provided, else the current value from `before`) so the credits
-            // row doesn't orphan to a stale project.
+            // ใช้ project_id หลังอัปเดต — กัน credits ไปเกาะ project เก่า
             const credProjId = (projValue !== undefined ? projValue : before.project_id) || 'proj_sap_dev';
             await pool.query(`INSERT INTO tbl_credits (user_id, project_id, user_credits) VALUES ($1,$2,$3)
                 ON CONFLICT (user_id) DO UPDATE SET user_credits=$3`,
@@ -271,22 +244,19 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
 });
 
 // PUT /api/users/:id/password  — change own password (auth + self-only)
-// Phase 6.1: lets non-admin users change their own password without admin rights.
+// lets non-admin users change their own password without admin rights.
 router.put('/api/users/:id/password', requireAuth, validate(schemas.changePassword), async (req, res) => {
     const targetId = parseInt(req.params.id);
     if (req.session.userId !== targetId && req.session.role !== 'admin') {
         return res.status(403).json({ ok: false, error: 'Can only change own password' });
     }
     const { password } = req.body;
-    // Phase 7: stronger password policy applied here too
+    // stronger password policy applied here too
     const pwErr = validatePasswordStrength(password);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
     try {
         const hash = await bcrypt.hash(password, 10);
-        // Phase 8: when the user changes THEIR OWN password, clear the
-        // must_change_password flag — they've now chosen their own.
-        // When an admin resets someone else's password through this route,
-        // keep must_change_password as-is (so the target still gets prompted).
+        // เปลี่ยนรหัสตัวเอง = ล้าง must_change_password; admin reset ให้คนอื่น = คงไว้
         const isSelf = req.session.userId === targetId;
         const r = await pool.query(
             `UPDATE tbl_user
@@ -295,9 +265,7 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
               WHERE user_id = $2 AND is_deleted = FALSE`,
             [hash, targetId, isSelf]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'User not found' });
-        // Phase 14: record every password change — self or admin-reset.
-        // Never log the hash or plaintext; REDACT_KEYS strips these
-        // defensively, but we don't include them here either.
+        // บันทึกทุกการเปลี่ยนรหัส — ห้ามมี hash/plaintext ใน log
         logAdminAction(req, {
             action: isSelf ? 'change_own_password' : 'admin_reset_password',
             targetType: 'user',
@@ -308,21 +276,8 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// PUT /api/users/:id/balance  — set user's credit allocation.
-//
-// Phase 16.11: DELTA model.
-//   Setting a user's credit moves money between the project pool and the
-//   user's wallet. delta = newCredit - oldCredit:
-//     delta > 0  ── allocate FROM project pool TO user      (decreases tbl_balance)
-//     delta < 0  ── return     FROM user      TO project    (increases tbl_balance)
-//     delta = 0  ── no-op (still returns ok)
-//
-// Rejects (HTTP 200, ok:false, code:'INSUFFICIENT_POOL') when the project
-// pool can't cover an increase. We never auto-cap — money operations
-// must be explicit. The frontend renders this as a custom modal.
-//
-// Wrapped in a transaction with SELECT … FOR UPDATE on both rows so two
-// admins editing concurrently can't double-spend the pool.
+// PUT /api/users/:id/balance — DELTA: ย้ายเงิน pool ↔ wallet ใน tx เดียว + FOR UPDATE กัน admin สองคนแย่ง
+// pool ไม่พอ → ok:false INSUFFICIENT_POOL — ไม่ auto-cap เพราะเรื่องเงินต้อง explicit
 router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance), async (req, res) => {
     const balanceNum = parseFloat(req.body.balance);
     if (isNaN(balanceNum) || balanceNum < 0) {
@@ -332,11 +287,7 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
     try {
         await client.query('BEGIN');
 
-        // Lock the user row only. Postgres rejects `FOR UPDATE` on the
-        // nullable side of an outer join (tbl_credits may have no row for
-        // a user that's never had credit set), so we restrict the lock to
-        // `u`. The upsert on tbl_credits below will acquire its own row
-        // lock implicitly when it runs.
+        // ล็อกเฉพาะแถว user — FOR UPDATE ฝั่ง nullable ของ outer join ไม่ได้; upsert ล็อกของมันเอง
         const u = await client.query(
             `SELECT u.user_id, u.project_id, COALESCE(cr.user_credits, 0) AS user_credits
                FROM tbl_user u
@@ -383,10 +334,7 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
             ON CONFLICT (user_id) DO UPDATE SET user_credits = EXCLUDED.user_credits`,
             [req.params.id, projId, balanceNum]);
 
-        // Phase 21.5 — log every admin balance change as a transaction.
-        // Inside the same BEGIN/COMMIT block so the log + balance change
-        // land together (or roll back together). delta > 0 → 'topup',
-        // delta < 0 → 'adjustment' (admin reducing credit, e.g. correction).
+        // log ธุรกรรมใน tx เดียวกัน — delta>0 topup, delta<0 adjustment
         if (delta !== 0) {
             const txType = delta > 0 ? 'topup' : 'adjustment';
             await client.query(`
@@ -447,19 +395,10 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
     }
 });
 
-// GET /api/credits — Phase 16.11
-// Combined view used by the Credit Management table:
-//   { username, displayName, projectId, projectName,
-//     projectBalance, userCredits, dailyCap }
-// One row per non-admin, non-deleted user. The project balance is duplicated
-// across users in the same project — that's intentional; the UI needs
-// per-row context so we don't N+1 client-side.
+// GET /api/credits — ตารางรวมต่อ user; projectBalance ซ้ำข้ามแถวโดยตั้งใจ กัน N+1 ฝั่ง UI
 router.get('/api/credits', requireAdmin, async (req, res) => {
     try {
-        // Phase 21.10 (Concept B): also return today's spend + today's
-        // cap bonus so the Cap Management page can show real-time
-        // "used today / effective cap" per user. Both are scoped to the
-        // Asia/Bangkok calendar day so they reset at local midnight.
+        // แถม spend วันนี้ + bonus (วันแบบ Asia/Bangkok) ให้หน้า Cap Management
         const r = await pool.query(`
             SELECT u.user_id                                      AS "userId",
                    u.username,
@@ -499,11 +438,7 @@ router.get('/api/credits', requireAdmin, async (req, res) => {
     }
 });
 
-// ── Phase 11 B3: daily spending cap ────────────────────────
-// PUT /api/users/:id/daily-cap  { dailyCap: number | null }
-//   number: hard ceiling in ฿/day; once today's spend reaches it the
-//           next /api/chat returns 402 instead of calling OpenAI.
-//   null:   no cap (default).
+// PUT daily-cap: number = เพดาน ฿/วัน (ชนแล้ว /api/chat ตอบ 402), null = ไม่จำกัด
 router.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap), async (req, res) => {
     const cap = req.body.dailyCap;
     const capVal = (cap === undefined || cap === null) ? null : cap;
@@ -532,9 +467,7 @@ router.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap),
 });
 
 
-// GET /api/users/:id/daily-cap-status
-//   → { ok, dailyCap, spentToday, remaining, exhausted }
-// User can check their own; admin can check anyone.
+// GET daily-cap-status — ดูของตัวเองได้, admin ดูได้ทุกคน
 router.get('/api/users/:id/daily-cap-status', requireAuth, async (req, res) => {
     const uid = parseInt(req.params.id, 10);
     if (!Number.isFinite(uid)) return res.status(400).json({ ok: false, error: 'bad id' });
@@ -554,9 +487,7 @@ router.get('/api/users/:id/daily-cap-status', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// DELETE /api/users/:id  — Phase 7: soft-delete + kill all sessions
-// We keep the row for audit; user can no longer log in (login query has
-// is_deleted=FALSE filter) and any active tokens are revoked immediately.
+// soft-delete + revoke ทุก session — เก็บแถวไว้ audit, login กรอง is_deleted อยู่แล้ว
 router.delete('/api/users/:id', requireAdmin, async (req, res) => {
     const targetId = parseInt(req.params.id);
     if (!Number.isInteger(targetId)) return res.json({ ok: false, error: 'Invalid user id' });
@@ -587,9 +518,6 @@ router.delete('/api/users/:id', requireAdmin, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// ══════════════════════════════════════════════════════════
-//  PROJECTS
-// ══════════════════════════════════════════════════════════
 
 
 return router;

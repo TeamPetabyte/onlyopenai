@@ -10,57 +10,16 @@ function isSkillPlaceholder(content) {
 }
 
 
-// ══════════════════════════════════════════════════════════
-//  SKILL ROUTER — picks a system prompt from the tbl_prompt catalog
-// ══════════════════════════════════════════════════════════
+// ── SKILL ROUTER — เลือก system prompt จาก catalog (tbl_prompt) ──
 
-// Phase 18: picks a skill from the DB-backed catalog (skill-prompts.js).
-// Phase 31: this is now the ONLY router — the old hardcoded
-// INTENT_SKILL_MAP/detectIntent() classifier was removed.
-//
-// Phase 40 rewrite. The router was answering "none" for the request people
-// actually type ("ช่วยรีวิวโค้ดนี้ให้หน่อย" + a paste), so the Prompt Lab
-// prompts looked like they were never used unless the tester named the check
-// out loud. Four things caused it, all fixed here:
-//   1. the prompt ORDERED it to return "none" for anything generic, while the
-//      catalog carries a catch-all skill meant for exactly those requests;
-//   2. it only saw the first 800 chars — on a paste that is the header comment
-//      and the DATA block, and an instruction typed after the code was lost;
-//   3. the 0.7 cut-off, against six deliberately-overlapping checks the model
-//      hedges between (0.5-0.6 is its honest answer, not a bad one);
-//   4. a pick that turned out to be a placeholder was dropped with no
-//      second-best, so a half-finished prompt meant NO prompt.
-//
-// Behaviour now
-// ─────────────
-//   - A bare code paste is decided from the code itself — no LLM call at all.
-//   - Otherwise gpt-4o-mini picks from the catalog, seeing a head+tail window
-//     of the message plus the last two conversation turns.
-//   - "none"/low-confidence/unusable picks fall through to the code shape,
-//     then to the catch-all skill. Only a message that is genuinely not about
-//     ABAP/SAP ends with no skill injected.
-//   - Returns { skillId, label, confidence, reason, content, source }.
-//     `source` is 'llm' | 'code-shape' | 'catch-all' | 'none' — it rides the
-//     `routed` SSE event so the chat UI can show WHY, not just WHAT.
+// ลำดับตัดสิน: paste เปล่า ๆ ตัดสินจากโค้ด (ไม่เรียก LLM) → gpt-4o-mini เลือกจาก catalog (เห็นหัว+ท้าย
+// ของข้อความ + 2 turn ล่าสุด) → ต่ำ/ใช้ไม่ได้ตกไป code-shape แล้ว catch-all — จะไม่มี skill ก็ต่อเมื่อ
+// ไม่ใช่เรื่อง ABAP จริง ๆ; source (llm/code-shape/catch-all) ติดไปกับ event ให้ UI บอกที่มา
 
-// ── Phase 40: code-shape rules ────────────────────────────────
-// Which focused check a piece of ABAP obviously calls for, judged from the
-// CODE rather than from what the user typed. Consulted only where there is no
-// competing user intent to misread:
-//   • a bare paste with essentially no prose → decided here, LLM call skipped;
-//   • after the LLM returned nothing, or settled for the catch-all → upgraded.
-// It never overrides a confident LLM pick, so "generate a unit test for this"
-// can't be hijacked into "cleanup commented code" by the shape of the code.
-// Phase 46: the rules moved to lib/abap-scan.js. These two wrappers keep the
-// registry check that used to live inside them — the rules match text, the
-// catalog decides which of those matched skills actually exist.
+// กติกา code-shape อยู่ lib/abap-scan — สองตัวนี้แค่เช็คกับ catalog ว่า skill มีจริงและไม่ใช่ placeholder
+// ใช้เฉพาะที่ไม่มีเจตนา user ให้ตีความผิด — ไม่ override pick มั่นใจของ LLM
 function pickSkillFromCodeShape(text) {
-    // Filter FIRST, then require exactly one — the order the pre-v1.11.4 code
-    // used. v1.11.4 swapped it and the commit claimed the filtering was
-    // unchanged, which was wrong: with two rules firing where one names a
-    // placeholder skill, the old code dropped the placeholder and picked the
-    // survivor, and the new code saw "two hits" and gave up. The equivalence
-    // test missed it because every skill in the test catalog was real.
+    // filter ก่อนแล้วค่อยเช็คเหลือหนึ่ง — v1.11.4 สลับลำดับแล้วเคสมี placeholder แตก (v1.11.6 แก้กลับ)
     const hits = abapScan.ROUTER_CODE_RULES
         .filter(r => { try { return r.test(text); } catch (_) { return false; } })
         .map(r => r.id)
@@ -77,7 +36,7 @@ function skillsForCode(text) {
     });
 }
 
-// Phase 46: supportingKnowledgeBlock moved to lib/prompt.js. The registry is
+// supportingKnowledgeBlock moved to lib/prompt.js. The registry is
 // passed in rather than reached for, so the builder is testable without a DB.
 const MAX_SUPPORTING_SKILLS   = promptLib.MAX_SUPPORTING_SKILLS;
 const supportingKnowledgeBlock = (ids) => promptLib.supportingKnowledgeBlock(ids, skillPrompts);
@@ -119,12 +78,7 @@ async function pickSkillFromCatalog(userMessage, oai, history) {
 
     const fullText = String(userMessage || '');
 
-    // ── Fast path: a bare code paste with (almost) no words ───────
-    // There is no instruction to contradict, so the code decides and the
-    // gpt-4o-mini round trip is skipped entirely.
-    // A LITERALLY bare paste — not "short prose". If the user typed anything at
-    // all we ask the LLM, because the words outrank the code's shape ("generate
-    // a unit test for this" must not become "cleanup commented code").
+    // fast path เฉพาะ paste ที่ไม่มีคำพูดเลย — พิมพ์อะไรมาด้วยให้ LLM เพราะคำพูดชนะรูปโค้ด
     if (looksLikeAbapCode(fullText) && proseOf(fullText) === '') {
         const shapeId = pickSkillFromCodeShape(fullText);
         const s = shapeId && skillPrompts.getSkill(shapeId);
@@ -157,7 +111,7 @@ ${hasCatchAll ? `  - If the message IS about ABAP/SAP development but no focused
 
 Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one short sentence>"}`;
 
-    // Phase 40: a follow-up ("แก้ตรงนี้ให้หน่อย") carries no signal of its own —
+    // a follow-up ("แก้ตรงนี้ให้หน่อย") carries no signal of its own —
     // without the previous turns the router could only ever answer "none" to it.
     const recent = (history || []).slice(-ROUTER_HISTORY_TURNS)
         .map(m => `[${m.role}] ${String(m.content || '').slice(0, 800)}`)
@@ -165,12 +119,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
 
     try {
         const client = oai || openai;
-        // safeChatCompletion handles the 401-fallback to global, but we don't
-        // have the userId here — pass undefined so it just rethrows instead
-        // (caller's outer try/catch in /api/chat will catch it).
-        // Phase 19.3: force JSON output. gpt-4o-mini occasionally wraps its
-        // answer in prose ("Sure! Here's the JSON: ...") which then breaks
-        // JSON.parse and we'd silently miss-classify the request.
+        // ไม่มี userId ตรงนี้เลยไม่ใช้ fallback หรู ๆ — throw ให้ /api/chat จับ; response_format บังคับ JSON กัน parse พัง
         const messages = [{ role: 'system', content: sys }];
         if (recent) {
             messages.push({ role: 'user', content:
@@ -215,9 +164,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
             }
         }
 
-        // ── Code-shape upgrade / rescue ───────────────────────────
-        // The LLM gave us nothing, or settled for the catch-all. Let the code
-        // itself name a focused check when it points at exactly one.
+        // LLM ว่าง/ได้ catch-all → ให้โค้ดชี้ check เฉพาะทางเมื่อชี้ได้ตัวเดียว
         if (!skill || skill.id === catchAllId) {
             const shapeId = pickSkillFromCodeShape(fullText);
             if (shapeId && shapeId !== (skill && skill.id)) {
@@ -238,11 +185,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
             return _skillResult(skill, { confidence: conf, reason, source: 'llm' });
         }
 
-        // ── Catch-all ─────────────────────────────────────────────
-        // Trust an explicit "none" only when the message really doesn't look
-        // like ABAP work. Otherwise use the catch-all rather than answering
-        // with no skill at all — that silent gap is what made the Prompt Lab
-        // prompts look like they were never wired up.
+        // เชื่อ "none" เฉพาะข้อความที่ไม่ใช่ ABAP จริง ๆ — นอกนั้น catch-all กันช่องว่างเงียบ
         const offTopic = (id === 'none') && !looksLikeAbapCode(fullText);
         if (!offTopic) {
             const fallback = skillPrompts.getCatchAllSkill();

@@ -71,24 +71,8 @@ router.get('/api/cost-by-day', requireAdmin, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// ══════════════════════════════════════════════════════════
-//  USAGE HISTORY
-// ══════════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════
-//  TRANSACTION JOURNAL (Phase 21.5)
-// ══════════════════════════════════════════════════════════
-// GET /api/transactions
-//   ?projectId=  filter by project (optional — admin only)
-//   ?from=YYYY-MM-DD  inclusive start (default: today - 7 days for day mode)
-//   ?to=YYYY-MM-DD    inclusive end   (default: today)
-//   ?groupBy=day|month  default 'day'
-//   ?limit=  cap rows (default 200, max 1000)
-//
-// Reads through v_user_credit_transaction so the JOINs to user/project
-// already include display_name + project_name. day mode returns rows
-// 1:1 with the underlying journal; month mode aggregates per
-// (month, user, type).
+// GET /api/transactions ?projectId ?from ?to ?groupBy=day|month ?limit — อ่านผ่าน view; month รวมต่อ (เดือน,user,type)
 router.get('/api/transactions', requireAdmin, async (req, res) => {
     const groupBy = (req.query.groupBy === 'month') ? 'month' : 'day';
     const limit   = Math.min(Math.max(parseInt(req.query.limit) || 200, 1), 1000);
@@ -112,11 +96,7 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
         projWhere = ` AND project_id = $${params.length}`;
     }
 
-    // Hide smoke/throwaway test users by default. Pass ?includeTest=1
-    // to bring them back (for debugging only).
-    // Patterns matched (anchored prefixes, case-insensitive):
-    //   smoke_*, p7_victim_*, delme_*, fix_*, om_*, pm_*, pm2_*,
-    //   test1, test2, testuser, testuser2
+    // ซ่อน user ทดสอบ (smoke_*, test* ฯลฯ) — ?includeTest=1 เอากลับมา
     let testWhere = '';
     if (req.query.includeTest !== '1') {
         testWhere = `
@@ -197,11 +177,7 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
     }
 });
 
-// GET /api/transactions/export?format=csv|xlsx&groupBy=day|month&from=&to=&projectId=
-// Phase 21.7 — Download the same dataset shown in "Transaction by Date" as
-// a CSV or Excel file. Reuses the v_user_credit_transaction view and the
-// same test-user filter as /api/transactions so the export matches what
-// the admin sees on screen.
+// export CSV/XLSX ชุดเดียวกับ /api/transactions filter เดียวกัน — ไฟล์ตรงกับที่เห็นบนจอ
 router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async (req, res) => {
     const format  = (req.query.format === 'xlsx') ? 'xlsx' : 'csv';
     const groupBy = (req.query.groupBy === 'month') ? 'month' : 'day';
@@ -373,16 +349,6 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
     }
 });
 
-// ════════════════════════════════════════════════════════════
-// Phase 21.10 — Quota request workflow (Concept B)
-// ════════════════════════════════════════════════════════════
-// Flow:
-//   user hits daily cap → POST /api/quota-requests (creates pending row)
-//   admin sees the list → POST /api/quota-requests/:id/resolve {action:'approve'|'deny'}
-//   approve  → INSERT tbl_daily_cap_bonus for TODAY (Bangkok) → effective cap rises
-//   deny     → just updates status; cap unchanged
-// One pending request per (user, today). Re-asking on the same day after a
-// deny is allowed (creates a new request).
 
 
 return router;

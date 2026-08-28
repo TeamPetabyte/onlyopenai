@@ -8,6 +8,8 @@ const {
     requireAuth,
     safeError,
 } = ctx;
+
+// ทุก endpoint ยึด owner จาก req.session.userId เท่านั้น — ไม่เชื่อ userId จาก query/body (กัน IDOR)
 /**
  * Verify the caller owns this session. Returns the row or sends a
  * response and returns null.  Note: sessions that are soft-deleted
@@ -40,11 +42,7 @@ async function loadOwnedSession(req, res, sessionId) {
     return row;
 }
 
-// GET /api/chat/sessions
-//  list the caller's own sessions, most recent first, soft-deleted hidden.
-//  Optional ?q= filter — matches session title OR any message content
-//  via ILIKE (case-insensitive, %-wrapped). The match is escaped so
-//  user-supplied % / _ behave as literals, not wildcards.
+// list ของตัวเองเท่านั้น; ?q ILIKE ที่ escape % _ แล้ว
 router.get('/api/chat/sessions', requireAuth, async (req, res) => {
     const uid = req.session.userId;
     // Clamp to 80 chars — anything longer is almost certainly not a real
@@ -68,7 +66,7 @@ router.get('/api/chat/sessions', requireAuth, async (req, res) => {
                  ORDER BY s.is_favorite DESC, s.updated_at DESC
                  LIMIT 100`,
                 [uid, pat]);
-            // Phase 19.7: snake_case → camelCase for the frontend.
+            // snake_case → camelCase for the frontend.
             const rows = r.rows.map(r => ({
                 id: r.id, title: r.title,
                 message_count: r.message_count, total_cost: r.total_cost,
@@ -140,12 +138,7 @@ router.post('/api/chat/sessions', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// PATCH /api/chat/sessions/:id   body: { title? , favorite? }
-//   Phase 19.7: now also accepts { favorite: bool } for star/unstar.
-//   At least one of title / favorite must be provided.
-//   Title change bumps updated_at; favorite toggle does NOT (we don't
-//   want starring an old chat to make it jump to the top of the date
-//   buckets — the favorite group is the "top" already).
+// PATCH {title?, favorite?} — favorite ไม่ bump updated_at กันแชทเก่าเด้งขึ้น bucket วันที่
 router.patch('/api/chat/sessions/:id', requireAuth, async (req, res) => {
     const sess = await loadOwnedSession(req, res, req.params.id);
     if (!sess) return;
@@ -219,9 +212,6 @@ router.get('/api/chat/sessions/:id/export', requireAuth, async (req, res) => {
 });
 
 
-// ══════════════════════════════════════════════════════════
-//  PHASE 3: KNOWLEDGE BASE ENDPOINTS
-// ══════════════════════════════════════════════════════════
 
 
 return router;

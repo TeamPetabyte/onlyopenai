@@ -29,9 +29,7 @@ Do NOT reward verbosity. Judge technical substance only.
 Reply with ONLY one JSON object, no markdown, no commentary:
 {"issues":n,"fix":n,"overall":n,"pass":true|false,"reason":"<one short sentence>"}`;
 
-// Ask the judge model and parse its JSON verdict. Reuses runSkillPromptOnce
-// (dual-path routing) — the judge system prompt has no {code} placeholder so
-// it passes through untouched.
+// judge ใช้ runSkillPromptOnce เส้นทางเดียวกับ Lab — prompt judge ไม่มี {code} เลยผ่านเฉย ๆ
 async function judgeEvalAnswer({ userId, question, expected, candidate, judgeModel, judgeEffort }) {
     const payload =
         'QUESTION:\n' + question +
@@ -123,12 +121,7 @@ async function executeEvalRun(runId, { userId, skillContent, model, effort, judg
 // POST /api/evals — start an exam. Body: { skill, model, effort, judgeModel, judgeEffort }.
 router.post('/api/evals', requireTrainer, expensiveRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
-    // v1.7.3: claim the single-run slot SYNCHRONOUSLY, right after the check,
-    // before any `await`. Otherwise two near-simultaneous requests (double
-    // click / two tabs) both pass the check while EVAL_ACTIVE is still false
-    // and both start a run (TOCTOU). Every early-return below that hasn't
-    // handed off to executeEvalRun must release the slot again; the runner's
-    // own `finally` releases it on normal completion.
+    // จอง slot แบบ sync ก่อน await ใด ๆ — กัน TOCTOU จาก double-click; ทุก early-return ต้องคืน slot
     if (EVAL_ACTIVE) return res.status(409).json({ ok: false, error: 'มี eval กำลังรันอยู่ — รอให้จบก่อน' });
     EVAL_ACTIVE = true;
 

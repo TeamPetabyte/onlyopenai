@@ -19,9 +19,7 @@ const {
 } = ctx;
 router.get('/api/skills', requireTrainer, (req, res) => {
     try {
-        // Strip the full `content` field — could be many KB; admin UI list
-        // only needs name/description/preview. Detail view (future) can
-        // call a per-skill endpoint if needed.
+        // ตัด content เต็มออกจาก list — หน้า admin ใช้แค่ name/description/preview
         const status = skillPrompts.getStatus();
         const skills = skillPrompts.getSkills().map(s => ({
             id:             s.id,
@@ -65,10 +63,7 @@ router.get('/api/skills/:id', requireTrainer, (req, res) => {
     }
 });
 
-// POST /api/skills — create or update a skill (Phase 22 prompt management).
-// Body: { id, label, description, content, openaiPromptId }. Writes
-// skill-prompts.json atomically and hot-reloads the registry so the chat
-// router uses the new prompt immediately.
+// POST /api/skills — เขียน atomic + hot-reload ให้ router ใช้ทันที
 router.post('/api/skills', requireTrainer, async (req, res) => {
     try {
         const body = req.body || {};
@@ -112,21 +107,14 @@ router.delete('/api/skills/:id', requireTrainer, async (req, res) => {
 });
 
 
-// POST /api/skills/:id/test — admin-only QA sandbox: run a test prompt
-// against a skill's system prompt without touching the chat budget gate or
-// persisting a tbl_chat_session row. Non-streaming (one-shot QA check, not
-// a live chat UX). Supports a short tool-calling loop since some skills
-// (find_bapi, lookup_auth_object, etc.) only produce a meaningful answer
-// via tool results.
+// POST /api/skills/:id/test — sandbox: ไม่ผ่าน budget gate ไม่เขียน session; มี tool loop สั้น
 router.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async (req, res) => {
     if (!HAS_API_KEY) return res.json({ ok: false, error: 'No API key configured' });
 
     const prompt = String(req.body?.prompt || '').trim();
     if (!prompt) return res.status(400).json({ ok: false, error: 'prompt required' });
 
-    // Phase 37: id "auto" — the same catalog router live chat uses picks the
-    // skill, so seniors don't have to know which prompt fits their question.
-    // The run is logged under the DETECTED skill, so history shows the match.
+    // id "auto" = ใช้ router ตัวเดียวกับแชทจริง; log ใต้ skill ที่ตรวจพบ
     let skill = null, routed = null;
     if (req.params.id === 'auto') {
         const pick = await pickSkillFromCatalog(prompt, openai);
@@ -144,7 +132,7 @@ router.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async 
     }
 
     try {
-        // Phase 34: model + effort from the request (validated allowlist).
+        // model + effort from the request (validated allowlist).
         const { answer, inputTokens, outputTokens, model: reqModel, effort: reqEffort } =
             await runSkillPromptOnce({
                 userId: req.session.userId,
@@ -160,9 +148,7 @@ router.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async 
             extra: { skillId: skill.id, model: reqModel, effort: reqEffort, promptPreview: prompt.slice(0, 100), inputTokens, outputTokens },
         });
 
-        // Phase 28: persist the full question+answer so a senior can judge it
-        // later (verdict + corrected answer → golden dataset). A failed insert
-        // must NOT fail the test itself — the answer is still useful on screen.
+        // เก็บคำถาม+คำตอบให้ senior ตัดสินทีหลัง — insert พังต้องไม่ทำให้เทสต์พัง
         let logId = null;
         try {
             const ins = await pool.query(
@@ -188,12 +174,7 @@ router.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async 
     }
 });
 
-// ── Phase 28: skill test log — verdict + history ──────────────────────────
-// The senior-dev training loop: every /api/skills/:id/test run is persisted
-// to tbl_skill_test_log; these endpoints let an admin judge answers
-// (correct/partial/incorrect + corrected answer) and browse the history.
-// NOTE: path is /api/skill-test-logs (NOT /api/skills/test-logs) so it can't
-// collide with the GET /api/skills/:id param route above.
+// path เป็น /api/skill-test-logs กันชนกับ GET /api/skills/:id
 
 
 return router;

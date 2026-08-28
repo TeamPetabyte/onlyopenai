@@ -2,37 +2,9 @@
 
 module.exports = function createUsageSync(ctx) {
 const { pool, openaiAdmin, logger } = ctx;
-// ── Phase 11 B4: /api/cost-by-day ───────────────────────────
-// Day-level spend aggregate over tbl_response × tbl_project rates.
-// Complements the per-user dashboard (renderUsage) — ops wants
-// a date-range rollup for budgeting / invoicing.
-//   ?days=30   window size (default 30, max 365)
-//   ?userId=N  filter to one user (optional)
-// Returns one row per day within the window (zero-fills gaps so a
-// chart can render without holes).
-// ══════════════════════════════════════════════════════════
-//  OpenAI Usage Sync (Phase 17.3)
-// ══════════════════════════════════════════════════════════
-//
-// Background job that pulls aggregated usage from OpenAI's Admin API every
-// OPENAI_USAGE_SYNC_INTERVAL_MIN minutes and writes it into tbl_daily_token.
-// Provides two HTTP endpoints:
-//   GET  /api/sync-status   read current sync health + per-project drift
-//   POST /api/sync-now      manually trigger one sync run (admin convenience)
-//
-// Design notes
-// ────────────
-//   * Date bucket: OpenAI returns UTC unix timestamps. We convert each
-//     bucket's start_time to Asia/Bangkok local date (UTC+7) to match the
-//     `usage_date_th` column semantics.
-//   * UPSERT on (usage_date_th, project_id, model) — the table's new PK
-//     after phase17-002. Re-running sync is safe.
-//   * Skip rows where project_id from OpenAI is NULL (org-level usage with
-//     no project tag — usually internal calls) or doesn't match any active
-//     row in tbl_project (orphaned data from deleted projects).
-//   * Status is tracked in tbl_sync_state (singleton row id=1). Two
-//     dashboards reference it: the sync-status endpoint and an admin-only
-//     "Sync Status" UI panel.
+// ดึง usage จาก OpenAI Admin API ลง tbl_daily_token — bucket แปลงเป็นวัน Asia/Bangkok
+// UPSERT บน (usage_date_th, project_id, model) รันซ้ำได้; แถวไม่มี project ที่ตรง = ข้าม
+// สถานะอยู่ใน tbl_sync_state (แถวเดียว id=1)
 const BKK_OFFSET_SEC = 7 * 3600;
 
 function _bkkDate(utcUnix) {
@@ -160,9 +132,7 @@ async function runUsageSync(reason = 'scheduled') {
 
     const durationMs = Date.now() - startedAt;
     try {
-        // Note: $4 is used in both an INTEGER column and a BIGINT expression.
-        // PG can't infer one consistent type for the same param across those
-        // contexts, so we cast it explicitly at each use.
+        // $4 โดนใช้ทั้งคอลัมน์ INTEGER และ expression BIGINT — ต้อง cast ทุกจุดใช้
         await pool.query(`
             UPDATE tbl_sync_state SET
                 last_run_at        = NOW(),
@@ -175,9 +145,7 @@ async function runUsageSync(reason = 'scheduled') {
              WHERE id = 1`,
             [status, errorMsg, durationMs, rowsInserted]);
     } catch (e) {
-        // Don't crash the sync run for a state-update failure, but DO log
-        // it — silent swallow was hiding the bug where state stuck at
-        // 'running' forever.
+        // state update พังไม่ล้ม sync แต่ต้อง log — เคยเงียบจน state ค้าง 'running' ตลอด
         console.error('[sync] failed to update tbl_sync_state:', e.message);
     }
 
@@ -193,11 +161,7 @@ function startUsageSyncTimer() {
         console.log('[sync] OPENAI_ADMIN_KEY not configured — usage sync disabled');
         return;
     }
-    // Phase 19.9: auto-sync is opt-in via OPENAI_USAGE_SYNC_ENABLED=true.
-    // Default = OFF. tbl_daily_token still exists and `POST /api/sync-now`
-    // (admin manual trigger) still works — the timer just doesn't fire
-    // by itself, so the app stays quiet until the team explicitly turns
-    // automatic sync on. Set the env var to "true" / "1" / "yes" to enable.
+    // auto-sync เป็น opt-in (OPENAI_USAGE_SYNC_ENABLED) — ปิดอยู่ timer ไม่ยิง แต่ sync-now มือยังใช้ได้
     const enabled = /^(1|true|yes|on)$/i.test(String(process.env.OPENAI_USAGE_SYNC_ENABLED || ''));
     if (!enabled) {
         console.log('[sync] auto-sync disabled (set OPENAI_USAGE_SYNC_ENABLED=true to enable). Manual /api/sync-now still works.');

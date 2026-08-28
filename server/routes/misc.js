@@ -25,11 +25,7 @@ router.get('/api/health', (req, res) => {
     });
 });
 
-// Phase 11 B2: /api/version — admin-only deployment fingerprint.
-// Exposes version, uptime, node version, migration state. Used by
-// ops to verify which build is live and whether any migrations are
-// pending/modified. Admin-gated because migration state is
-// deployment-sensitive info.
+// /api/version — fingerprint ของ deploy; admin เท่านั้น เพราะสถานะ migration เป็นข้อมูล sensitive
 const _BOOT_TIME = Date.now();
 router.get('/api/version', requireAdmin, async (req, res) => {
     let migrations = null;

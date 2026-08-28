@@ -1,12 +1,7 @@
 // billing.js — เงินจริงอยู่ที่ project pool; daily cap เป็นเพดาน ไม่ใช่กระเป๋า
 
 module.exports = function createBilling({ pool }) {
-// Phase 21 A2 — today's spend now reads from tbl_daily_usage, which is
-// already pre-aggregated per (date, user, session, model). Replaces the
-// older JOIN over tbl_response × tbl_project rates (slower; required
-// re-computing cost on every read; missed turns that didn't write to
-// tbl_response). The rollup table is updated atomically inside the chat
-// transaction so it's always in sync with what user was actually charged.
+// spend วันนี้อ่านจาก tbl_daily_usage ที่ rollup ใน tx ของแชทแล้ว — ตรงกับที่หักจริงเสมอ
 async function spentToday(userId) {
     const r = await pool.query(`
         SELECT COALESCE(SUM(total_price), 0)::numeric(12,4) AS spent
@@ -17,25 +12,11 @@ async function spentToday(userId) {
     return parseFloat(r.rows[0].spent) || 0;
 }
 
-// ════════════════════════════════════════════════════════════
-// Phase 21.10 — Concept B credit gates
-// ════════════════════════════════════════════════════════════
-// One pool per project (`tbl_balance.project_credits`) is the only real
-// money. Per-user `daily_cap` is a SPENDING LIMIT, not a wallet. A user
-// can request a one-day bonus → admin approves → an entry in
-// `tbl_daily_cap_bonus` raises today's effective cap.
-//
-//   effective_cap(user, today) = daily_cap + Σ today's approved bonuses
-//
-// `checkChatBudget` is the single gate; the chat endpoint calls it before
-// touching OpenAI. It distinguishes two failure modes so the UX can show
-// different messages (pool empty needs admin top-up; cap reached can be
-// waited out or escalated to a quota request).
+// Concept B: เงินจริงมีที่เดียวคือ project pool; daily_cap เป็นเพดานไม่ใช่กระเป๋า
+// checkChatBudget คือเกตเดียว — แยก error pool หมด vs ชน cap ให้ UX คนละข้อความ
 
 async function getEffectiveDailyCap(userId) {
-    // Phase 21.12 — bonus is now a PERSISTENT balance (tbl_user.bonus_balance),
-    // not a today-only sum. effective_cap = daily_cap + bonus_balance.
-    // Returns null when the user has no daily_cap configured (unlimited).
+    // bonus เป็นยอดคงค้าง (tbl_user.bonus_balance) — effective = daily_cap + bonus; ไม่มี cap = null
     const r = await pool.query(
         `SELECT daily_cap AS base, COALESCE(bonus_balance, 0) AS bonus
            FROM tbl_user
@@ -59,11 +40,7 @@ async function getProjectPool(projectId) {
 }
 
 async function checkChatBudget(userId) {
-    // Returns { ok: true, pool, cap, projectId }  on success,
-    //   or   { ok: false, error, message, ... }   on block.
-    // Errors:
-    //   'project_pool_empty'  — pool ≤ 0 → admin must top up.
-    //   'daily_cap_exceeded'  — usage_today ≥ effective cap → wait/request more.
+    // คืน {ok:true,...} หรือ {ok:false, error:'project_pool_empty'|'daily_cap_exceeded', ...}
     const u = await pool.query(
         `SELECT project_id FROM tbl_user WHERE user_id=$1 AND is_deleted=FALSE`,
         [userId]);
@@ -101,13 +78,7 @@ async function checkChatBudget(userId) {
     return { ok: true, projectPool: pool_, cap, projectId };
 }
 
-// Phase 21 A1 — active pricing lookup for a model.
-// Returns the currently effective price row (input/cached/output) from
-// tbl_pricing. Falls back to caller-provided defaults if no row exists
-// (e.g. brand-new model not yet seeded). The fallback path also keeps
-// older / unit-test callers working when the migration hasn't been
-// applied yet. Cached: 30 s in-process map, plenty for a chat workload
-// while keeping latency stable when admin edits a price.
+// ราคา active จาก tbl_pricing + cache 30s ต่อ process; ไม่มีแถวใช้ fallback ของผู้เรียก
 const _pricingCache = new Map();   // model → { row, expiresAt }
 const PRICING_TTL_MS = 30 * 1000;
 async function getActivePricing(model, fallback = {}) {

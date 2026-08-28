@@ -8,11 +8,7 @@ const {
     requireAdmin,
     safeError,
 } = ctx;
-// GET /api/audit-log  — ประวัติ login/logout + failed attempts (Phase 14)
-//   ?event=login_fail|login_ok|logout|lockout|login_blocked   filter by event_type
-//   ?userId=N   filter by user (still returns NULL-user rows if event also matches)
-//   ?limit=N    (default 200, max 1000)
-// LEFT JOIN so login_fail rows with unknown username (user_id IS NULL) still show.
+// GET /api/audit-log ?event ?userId ?limit — LEFT JOIN ให้แถว user_id NULL ยังโชว์
 router.get('/api/audit-log', requireAdmin, async (req, res) => {
     const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit, 10) || 200));
     const ev = req.query.event ? String(req.query.event).slice(0, 20) : null;
@@ -40,12 +36,7 @@ router.get('/api/audit-log', requireAdmin, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// GET /api/action-log  — ประวัติ admin actions (Phase 14: filter + details)
-//   ?action=create_user|update_user|...   filter by action_type
-//   ?target=user|project                  filter by target_type
-//   ?targetId=N                           filter by target_id
-//   ?userId=N                             filter by admin user
-//   ?limit=N                              default 200, max 1000
+// GET /api/action-log ?action ?target ?targetId ?userId ?limit
 router.get('/api/action-log', requireAdmin, async (req, res) => {
     const limit  = Math.min(1000, Math.max(1, parseInt(req.query.limit, 10) || 200));
     const action = req.query.action  ? String(req.query.action).slice(0, 40) : null;

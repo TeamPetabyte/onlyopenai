@@ -12,12 +12,7 @@ const {
     safeError,
 } = ctx;
 router.get('/api/history', requireAuth, async (req, res) => {
-    // Phase 16.9: aliases so the legacy frontend (which reads h.prompt /
-    // h.response / h.cost) keeps working despite tbl_response naming the
-    // columns input_param / output_param and not storing cost at all.
-    // Cost is COMPUTED here from token counts × tbl_pricing (Phase 30 —
-    // was tbl_project.input_rate/output_rate, which could disagree with
-    // what was actually charged).
+    // alias คอลัมน์ให้ frontend เดิม; cost คำนวณจาก token × tbl_pricing ไม่ใช่ rate เก่า
     try {
         const { userId } = req.query;
         let r;
@@ -65,26 +60,10 @@ router.delete('/api/history', requireAdmin, async (req, res) => {
 
 // POST /api/history  — บันทึกหลังรัน skill
 router.post('/api/history', requireAuth, async (req, res) => {
-    // DEPRECATED — no-op kept only so older clients don't get a 404.
-    //
-    // /api/chat now persists tbl_response, deducts the project pool, AND writes
-    // the credit ledger authoritatively in one place. This legacy endpoint used
-    // to ALSO insert tbl_response and deduct the pool, which DOUBLE-CHARGED every
-    // chat: the project pool was debited twice while the ledger recorded it once
-    // (symptom: pool drops ~2× the logged usage). Neutralised so billing happens
-    // in exactly one path. Returns ok without touching money or writing rows.
+    // DEPRECATED no-op — endpoint นี้เคยหักเงินซ้ำกับ /api/chat (pool ลด ~2×); เหลือไว้กัน 404
     res.json({ ok: true, deducted: false, deprecated: true });
 });
 
-// ══════════════════════════════════════════════════════════
-//  CHAT SESSIONS  (Phase 12 — conversation history, IDOR-safe)
-// ══════════════════════════════════════════════════════════
-// Storage: tbl_chat_session (thread metadata) + tbl_chat_message (per-turn).
-//
-// All endpoints here filter by req.session.userId.  No query or body
-// parameter is trusted to identify the owner — even if a frontend bug
-// sends the wrong userId, the server anchors on the cookie/session.
-// That closes the IDOR that existed in the legacy /api/sessions code.
 
 
 return router;

@@ -17,7 +17,7 @@ const { logger, httpLogger, flushLogger } = require('./logger');        // Phase
 const openaiAdmin           = require('./openai-admin');                // Phase 15
 const cryptoStore           = require('./crypto');                       // Phase 17
 const skillPrompts          = require('./skill-prompts');
-// Phase 46: pure logic lifted out of this file. No pool, no OpenAI client —
+// pure logic lifted out of this file. No pool, no OpenAI client —
 // each of these can be exercised by a test directly.
 const promptLib             = require('./lib/prompt');                  // Phase 46
 const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = promptLib;
@@ -25,27 +25,14 @@ const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// Phase 9: cookie-parser must run BEFORE any route that reads req.cookies.
+// cookie-parser must run BEFORE any route that reads req.cookies.
 // Single line, no secret needed (we use HttpOnly+SameSite=Strict, not signed).
 app.use(cookieParser());
 
-// Phase 11 C: structured request log — one JSON line per request, with
-// redacted headers (Authorization/Cookie/CSRF). /api/health is skipped
-// (see logger.js) so health-check spam does not drown the signal.
+// request log ต่อบรรทัด (redact header ลับ); /api/health ถูกข้ามกัน log ท่วม
 app.use(httpLogger);
 
-// Phase 7: Security headers (CSP relaxed for inline scripts/styles in this app)
-// Phase 8: HSTS in prod — once a browser sees this, it refuses HTTP for 1 year.
-// Phase 10: CSP enabled with a curated policy. We HAVE to keep 'unsafe-inline'
-// for both script and style because the existing HTML uses ~54 inline
-// onclick/onsubmit handlers + many inline <style> blocks. Refactoring that
-// out is a project of its own. But everything else gets locked down:
-//   - object-src 'none'           no <embed>/<object>/flash
-//   - base-uri 'self'             prevents <base> href hijack
-//   - frame-ancestors 'none'      clickjacking kill
-//   - form-action 'self'          forms can only POST to us
-//   - default-src 'self'          no random cross-origin loads
-// Google Fonts is the only allowed CDN (the app uses Inter + JetBrains Mono).
+// CSP: ล็อกทุกอย่างยกเว้น 'unsafe-inline' (HTML ยังมี inline handler เป็นสิบ) + Google Fonts; HSTS เฉพาะ prod
 app.use(helmet({
     contentSecurityPolicy: {
         useDefaults: false,
@@ -102,7 +89,7 @@ if (!IS_PROD && ALLOWED_ORIGINS.length === 0) {
 }
 
 
-// Phase 8: Account lockout policy. Persistent (DB-backed) so it
+// Account lockout policy. Persistent (DB-backed) so it
 // survives restart and complements the in-memory rate limiter.
 const LOCKOUT_THRESHOLD = parseInt(process.env.LOCKOUT_THRESHOLD) || 5;
 const LOCKOUT_MINUTES   = parseInt(process.env.LOCKOUT_MINUTES)   || 15;
@@ -164,7 +151,7 @@ function connectWithRetry(attempt = 1, maxAttempts = 3) {
 }
 connectWithRetry();
 
-// Phase 49: โครงสร้างพื้นฐานย้ายไปเป็นโมดูล — ชื่อเดิมทั้งหมด destructure กลับมา
+// โครงสร้างพื้นฐานย้ายไปเป็นโมดูล — ชื่อเดิมทั้งหมด destructure กลับมา
 // validateAmount ไม่ import — zod แทนที่ไปนานแล้ว (ใน validation.js)
 const { validatePasswordStrength, normalizeRole } = require('./lib/validators');
 const sessionStore = require('./services/session-store')({ pool, isProd: IS_PROD });
@@ -177,7 +164,7 @@ const { logAdminAction, logAuthEvent } = require('./services/audit')({ pool });
 const { spentToday, getEffectiveDailyCap, getProjectPool,
         checkChatBudget, getActivePricing } = require('./services/billing')({ pool });
 
-// Phase 49: เครื่องยนต์ AI อยู่ใน services/ai/* — route เข้าถึงผ่าน ctx spread ด้านล่าง
+// เครื่องยนต์ AI อยู่ใน services/ai/* — route เข้าถึงผ่าน ctx spread ด้านล่าง
 const aiClient = require('./services/ai/client')({ pool });
 const { HAS_API_KEY } = aiClient;
 const aiTools = require('./services/ai/tools')({ ai: aiClient });
@@ -185,9 +172,7 @@ const skillRouter = require('./services/ai/skill-router')({ ai: aiClient, skillP
 const { runSkillPromptOnce } = require('./services/ai/skill-runner')({ ai: aiClient, tools: aiTools });
 aiClient.startKnowledgeInit();
 
-// ── Middleware ─────────────────────────────────────────────
-// CORS: whitelist from env. In prod, we already exit if list is empty (see above).
-// In dev with empty list, allow all. Non-browser clients (no Origin header) always pass.
+// CORS whitelist จาก env — prod ห้ามว่าง (เช็คด้านบน), dev ว่าง = เปิดหมด, ไม่มี Origin = ผ่าน
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin)                         return callback(null, true); // curl / server-to-server
@@ -197,36 +182,18 @@ app.use(cors({
         return callback(new Error('CORS policy: origin not allowed'));
     },
     methods:        ['GET', 'POST', 'PUT', 'DELETE'],
-    // Phase 9: X-CSRF-Token must be in the CORS allowlist or browser
-    // strips it on preflight before reaching our middleware.
-    // Phase 39: Authorization removed — cookie is the only auth path.
+    // X-CSRF-Token ต้องอยู่ใน allowlist ไม่งั้น browser ตัดทิ้งตอน preflight
     allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
     credentials:    true,
 }));
 app.use(express.json({ limit: '2mb' }));
-// Phase 9: CSRF guard runs after CORS+json so 403 responses still get CORS
+// CSRF guard runs after CORS+json so 403 responses still get CORS
 // headers and we have access to req.body if any future logic needs it.
 app.use(csrfGuard);
-// Phase 19.7.1: never let the browser cache HTML. The HTML files
-// reference versioned JS/CSS via ?v=... query strings, so caching the
-// HTML aggressively (Express's default sends ETag → 304) means users
-// can sit on a stale `index.html` that still points at old JS even
-// after we ship new code. JS/CSS keep their default cache headers —
-// the version-string in the URL is the cache buster for them.
-// Security: express.static below serves the whole repo root (so the
-// frontend at ../index.html, ../js, ../css, ../assets is reachable). That
-// also exposed server source, internal docs, DB dumps, deploy scripts, and
-// archived legacy data (e.g. GET /server/server.js, /docs/*.md, and
-// /_archive/legacy/db.json which held bcrypt password hashes). Block every
-// non-frontend top-level folder here, before static runs — including any dir
-// starting with "_" (archives / mockups) or "." (.git, .env, .claude), which
-// the earlier explicit list missed. Only js/ css/ assets/ + the page HTML
-// files stay public.
+// HTML ห้าม cache (JS/CSS ใช้ ?v= เป็น cache buster); static เสิร์ฟ repo root
+// จึงต้องบล็อกทุกโฟลเดอร์ที่ไม่ใช่ frontend รวม _* และ .* — เคยหลุด db.json ที่มี hash รหัสผ่าน
 const BLOCKED_TOP_DIRS = /^\/(server|docs|backups|windows|node_modules|_[^/]+|\.[^/]+)(\/|$)/i;
-// Also block root-level source/config files (start.js, README.md, *.sh/.bat,
-// etc.) — the browser only ever needs the page HTML files + js/css/assets, so
-// these are just source exposure. Frontend assets live under js/ css/ assets/
-// so the /dir/ prefix keeps them clear of this root-file match.
+// บล็อกไฟล์ source/config ระดับ root ด้วย — browser ใช้แค่ HTML + js/css/assets
 const BLOCKED_ROOT_FILES = /^\/[^/]+\.(js|mjs|cjs|ts|sh|bat|ps1|md|py|sql|json|ya?ml|env|example|lock)$/i;
 app.use((req, res, next) => {
     if (BLOCKED_TOP_DIRS.test(req.path) || BLOCKED_ROOT_FILES.test(req.path)) {
@@ -235,11 +202,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Clean URLs: /login instead of /login.html. Old .html addresses 301 to
-// the extensionless form so bookmarks and old links keep working, and
-// express.static's `extensions` option resolves /login back to login.html
-// on disk. Must be registered BEFORE the static middleware, otherwise
-// static serves the .html file first and the redirect never runs.
+// clean URL: /login ↔ login.html (301 จาก .html เดิม) — ต้องมาก่อน static
 app.get(['/login.html', '/admin.html', '/change-password.html', '/index.html'], (req, res) => {
     const clean = req.path === '/index.html' ? '/' : req.path.replace(/\.html$/, '');
     const query = req.originalUrl.slice(req.path.length);   // keep ?expired=1 etc.
@@ -265,15 +228,8 @@ const chatRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
-        // express-rate-limit v8 takes ipKeyGenerator(ip, ipv6Subnet), not
-        // (req, res). Called the old way it returns the request object, the
-        // key becomes "ip:[object Object]", and every unauthenticated caller
-        // shares one bucket. Its own validator stays quiet because the source
-        // contains the token "ipKeyGenerator" — nothing reports this.
-        // Phase 7: rate-limit keys by token prefix when present (no DB lookup
-        // needed in the hot path), otherwise IP. Endpoints that need the real
-        // user id are already gated by requireAuth, which populates req.session.
-        // Phase 39: token now comes from the session cookie (Bearer removed).
+        // v8: ipKeyGenerator(ip) ไม่ใช่ (req,res) — เรียกผิดแล้ว key เป็น [object Object] รวมทุกคนถังเดียว
+        // key ตาม token ก่อน (ไม่ต้องแตะ DB) ไม่มีค่อยใช้ IP
         const tok = _extractToken(req);
         if (tok) return `t:${tok.slice(0, 16)}`;
         return `ip:${ipKeyGenerator(req.ip)}`;
@@ -286,16 +242,8 @@ const chatRateLimiter = rateLimit({
 });
 
 
-// Phase 47: what a caught error is allowed to tell the client.
-//
-// 62 handlers were returning e.message verbatim. A Postgres error names the
-// table, the column and the constraint; an ENOENT names the server path. All
-// of it is behind auth, so this is disclosure rather than a hole — but there
-// was never a reason for it, and the global handler below does NOT cover these
-// because a route that catches its own error never reaches it. The commit that
-// added that handler claimed otherwise; this is the part that was missing.
-//
-// The full error still goes to the log with a reference the user can quote.
+// สิ่งที่ error บอก client ได้: ข้อความที่เราเขียนเอง + ref สั้น ๆ — stack จริงลง log
+// (เดิม 62 handler ส่ง e.message ตรง ๆ ซึ่งสะกดชื่อตาราง/พาธออกไป)
 function safeError(e, req) {
     const ref = crypto.randomBytes(4).toString('hex');
     const where = req ? `${req.method} ${req.originalUrl}` : '';
@@ -305,19 +253,11 @@ function safeError(e, req) {
     if (e && e.userFacing) return { ...safeError(e, req), ref };
     return { error: 'Something went wrong — quote reference ' + ref + ' when reporting it.', ref };
 }
-// ══════════════════════════════════════════════════════════
-//  AUTH
-// ══════════════════════════════════════════════════════════
 
-// Phase 7: brute-force protection on login. Per IP+username so an attacker
+// brute-force protection on login. Per IP+username so an attacker
 // can't burn one user's rate budget for another.
 const LOGIN_MAX_PER_15MIN = parseInt(process.env.LOGIN_MAX_PER_15MIN) || 10;
-// Phase 47: the routes that spend money or hold a big buffer. /api/chat and
-// the login are already limited; these were not, and each one either fires a
-// real OpenAI request (skills test, evals) or takes a 100MB upload. Generous
-// on purpose — this is a backstop against a stuck retry loop or an accidental
-// double-click, not a quota. Shares the chat limiter's key strategy so one
-// user hitting it does not limit everyone behind the same IP.
+// backstop ของ route ที่เผาเงิน/บัฟเฟอร์ใหญ่ — กัน retry ค้าง/ดับเบิลคลิก ไม่ใช่โควต้า
 const EXPENSIVE_RATE_LIMIT_PER_MIN = Number(process.env.EXPENSIVE_RATE_LIMIT_PER_MIN) || 30;
 const expensiveRateLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -325,10 +265,7 @@ const expensiveRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
-        // Keyed by PATH as well as caller. One rateLimit() instance owns one
-        // store, so without this the five routes share a single 30/min budget
-        // and the 429 says "for this endpoint" when it measured all of them —
-        // 30 CSV exports would block an upload.
+        // key รวม path ด้วย — instance เดียวถังเดียว ไม่งั้นห้า route แชร์ 30/min ก้อนเดียว
         const who = _extractToken(req) ? `t:${_extractToken(req).slice(0, 16)}`
                                        : `ip:${ipKeyGenerator(req.ip)}`;
         return `${who}|${req.path}`;
@@ -346,7 +283,7 @@ const loginRateLimiter = rateLimit({
     legacyHeaders: false,
     skipSuccessfulRequests: true,    // only failed attempts count
     keyGenerator: (req, res) => {
-        // Phase 10: coerce with String() — attacker may send non-string shapes
+        // coerce with String() — attacker may send non-string shapes
         // that crash toLowerCase. Clamp length so huge input doesn't grow keys.
         const u = String(req.body?.username || '').toLowerCase().slice(0, 64);
         return `${ipKeyGenerator(req.ip)}:${u}`;
@@ -403,12 +340,7 @@ app.use(require('./routes/misc')(ctx));
 app.use(require('./routes/chat')(ctx));
 
 
-// ── Start ──────────────────────────────────────────────────
-// Phase 11: boot sequence
-//   1. Run pending schema migrations (abort if any fail — safer than
-//      letting the server come up with a partially-migrated DB).
-//   2. Start HTTP listener.
-//   3. Install SIGTERM/SIGINT handlers for graceful shutdown.
+// ── Start ── boot: migrations (fail = ไม่ start) → listen → signal handlers
 let _httpServer = null;
 let _shuttingDown = false;
 
@@ -446,18 +378,11 @@ async function gracefulShutdown(signal) {
     process.exit(0);
 }
 
-// Phase 47: the last stop for anything a route did not catch. 61 handlers were
-// returning e.message straight to the client — a Postgres error names tables
-// and constraints, a filesystem error names server paths. All of it sits
-// behind auth, so this is disclosure rather than a hole, but there is no
-// reason for it. The full error goes to the log with an id; the client gets
-// the id, which is what a person needs in order to report the problem.
+// ตาข่ายสุดท้าย: error ที่ route ไม่ได้จับ — client ได้ ref, log ได้ stack
 app.use((err, req, res, _next) => {
     const ref = crypto.randomBytes(6).toString('hex');
     console.error(`[error ${ref}] ${req.method} ${req.originalUrl}:`, err && err.stack ? err.stack : err);
-    // Express needs the error passed on once headers are out, so its default
-    // handler destroys the socket. Returning here left an SSE response — and
-    // /api/chat writes headers immediately — open until something timed out.
+    // headers ออกไปแล้วต้องส่งต่อให้ Express ปิด socket — ไม่งั้น SSE ค้างจน timeout
     if (res.headersSent) return _next(err);
     res.status(err && err.status ? err.status : 500)
        .json({ ok: false, error: 'Internal error', ref });
@@ -487,17 +412,10 @@ async function boot() {
         console.log('');
     });
 
-    // Phase 17.3: start the OpenAI usage sync background job. Runs first
-    // pass ~10s after boot (so listener is up + DB warm), then every
-    // OPENAI_USAGE_SYNC_INTERVAL_MIN minutes. No-op if admin key missing.
+    // usage sync รอบแรก ~10s หลัง boot แล้ววนตาม env; ไม่มี admin key = no-op
     startUsageSyncTimer();
 
-    // Phase 18: load skill-prompts.json into the router's in-memory cache.
-    // Safe to skip on parse error — `getSkills()` returns [] and the chat
-    // path falls back to Assistant-only behaviour.
-    // Phase 23: prompts now live in tbl_prompt (DB). Wire the pool and load
-    // from DB (seeds from the JSON file on first boot when the table is empty;
-    // falls back to the file if the DB is unreachable).
+    // โหลด skill prompts จาก tbl_prompt (seed จากไฟล์ตอนตารางว่าง; DB ล่มใช้ไฟล์)
     skillPrompts.setPool(pool);
     await skillPrompts.load();
 
@@ -505,16 +423,7 @@ async function boot() {
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
-    // 4. Phase 16.6: safety net for unhandled async errors.
-    // Node ≥15 (we're on 24) terminates the process by default on an
-    // unhandled promise rejection. Transient infra blips — DB EHOSTUNREACH,
-    // OpenAI 5xx, slow Postgres queries that throw past every try/catch —
-    // would silently kill the server. We log them loudly instead so they
-    // still get noticed in the operator log, but the HTTP listener stays up.
-    //
-    // Note: this is NOT a license to skip per-route error handling. Every
-    // route should still wrap its own awaits — this is the last resort that
-    // prevents a single missed catch from taking the whole server down.
+    // unhandledRejection ห้ามฆ่า process — log ดัง ๆ แล้วอยู่ต่อ; ไม่ใช่ข้ออ้างให้ route เลิก try/catch
     process.on('unhandledRejection', (reason, promise) => {
         const msg = (reason && reason.message) || String(reason);
         console.error('[unhandledRejection]', msg);
@@ -525,9 +434,7 @@ async function boot() {
         } catch (_) { /* logger itself may be the problem */ }
     });
     process.on('uncaughtException', (err) => {
-        // Synchronous throws are more dangerous than unhandled rejections —
-        // state may be corrupt. Log and let the process keep running but
-        // flag it loudly so the operator can decide whether to recycle.
+        // throw แบบ sync อันตรายกว่า — state อาจพัง; log ให้ operator ตัดสินใจ restart เอง
         console.error('[uncaughtException]', err && err.message);
         if (err && err.stack) console.error(err.stack);
         try {

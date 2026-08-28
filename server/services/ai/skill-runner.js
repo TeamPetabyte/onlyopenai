@@ -4,18 +4,12 @@ const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = requ
 module.exports = function createSkillRunner({ ai, tools }) {
 const { openai, resolveModel, resolveEffort, PHASE4_TOOLS } = ai;
 const { getOrgStandards, buildPreAnalysis, runResponsesTurn, executeTool } = tools;
-// Phase 30 (eval harness): shared one-shot prompt runner. Applies the {code}
-// placeholder convention, resolves the model/effort against the allowlist and
-// routes to the right API path (Responses for gpt-5.6, Chat Completions
-// otherwise, with a short tool loop). Used by BOTH the admin test endpoint
-// and the eval batch runner so an exam answers exactly like a live test.
+// runner หนึ่งคำถามหนึ่ง skill — เส้นทางเดียวกับแชทจริง ใช้ทั้ง Prompt Lab และ eval
 async function runSkillPromptOnce({ userId, skillContent, question, model, effort }) {
-    // Phase 36: shared {code} handling — substitutes only when the message
+    // shared {code} handling — substitutes only when the message
     // actually looks like ABAP, so plain questions get answered directly.
     let { systemPrompt, userPrompt } = applyCodePlaceholder(skillContent, question);
-    // Phase 35.1: same appendix as live chat — Lab/eval answers must be
-    // collected under identical conditions to be usable as a baseline.
-    // Phase 42: including the pre-fetched org standards, for the same reason.
+    // appendix + org standards ชุดเดียวกับแชทจริง — คำตอบ Lab/eval ถึงใช้เทียบ baseline ได้
     systemPrompt += PROMPT_COMMON_APPENDIX;
     systemPrompt += orgStandardsBlock(await getOrgStandards());
     systemPrompt += await buildPreAnalysis(question);
@@ -38,9 +32,7 @@ async function runSkillPromptOnce({ userId, skillContent, question, model, effor
             { role: 'system', content: systemPrompt },
             { role: 'user',   content: userPrompt },
         ];
-        // Phase 35.1: 3 turns matches live chat's MAX_TOOL_TURNS. On the last
-        // turn tools are disabled so a tool-happy exchange (e.g. find_bapi →
-        // search_knowledge) can never run out of turns and return ''.
+        // 3 turn เท่าแชทจริง; turn สุดท้ายปิด tool กันตอบ '' เพราะ turn หมด
         const MAX_TEST_TOOL_TURNS = 3;
         for (let turn = 0; turn < MAX_TEST_TOOL_TURNS; turn++) {
             const lastTurn   = turn === MAX_TEST_TOOL_TURNS - 1;

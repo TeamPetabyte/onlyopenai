@@ -1,26 +1,8 @@
 // audit.js — เขียน tbl_action_admin / tbl_audit_log (best-effort เสมอ)
 
 module.exports = function createAudit({ pool }) {
-// ── Helper: บันทึก admin/user action (Phase 14 extended) ─────
-// tbl_action_admin.project_id was NOT NULL in older schemas; phase11-003
-// relaxes it, and we pass the admin's project_id (may be NULL) so rows
-// with a project still record it for reporting.
-//
-// Phase 14 adds structured detail: action_type, target_type, target_id,
-// and a before/after change snapshot (JSONB). All detail params are
-// optional for back-compat — the two-arg form `logAdminAction(req)` is
-// still valid. Prefer the object form:
-//
-//   logAdminAction(req, {
-//     action: 'update_balance',
-//     targetType: 'user', targetId: 42,
-//     before: { balance: 100 },
-//     after:  { balance: 500 },
-//   });
-//
-// SECURITY: never pass `password`, `password_hash`, CSRF tokens,
-// or session tokens inside before/after. The redactor below strips
-// them defensively, but the caller is the primary gate.
+// เขียน tbl_action_admin — detail แบบ object (action/target/before/after) หรือสองอาร์กแบบเก่าก็ได้
+// ห้ามใส่รหัสผ่าน/token ใน before/after — redactor ช่วยกรอง แต่ผู้เรียกคือด่านแรก
 const REDACT_KEYS = new Set([
     'password', 'password_hash', 'pw', 'pw_hash',
     'csrf_token', 'csrf', 'token', 'bearer', 'session_token',
@@ -73,9 +55,7 @@ async function logAdminAction(req, detail = {}) {
     } catch (e) { console.error('[action-log]', e.message); }
 }
 
-// ── Helper: audit-log event (Phase 14) ──────────────────────
-// Records non-action events (failed login, lockout, logout) in
-// tbl_audit_log. user_id may be NULL when the username was unknown.
+// เหตุการณ์ auth (login fail/lockout/logout) ลง tbl_audit_log — user_id เป็น NULL ได้
 async function logAuthEvent(eventType, userId, req, detail = {}) {
     try {
         const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || '').toString().slice(0, 45);

@@ -37,16 +37,16 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
             JOIN tbl_user_role ro ON u.role_id = ro.role_id
             LEFT JOIN tbl_credits cr ON u.user_id = cr.user_id
             WHERE u.username = $1 AND u.is_deleted = FALSE`, [username]);
-        // Phase 7: bad-cred / inactive responses use 401 so the
+        // bad-cred / inactive responses use 401 so the
         // rate-limiter (skipSuccessfulRequests:true) actually counts them.
         if (r.rows.length === 0) {
-            // Phase 14: log unknown username — no user_id since it doesn't exist.
+            // log unknown username — no user_id since it doesn't exist.
             logAuthEvent('login_fail', null, req, { reason: 'unknown_user', username });
             return res.status(401).json({ ok: false, error: 'Invalid credentials' });
         }
         const u = r.rows[0];
 
-        // Phase 8: account lockout check (before bcrypt — saves CPU on locked accounts)
+        // account lockout check (before bcrypt — saves CPU on locked accounts)
         if (u.locked_until && new Date(u.locked_until) > new Date()) {
             const minsLeft = Math.ceil((new Date(u.locked_until) - new Date()) / 60000);
             logAuthEvent('login_blocked', u.id, req, { reason: 'still_locked', mins_left: minsLeft });
@@ -63,7 +63,7 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
         const valid = await bcrypt.compare(password, u.pw);
 
         if (!valid) {
-            // Phase 8: increment failed_attempts, lock if over threshold.
+            // increment failed_attempts, lock if over threshold.
             // Single UPDATE so it's atomic; CASE handles the threshold inside SQL.
             const upd = await pool.query(
                 `UPDATE tbl_user
@@ -100,20 +100,7 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
             `UPDATE tbl_user SET failed_attempts = 0, locked_until = NULL WHERE user_id = $1`,
             [u.id]);
 
-        // Phase 20.3: close any "zombie" login_ok rows for this user.
-        //
-        // Background: log_out_time gets stamped by POST /api/logout. If a
-        // session ended any other way — server crash, browser close, network
-        // drop, token natural expiry — the audit row stays with
-        // log_out_time = NULL forever, which makes the Login History show
-        // "—" instead of the duration.
-        //
-        // Fix: every time the user logs in, sweep their previous open rows
-        // and stamp them at the most plausible end-time:
-        //   1) the row's matching tbl_session.last_seen_at  (most accurate)
-        //   2) tbl_session.expires_at                       (if still alive but stale)
-        //   3) NOW()                                        (last-resort)
-        // The COALESCE picks the first non-null candidate.
+        // ปิดแถว login_ok ที่ค้าง (crash/ปิด browser/หมดอายุ) — stamp เวลาที่น่าเชื่อสุด: last_seen_at → expires_at → NOW()
         await pool.query(`
             UPDATE tbl_audit_log a
             SET log_out_time = COALESCE(
@@ -136,35 +123,23 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
               AND a.log_out_time IS NULL`,
             [u.id]);
 
-        // Audit log (Phase 14: tagged with event_type='login_ok' via the new column)
-        // Phase 16.10.1: log_out_date/time MUST stay NULL until the user really
-        // logs out. The legacy INSERT pre-filled them with NOW() — which made it
-        // look like every session ended at the same instant it started AND
-        // broke the /api/logout UPDATE (which now filters for log_out_time IS
-        // NULL to find the row to stamp). Leaving them NULL is the correct
-        // semantic: "no logout recorded yet".
+        // log_out_* ต้องเป็น NULL จนกว่าจะ logout จริง — เคย pre-fill แล้วประวัติเพี้ยนทั้งหน้า
         const ipAddr = (req.headers['x-forwarded-for'] || req.ip || '').toString().slice(0, 45);
         await pool.query(`INSERT INTO tbl_audit_log
                 (user_id, log_in_date, log_in_time, event_type, detail, ip)
             VALUES ($1, CURRENT_DATE, NOW(), 'login_ok', $2, $3)`,
             [u.id, JSON.stringify({ must_change_password: !!u.must_change_password }), ipAddr]);
         const role = normalizeRole(u.role);
-        // Phase 9: createSession returns both session token + per-session CSRF token
+        // createSession returns both session token + per-session CSRF token
         const { token, csrf } = await createSession({ id: u.id, username: u.username, role });
-        // Phase 9: HttpOnly cookie. JS cannot read it → safe from XSS theft.
-        // Phase 24: session-scoped (no maxAge) so it dies when the browser closes
-        // ("close browser = logout"). The server session (tbl_session) keeps its
-        // own 24h expiry as a backstop. A readable marker cookie rides alongside
-        // so the frontend knows the browser session is still alive.
+        // cookie HttpOnly + session-scoped (ปิด browser = logout); tbl_session กันอีกชั้นที่ 24h
         res.cookie(SESSION_COOKIE, token, _sessionCookieOpts());
         res.cookie(ACTIVE_COOKIE, '1', _markerCookieOpts());
         res.json({
             ok: true,
-            // Phase 39: `token` no longer returned in the body — the session
-            // rides ONLY in the HttpOnly cookie above. Non-browser clients
-            // read it from Set-Cookie (curl -c jar).
-            csrfToken: csrf,            // Phase 9: client must echo this in X-CSRF-Token on POST/PUT/DELETE
-            mustChangePassword: !!u.must_change_password,    // Phase 8: client redirects to pw-change page
+            // ไม่ส่ง token ใน body — session อยู่ใน HttpOnly cookie เท่านั้น
+            csrfToken: csrf,            // client must echo this in X-CSRF-Token on POST/PUT/DELETE
+            mustChangePassword: !!u.must_change_password,    // client redirects to pw-change page
             user: { id: u.id, username: u.username, displayName: `${u.name} ${u.surname}`.trim(),
                     role, plan: role === 'admin' ? 'enterprise' : 'pro',
                     balance: parseFloat(u.balance), projectId: u.project_id,
@@ -174,11 +149,7 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
 });
 
 
-// POST /api/logout
-// Phase 16.6: defensive wrap — every DB call in this handler is best-effort.
-// A transient EHOSTUNREACH on tbl_session/tbl_audit_log used to throw an
-// unhandled promise rejection from the bare `await getSession(token)` path,
-// which Node 24 turns into a process exit. Logout must never crash the server.
+// POST /api/logout — ทุก DB call เป็น best-effort: logout ห้ามทำ server ตาย (เคยเจอ unhandled rejection ปิด process)
 router.post('/api/logout', async (req, res) => {
     const token = _extractToken(req);
     let sess = null;
@@ -191,19 +162,13 @@ router.post('/api/logout', async (req, res) => {
         try { await deleteSession(token); }
         catch (e) { console.error('[logout] deleteSession failed (non-fatal):', e.message); }
     }
-    // Phase 9: clear the HttpOnly cookie too — browsers won't auto-clear it.
+    // clear the HttpOnly cookie too — browsers won't auto-clear it.
     // Options must match what was set (path/sameSite/secure) or some browsers ignore.
     res.clearCookie(SESSION_COOKIE, _sessionCookieOpts());
     res.clearCookie(ACTIVE_COOKIE, _markerCookieOpts());
     if (userId) {
         try {
-            // Phase 16.10: target the exact most-recent login_ok row that
-            // hasn't been stamped yet. The legacy query matched on
-            // log_in_date (DATE) which mis-targeted when a user logged in
-            // multiple times in one day, and didn't filter by event_type so
-            // it could stamp a login_fail/lockout row by mistake. As a result
-            // the UI showed "still online" for users who'd actually logged
-            // out. We now address the single intended row via its PK `id`.
+            // stamp เฉพาะแถว login_ok ล่าสุดที่ยังไม่ปิด ผ่าน PK — เคย match ด้วยวันที่แล้วโดนแถวผิด
             await pool.query(`
                 UPDATE tbl_audit_log
                    SET log_out_date = CURRENT_DATE, log_out_time = NOW()
@@ -216,16 +181,13 @@ router.post('/api/logout', async (req, res) => {
                       LIMIT 1
                  )`, [userId]);
         } catch (e) { console.error('[logout] audit-log update failed (non-fatal):', e.message); }
-        // Phase 14: also record logout as its own event row for clean history.
+        // also record logout as its own event row for clean history.
         try { logAuthEvent('logout', userId, req, { via: token ? 'token' : 'body' }); }
         catch (e) { console.error('[logout] logAuthEvent failed (non-fatal):', e.message); }
     }
     res.json({ ok: true });
 });
 
-// ══════════════════════════════════════════════════════════
-//  USERS
-// ══════════════════════════════════════════════════════════
 
 
 return router;

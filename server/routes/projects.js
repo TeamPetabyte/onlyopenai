@@ -30,13 +30,7 @@ router.get('/api/projects', requireAuth, async (req, res) => {
             LEFT JOIN tbl_balance b ON p.project_id = b.project_id
             WHERE p.is_deleted = FALSE
             ORDER BY p.created_date ASC`);
-        // Phase 16.5 / 17: never leak the full project_api_key to the browser.
-        // The frontend only needs to know "does this project have a key?" plus
-        // a short preview for the admin to confirm which key is set.
-        // Phase 17: column may now be encrypted (`enc:v1:...`) — decrypt once
-        // before sniffing prefix/suffix so the preview still shows the real
-        // "sk-svcac…XXXX" pattern. Legacy plaintext rows decrypt() returns
-        // unchanged so the same path covers both.
+        // ไม่ส่ง key เต็มให้ browser — decrypt ก่อนทำ preview "sk-…XXXX" (แถว legacy plaintext ผ่าน path เดียวกัน)
         const projects = r.rows.map(p => {
             const raw = cryptoStore.tryDecrypt(p.project_api_key);
             const looksReal = !!raw && /^sk-/i.test(raw);
@@ -53,33 +47,14 @@ router.get('/api/projects', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// POST /api/projects
-// Phase 15: also creates a matching project + service-account on OpenAI so
-// every dashboard project owns its own API key. If admin key isn't configured
-// or OpenAI rejects the call, the dashboard row still lands — admin can
-// manually link it later — so a flaky OpenAI never blocks local provisioning.
+// POST /api/projects — สร้างคู่ฝั่ง OpenAI ด้วย; OpenAI ล่มไม่ block การสร้างฝั่งเรา
 router.post('/api/projects', requireAdmin, validate(schemas.createProject), async (req, res) => {
     const { name, projectId, apiKey, description, inputRate, outputRate, creditLimit } = req.body;
     const inRate  = inputRate  !== undefined ? inputRate  : 0.50;
     const outRate = outputRate !== undefined ? outputRate : 1.50;
     const credLim = creditLimit !== undefined ? creditLimit : 0;
 
-    // Phase 16.2: provision the OpenAI project ONLY — do not auto-create a
-    // service-account or API key. Rationale: many admins want the project
-    // linked at OpenAI for usage tracking & quota isolation, but prefer to
-    // generate the API key by hand in the OpenAI dashboard (e.g. user-owned
-    // key with explicit "All" permissions, or a SA with custom name/scope).
-    //
-    // The SA-creation path is preserved in git history (see commit before
-    // Phase 16.2) and can be re-enabled per-project later via a dedicated
-    // "Generate API key" admin action if desired.
-    //
-    // Result of this block:
-    //   openaiProjectId         → set when admin key is configured & API succeeded
-    //   openaiServiceAccountId  → always null (no SA created here)
-    //   openaiKey               → always null (admin pastes key later via Edit Project)
-    //   openaiError             → message if the project create call failed (non-fatal —
-    //                             the dashboard row still lands so admin can recover)
+    // สร้างเฉพาะ OpenAI project — ไม่ mint SA/key อัตโนมัติ (admin วาง key เองทีหลัง; โค้ดเดิมอยู่ใน git history)
     let openaiProjectId = null;
     let openaiServiceAccountId = null;
     let openaiKey = null;
@@ -95,23 +70,12 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
         }
     }
 
-    // Phase 15.2: prefer OpenAI's project id as the dashboard PK so
-    // tbl_project.project_id == tbl_project.openai_project_id from day one.
-    // Fallbacks (in order):
-    //   1) the OpenAI id we just received    (preferred — DB and OpenAI agree)
-    //   2) admin-supplied projectId          (back-compat for offline mode)
-    //   3) generated 'proj_<slug>_<ts>' id   (last resort, e.g. admin key missing)
+    // ใช้ id ของ OpenAI เป็น PK เมื่อได้มา; fallback: id จาก admin → gen proj_<slug>_<ts>
     const pid = openaiProjectId
         || projectId
         || ('proj_' + name.toLowerCase().replace(/\s+/g,'_').slice(0,20) + '_' + Date.now().toString(36));
 
-    // Pick what to write into project_api_key:
-    //   1) the freshly-minted service-account key  (Phase 16.2: never set here anymore)
-    //   2) whatever the admin pasted in the form   (backwards-compat path — manual key)
-    //   3) NULL                                    (Phase 16.2: prefer null over a fake
-    //                                                placeholder. Admin can paste a real
-    //                                                key later via Edit Project.)
-    // Phase 17: encrypt at rest before INSERT.
+    // key ที่เขียน: ของที่ admin วาง หรือ NULL — เข้ารหัสก่อน INSERT เสมอ
     const rawKey = openaiKey || apiKey || null;
     const keyToStore = rawKey ? cryptoStore.encrypt(rawKey) : null;
 
@@ -164,12 +128,7 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
 router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), async (req, res) => {
     const { name, apiKey, credits, description, inputRate, outputRate, creditLimit } = req.body;
     const creditsNum = (credits === undefined) ? null : credits;
-    // Phase 16.5: distinguish three states for apiKey:
-    //   apiKey === undefined       → field omitted: keep existing (COALESCE)
-    //   apiKey === null            → admin clicked "Clear": overwrite with NULL
-    //   apiKey === 'sk-...'        → admin pasted new key: overwrite
-    // The legacy code used `apiKey || null` which collapsed null and '' into
-    // "keep existing", making clear-key impossible.
+    // apiKey สามสถานะ: undefined=คงเดิม, null=ล้าง, sk-...=ทับ (เดิม `|| null` ทำให้ล้างไม่ได้)
     const apiKeyAction =
         apiKey === undefined ? 'keep'
       : apiKey === null      ? 'clear'
@@ -186,9 +145,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
               WHERE p.project_id = $1`, [req.params.id]);
         const before = prev.rows[0] || null;
 
-        // Build the api_key fragment dynamically so 'clear' can write NULL
-        // while 'keep' leaves the column alone.
-        // Phase 17: encrypt the new key before writing.
+        // สร้าง fragment แบบ dynamic ให้ 'clear' เขียน NULL ได้; key ใหม่เข้ารหัสก่อน
         const apiKeyFrag =
             apiKeyAction === 'set'   ? `project_api_key = $2`
           : apiKeyAction === 'clear' ? `project_api_key = NULL`
@@ -209,7 +166,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
              (creditLimit !== undefined ? parseFloat(creditLimit) : null),
              req.params.id]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'Project not found' });
-        // Phase 17.2: drop any cached per-project OpenAI client so the next
+        // drop any cached per-project OpenAI client so the next
         // chat request reads the new key (set or clear) from the DB.
         if (apiKeyAction !== 'keep') invalidateProjectClient(req.params.id);
         if (creditsNum !== null) {
@@ -250,12 +207,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// DELETE /api/projects/:id  — Phase 7: soft-delete
-// Three FKs reference tbl_project: tbl_user.project_id (nullable),
-// tbl_balance.project_id (NOT NULL), tbl_response.project_id (NOT NULL).
-// We refuse delete if there is chat history (history is user data — never
-// silently deleted), unassign users, drop the balance row so the credit
-// pool doesn't leak, and mark the project row is_deleted=TRUE for audit.
+// soft-delete: มีประวัติแชท = ปฏิเสธ, ปลด user, ลบแถว balance, mark is_deleted
 router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     const pid = req.params.id;
     const client = await pool.connect();
@@ -279,11 +231,7 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
         }
         // Unassign users so the dashboard doesn't show a ghost project
         await client.query('UPDATE tbl_user SET project_id=NULL WHERE project_id=$1', [pid]);
-        // Drop per-user credits tied to this project BEFORE tbl_balance
-        // because tbl_credits.project_id → tbl_balance.project_id (FK). The
-        // project is going away so those credit allocations die with it;
-        // users keep their accounts but need to be re-assigned to a project
-        // (and re-funded) to spend again.
+        // ลบ tbl_credits ก่อน tbl_balance (FK) — โปรเจกต์หาย เงินจัดสรรหายตาม
         await client.query('DELETE FROM tbl_credits WHERE project_id=$1', [pid]);
         // Drop balance row (otherwise credits are still "allocated" to a dead project)
         await client.query('DELETE FROM tbl_balance WHERE project_id=$1', [pid]);
@@ -298,11 +246,7 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
             [pid]);
         await client.query('COMMIT');
 
-        // Phase 16.5: archive the linked OpenAI project so it doesn't keep
-        // showing up on platform.openai.com after the admin "deleted" it.
-        // Done AFTER commit — a flaky OpenAI shouldn't roll back the dashboard
-        // delete; we just record the failure in the audit log so admin can
-        // archive by hand later.
+        // archive ฝั่ง OpenAI หลัง COMMIT — OpenAI ล่มไม่ roll back ฝั่งเรา แค่ลง audit ไว้ archive มือ
         let openaiArchiveStatus = 'skipped';
         const openaiPid = beforeProj.rows[0]?.openai_project_id;
         if (openaiPid && openaiAdmin.isEnabled()) {
@@ -331,15 +275,7 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     }
 });
 
-// PUT /api/projects/:id/topup  — add credits to project pool
-// Phase 16.1 / 21.2: top-up flow writes to BOTH tbl_balance (current) and
-// tbl_topup_project (audit trail — renamed from tbl_topup_history),
-// atomically inside a single transaction.
-// Prior implementation used a non-transactional UPSERT plus a "revert if cap
-// exceeded" UPDATE — fragile under concurrent top-ups (a 2nd request could
-// observe an over-cap intermediate state, or the revert could fail leaving
-// the cap silently breached). Now: row-locked check → conditional write,
-// no revert path needed.
+// topup เขียน tbl_balance + tbl_topup_project ใน tx เดียว ล็อกแถวกันแข่ง (เดิม UPSERT+revert เปราะ)
 router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), async (req, res) => {
     const amountNum = req.body.amount;
     const note      = (req.body.note || '').toString().trim().slice(0, 500) || null;
@@ -357,10 +293,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
             return res.json({ ok: false, error: 'Project not found' });
         }
 
-        // 2) Lock the balance row (or fall through to insert path) so no
-        //    concurrent top-up can race past the cap check.
-        //    Also read project_credits_amount (Phase 20) so we can bump it
-        //    inside the same transaction.
+        // ล็อกแถว balance กัน top-up ซ้อนทะลุ cap; อ่าน lifetime มาบวกใน tx เดียวกัน
         const lock = await client.query(
             `SELECT project_credits, project_credits_amount
              FROM tbl_balance WHERE project_id=$1 FOR UPDATE`, [pid]);
@@ -376,11 +309,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
             return res.json({ ok: false, error: `Balance cap exceeded (max ${MAX_BALANCE})` });
         }
 
-        // 4) UPSERT current balance + lifetime amount.
-        //    Phase 20: project_credits_amount is monotonically non-decreasing —
-        //    on conflict we ADD `amountNum` to the existing value rather than
-        //    overwrite with newLifetime (defensive in case the locked row went
-        //    out of sync; ADD is order-independent).
+        // lifetime บวกเพิ่มเสมอ (order-independent) ไม่เขียนทับ
         await client.query(
             `INSERT INTO tbl_balance
                 (project_id, project_credits, project_credits_amount,
@@ -395,9 +324,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
             [pid, newBal, newLifetime, adminId, parseFloat(amountNum)]
         );
 
-        // 5) Append to history (one row per top-up event, never updated).
-        // Phase 21.2: table renamed tbl_topup_history → tbl_topup_project
-        // so the name matches the rest of the project-scoped tables.
+        // append ประวัติ หนึ่งแถวต่อครั้ง ไม่มี update
         await client.query(
             `INSERT INTO tbl_topup_project
                 (project_id, user_id, amount, balance_before, balance_after, note)
@@ -425,12 +352,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
     }
 });
 
-// GET /api/topup-history  — Phase 16.1
-//   ?projectId=...   filter to one project (optional)
-//   ?limit=N         default 100, max 500
-// Returns newest-first. Joins tbl_project + tbl_user so the UI doesn't N+1.
-// Open to all admins (requireAdmin); regular users have no business reading
-// other projects' financial events.
+// GET topup-history ?projectId ?limit(100/500) ใหม่→เก่า, join ครบกัน N+1; admin เท่านั้น
 router.get('/api/topup-history', requireAdmin, async (req, res) => {
     const limit     = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
     const projectId = req.query.projectId ? String(req.query.projectId).slice(0, 64) : null;
@@ -465,9 +387,6 @@ router.get('/api/topup-history', requireAdmin, async (req, res) => {
     }
 });
 
-// ══════════════════════════════════════════════════════════
-//  AUDIT LOGS
-// ══════════════════════════════════════════════════════════
 
 
 return router;

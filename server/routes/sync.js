@@ -46,9 +46,6 @@ router.get('/api/sync-status', requireAdmin, async (req, res) => {
     }
 });
 
-// ── Skill prompts registry (Phase 18) ─────────────────────
-// GET  /api/skills          — list everything we know about (admin UI list)
-// POST /api/skills/reload   — re-read skill-prompts.json from disk
 
 /** Phase 19.3: stronger placeholder detector — flags REPLACE-prefixed stubs,
  *  "TODO: fill in", "PLACEHOLDER", one-line stubs etc.

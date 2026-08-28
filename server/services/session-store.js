@@ -4,14 +4,10 @@ const { normalizeRole } = require('../lib/validators');
 
 module.exports = function createSessionStore({ pool, isProd }) {
 const IS_PROD = isProd;
-// ── Session Store (Phase 7: PostgreSQL-backed; Phase 9: CSRF token) ────
-// Survives server restart, supports multi-instance scale, gives admins
-// a real "who's logged in" / "logout-all" capability later.
+// session อยู่ใน Postgres — รอด restart, scale หลาย instance ได้, admin เห็นว่าใครล็อกอินอยู่
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const SESSION_COOKIE = 'petabyte_session';
-// Phase 24: readable (non-HttpOnly) session-scoped marker cookie. Lets the
-// frontend tell whether the browser session is still alive. Dies when the
-// browser closes (no maxAge) → drives "close browser = logout".
+// marker cookie อ่านได้จาก JS ไม่มี maxAge — ปิด browser = หาย = frontend รู้ว่า logout
 const ACTIVE_COOKIE = 'petabyte_active';
 const CSRF_HEADER    = 'x-csrf-token';
 
@@ -47,7 +43,7 @@ async function getSession(token) {
     return r.rows[0];
 }
 
-// Phase 9: cookie option helper — single source of truth so login/logout match
+// cookie option helper — single source of truth so login/logout match
 function _sessionCookieOpts(maxAge) {
     return {
         httpOnly: true,
@@ -58,7 +54,7 @@ function _sessionCookieOpts(maxAge) {
     };
 }
 
-// Phase 24: options for the readable marker cookie — NOT HttpOnly (JS must read
+// options for the readable marker cookie — NOT HttpOnly (JS must read
 // it) and NO maxAge (session-scoped: the browser drops it when it closes).
 function _markerCookieOpts() {
     return { httpOnly: false, sameSite: 'strict', secure: IS_PROD, path: '/' };
@@ -71,7 +67,7 @@ async function deleteSession(token) {
 }
 
 // Janitor: prune expired sessions every 10 minutes
-// Phase 11: captured so graceful shutdown can clear it.
+// captured so graceful shutdown can clear it.
 const _sessionJanitor = setInterval(() => {
     pool.query('DELETE FROM tbl_session WHERE expires_at <= NOW()')
         .then(r => { if (r.rowCount > 0) console.log(`[sessions] pruned ${r.rowCount} expired`); })
@@ -80,11 +76,7 @@ const _sessionJanitor = setInterval(() => {
 _sessionJanitor.unref();
 
 function _extractToken(req) {
-    // Phase 9: HttpOnly cookie (can't be stolen by XSS).
-    // Phase 39: Bearer fallback removed — the cookie is the ONLY auth path.
-    // Non-browser clients (curl, smoke tests) authenticate by sending the
-    // cookie explicitly:  curl -H "Cookie: petabyte_session=<token>" ...
-    // (or use -c/-b cookie jars around /api/auth/login).
+    // cookie คือทางเดียว (Bearer ถูกถอดแล้ว) — client นอก browser ส่ง Cookie header เอง
     return (req.cookies && req.cookies[SESSION_COOKIE]) || '';
 }
 

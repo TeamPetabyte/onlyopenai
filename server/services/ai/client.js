@@ -11,36 +11,20 @@ const HAS_API_KEY = !!(
     !process.env.OPENAI_API_KEY.startsWith('sk-xxx')
 );
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-// Model-compatibility knobs. Newer models (gpt-5.5, o-series) reject a custom
-// `temperature` (only the default is allowed) and require `max_completion_tokens`
-// instead of `max_tokens`. OPENAI_TEMPERATURE: a number = use it; empty = omit
-// it; unset = 0.4 (fine for gpt-4o). If a model rejects it at runtime we flip
-// _tempUnsupported so we stop sending it (avoids a failed call every message).
+// model ใหม่ปฏิเสธ temperature ที่ตั้งเอง — เจอ reject ครั้งแรกแล้วเลิกส่งถาวรผ่าน _tempUnsupported
 const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
     ? (process.env.OPENAI_TEMPERATURE.trim() === '' ? null : Number(process.env.OPENAI_TEMPERATURE))
     : 0.4;
 let _tempUnsupported = false;
 
-// Phase 34: model registry — which models the picker exposes, and which OpenAI
-// API each one uses. The gpt-5.6 family (sol/terra/luna) runs on the Responses
-// API (/v1/responses) with reasoning.effort; gpt-5.5 stays on the existing Chat
-// Completions loop (dual-path, safe rollback). Single source for request-side
-// validation. Per-model pricing lives in tbl_pricing (phase27-001). The bare
-// `gpt-5.6` alias resolves to sol (see resolveModel below).
-// Phase 46: moved to lib/models.js. resolveModel now takes the deployment
-// default explicitly instead of closing over MODEL, which is what let it move.
+// registry model อยู่ lib/models.js — gpt-5.6 วิ่ง Responses API, gpt-5.5 วิ่ง Chat Completions
 const _models = require('./lib/models');
 const resolveModel  = (requested) => _models.resolveModel(requested, MODEL);
 const resolveEffort = _models.resolveEffort;
 
 let openai = null;
 let OpenAI = null;
-// Optional corporate egress proxy + fail-fast timeout for OpenAI calls.
-// On a locked-down company network the server often cannot reach
-// api.openai.com directly (blocked or proxy-only). openai v4 uses a
-// node-fetch shim and does NOT auto-honor HTTPS_PROXY — the agent must be
-// wired in explicitly. The timeout makes a blocked egress fail fast (and the
-// chat UI shows a real error) instead of hanging silently on the SDK default.
+// เครือข่ายบริษัทมัก proxy-only — SDK ไม่อ่าน HTTPS_PROXY เอง ต้อง wire agent; timeout ให้ fail เร็วไม่แขวนเงียบ
 const _OAI_PROXY = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 let _oaiAgent = undefined;
 if (_OAI_PROXY) {
@@ -64,28 +48,8 @@ if (HAS_API_KEY) {
     console.log('⚠️  No OpenAI API Key — MOCK mode');
 }
 
-// ── Phase 17.2 + 17.2.1: per-project OpenAI client routing ───
-// Phase 17.2.1 adds an "invalidation" path so a project whose stored key
-// turns out to be 401 (revoked/expired/wrong) doesn't break chat forever —
-// the chat path catches the 401 once, marks the project, and from then on
-// `getProjectOpenAI` short-circuits to the global client. Cleared via
-// invalidateProjectClient() when an admin saves a new key.
-// When a user makes a chat request we look up their project's
-// `project_api_key` (decrypted) and use that key for the OpenAI call.
-// This gives us:
-//   - Per-project cost separation in OpenAI's billing dashboard
-//   - Per-project quota isolation (one runaway project doesn't burn org quota)
-//   - Per-project audit trail (usage tagged with the project's SA)
-//
-// Fallback strategy: any case where we don't have a usable per-project key
-// (user has no project / project has no key / decrypt failed / key looks
-// invalid) returns the GLOBAL `openai` client. This keeps backward
-// compatibility — nothing breaks during the rollout while admins are still
-// pasting in keys per project.
-//
-// Cache: clients are cached by project_id so we don't re-construct one on
-// every request. Cache is invalidated when admin saves a new key on the
-// project (PUT /api/projects/:id) — see invalidateProjectClient() call sites.
+// client ต่อ project (key จาก DB, decrypt แล้ว cache) — แยกบิล/โควต้า/รอยเท้าใน dashboard ของ OpenAI
+// key ใช้ไม่ได้ทุกกรณี → ถอยไป client กลาง; เจอ 401 กลางแชทจะ mark ไว้จน admin วาง key ใหม่
 const _projectClientCache = new Map();      // projectId -> { client, decryptedKeyTail }
 const _invalidProjectKeys = new Set();       // project_ids whose stored key returned 401 — see chatWithFallback
 
@@ -93,18 +57,14 @@ async function getProjectOpenAI(userId) {
     if (!openai) return openai;                        // no key configured at all
     if (!userId) return openai;                        // no auth context
 
-    // Resolve the user's current project. (Cached fetchUsersFromDB on client
-    // is great for UI, but here we read fresh from DB so a project change
-    // takes effect on the very next request.)
+    // อ่าน project สดจาก DB — เปลี่ยน project แล้วมีผล request ถัดไปทันที
     const u = await pool.query(
         'SELECT project_id FROM tbl_user WHERE user_id = $1 AND is_deleted = FALSE',
         [userId]);
     const projectId = u.rows[0]?.project_id;
     if (!projectId) return openai;
 
-    // Phase 17.2.1: short-circuit projects we've already proven have a bad
-    // key — we caught a 401 on a previous chat call and marked them. Admin
-    // saving a new key clears the flag via invalidateProjectClient().
+    // project ที่พิสูจน์แล้วว่า key เสีย → ข้ามไป client กลางจนกว่าจะ invalidate
     if (_invalidProjectKeys.has(projectId)) return openai;
 
     // Check cache
@@ -186,7 +146,7 @@ let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 async function ensureAssistant(vectorStoreId = null) {
     if (!HAS_API_KEY) return null;
     if (ASSISTANT_ID) {
-        // Phase 3: ถ้ามี vector store ใหม่ให้ patch assistant
+        // ถ้ามี vector store ใหม่ให้ patch assistant
         if (vectorStoreId) {
             try {
                 await openai.beta.assistants.update(ASSISTANT_ID, {
@@ -227,9 +187,7 @@ async function ensureAssistant(vectorStoreId = null) {
 // ── Phase 3: Vector Store + File Search (RAG) ─────────────
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
-// File types the vector store can parse natively — .txt plus documents
-// (PDF/DOC/DOCX/MD/HTML) so manuals can be dropped in without conversion.
-// HTML added for the SAP offline library (SR13/ABAPHELP exports).
+// ชนิดไฟล์ที่ vector store อ่านออกเอง (.txt + เอกสาร + .html สำหรับ SAP offline library)
 const KB_FILE_RE = /\.(txt|md|pdf|docx?|html?)$/i;
 
 async function ensureVectorStore() {
@@ -299,10 +257,7 @@ async function syncNewKnowledgeFiles() {
     if (!fs_mod.existsSync(KNOWLEDGE_DIR)) return;
     try {
         const localFiles = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => KB_FILE_RE.test(f));
-        // Enumerate vector store → resolve filenames.
-        // Phase 38: list() returns ONE page (default 20). Past 20 files the
-        // diff saw a truncated set and re-uploaded "missing" files on every
-        // boot, duplicating them in the store. for-await walks ALL pages.
+        // เดินทุกหน้า — list() หน้าเดียว (20 ไฟล์) เคยทำให้ไฟล์เก่าถูกอัพซ้ำทุก boot
         const existing   = new Set();
         for await (const vf of openai.vectorStores.files.list(VECTOR_STORE_ID, { limit: 100 })) {
             try {
@@ -348,7 +303,7 @@ if (HAS_API_KEY) {
     ensureVectorStore()
         .then(vsId => ensureAssistant(vsId))
         .then(id  => { if (id) console.log(`✅ System ready: assistant=${id} vs=${VECTOR_STORE_ID}`); })
-        .then(()  => syncNewKnowledgeFiles())  // Phase 14: pick up any new knowledge files
+        .then(()  => syncNewKnowledgeFiles())  // pick up any new knowledge files
         .catch(e  => console.error('[startup]', e.message));
 }
 }

@@ -6,15 +6,9 @@ const { looksLikeAbapCode, checkAbapSyntax } = abapScan;
 
 module.exports = function createAiTools({ ai }) {
 const { HAS_API_KEY, openai, getVectorStoreId, markProjectKeyInvalid, KNOWLEDGE_DIR } = ai;
-// NOTE (v1.7.2): the legacy Assistants-API chat stack (POST /api/thread/create,
-// DELETE /api/thread/:threadId, POST /api/thread/message + processAssistantStream)
-// was removed — all live chat runs through /api/chat now, and no frontend called
-// these. The Assistants API is still used for RAG/vector-store only, via
-// ensureAssistant()/ensureVectorStore() in the boot sequence + file upload.
+// Assistants-API chat stack ถูกถอดตั้งแต่ v1.7.2 — Assistants เหลือใช้แค่ RAG/vector store
 
-// ══════════════════════════════════════════════════════════
-//  PHASE 4: TOOL EXECUTION FUNCTIONS
-// ══════════════════════════════════════════════════════════
+// ── TOOL EXECUTION ──
 
 /** ค้นหา BAPI/RFC จาก knowledge file */
 function findBapi(task, module) {
@@ -250,31 +244,12 @@ async function searchKnowledge(query) {
     }
 }
 
-// ── Phase 42: the org's development standards, fetched once ───────────────
-// The shared appendix used to order a knowledge-base search for the org's
-// standards before writing any ABAP. Every single answer therefore opened with
-// the same query and got the same content back — the logs show it at every
-// effort level, without exception. On a reasoning model a tool round trip is
-// not a cheap lookup: the model thinks, calls, waits, then thinks again from
-// scratch. That one guaranteed round trip was costing a full extra reasoning
-// pass on every request, and wall-clock tracks the number of calls almost
-// linearly (2 calls ≈ 2 min, 3 ≈ 5.5 min, 4 ≈ 8-14 min).
-//
-// So fetch it once, cache it, and hand it to the model in the prompt instead.
-// The tokens are much the same — the tool result landed in the context anyway —
-// but the round trip disappears. Nothing about what the model is told to comply
-// with changes, so this is a latency fix, not a behaviour change.
-//
-// Degrades quietly: if the vector store is unavailable or has no standards, the
-// text stays empty, no block is injected, and the appendix's "search for them
-// if they are not provided" clause takes over exactly as before.
+// org standards: ทุกคำตอบเคยเปิดด้วย search เดิมซ้ำ ๆ — round trip ละหนึ่งรอบ reasoning เต็ม ๆ
+// จึง fetch ครั้งเดียว cache 6 ชม. แล้วแนบใน prompt แทน; หาไม่เจอ = ไม่แนบ ให้ model ค้นเองแบบเดิม
 const ORG_STANDARDS_QUERY     = 'organization ABAP development standards naming conventions error handling documentation';
 const ORG_STANDARDS_TTL_MS    = 6 * 60 * 60 * 1000;   // re-read a few times a day
 const ORG_STANDARDS_MAX_CHARS = 6000;                 // ~1.5k tokens; fits two chunks of the org doc
-// The vector store ranks a generic SAP manual above the org's own standards
-// for this query (0.738 vs 0.704), so filling the budget by score alone took
-// ABAP_Keyword_Documentation and left the org document out entirely — the one
-// thing this block exists to carry. Rank the org's own file first.
+// จัดไฟล์ standards ององค์กรขึ้นก่อน — คะแนน search ดันคู่มือ SAP ทั่วไปชนะเอกสารจริง
 const ORG_STANDARDS_FILE_RE   = /standard|keystone/i;
 let _orgStandards = { text: '', files: [], fetchedAt: 0 };
 
@@ -311,23 +286,8 @@ async function getOrgStandards() {
     return _orgStandards;
 }
 
-// ── Phase 43: pre-analysis — do the mechanical work before the model runs ──
-// At `medium` the model reasons roughly five times less than at `high`, so the
-// way to keep answer quality is not to demand more thinking — it is to stop
-// making it think about things a rule can settle. Two of those:
-//
-//   1. Finding the defects. checkAbapSyntax already detects TABLES, MOVE...TO,
-//      SELECT *, SELECT...ENDSELECT and friends deterministically, with line
-//      numbers. Making the model hunt for them across 30,000 characters spends
-//      attention and can miss one; handing it the list cannot.
-//   2. Choosing what to look up. The model used to spend a whole round trip
-//      deciding what to search for. The scan already tells us what this code is
-//      guilty of, so the query can be built from that — server side, in seconds,
-//      with no reasoning pass.
-//
-// What is left for the model is the part it is actually good at: deciding what
-// the right fix is and explaining why. Both lookups run on the server, so this
-// adds seconds, not another think-call-think cycle.
+// pre-analysis: งานที่ rule ตัดสินได้ทำฝั่ง server ก่อน — แนบผล scan (บรรทัดแม่น) + เอกสารที่ตรง
+// เหลือให้ model แค่ส่วนที่มันเก่ง: ตัดสินวิธีแก้และอธิบาย
 const PREANALYSIS_MAX_CHARS = 4000;
 
 function scanQueryTerms(scan) {
@@ -360,15 +320,9 @@ async function buildPreAnalysis(userMessage) {
             }
         }
 
-        // Documents chosen from what the scan found, plus the user's own words.
-        // The defect terms lead: they are the signal. The question contributes
-        // only its first prose line, capped short — taking 200 characters of
-        // proseOf() dragged in report-header fragments (`LINE-COUNT 65`,
-        // `NO STANDARD PAGE HEADING.`) that diluted the query into noise.
+        // query สร้างจาก defect ที่ scan เจอ + prose บรรทัดแรกสั้น ๆ — ยาวกว่านั้นลาก header report มาปนจน query เละ
         const terms = scanQueryTerms(scan);
-        // Phase 47: was a hand-copied duplicate of proseOf's predicate, which is
-        // why the raw regex had to be exported at all. One rule, one place —
-        // two copies of "is this a statement line" would have drifted apart.
+        // ใช้ firstProseLine จาก abap-scan — กติกาเดียว ที่เดียว ไม่ก๊อปมา drift
         const ask = abapScan.firstProseLine(text);
         const query = [...terms, ask.slice(0, 120)].filter(Boolean).join(' ').trim();
         if (query) {
@@ -395,10 +349,7 @@ async function buildPreAnalysis(userMessage) {
 }
 
 /** The prompt block carrying the standards, or '' when we have none. */
-// Phase 35.2: RAG visibility — the chat UI shows a badge while the model
-// searches documents. Extract the search query from a pending tool-call
-// batch, and shape the search result into a compact tool_result event
-// (top filenames only — chunks stay server-side).
+// badge ฝั่ง UI: ดึง query จาก tool-call แล้วสรุปผลเป็น event สั้น (ชื่อไฟล์ top ไม่ส่ง chunk)
 function ragQueryOf(name, rawArgs) {
     if (name !== 'search_knowledge') return null;
     try { return String((JSON.parse(rawArgs || '{}')).query || ''); } catch (_) { return ''; }
@@ -424,12 +375,7 @@ async function executeTool(name, args) {
     }
 }
 
-// ── Phase 34: Responses API path (gpt-5.6 family) ──────────────────────────
-// The Responses API (/v1/responses) uses a different request/stream shape than
-// Chat Completions. This helper mirrors the Chat Completions tool loop but on
-// Responses, emitting the SAME SSE vocabulary ({type:'chunk'|'tool_call'}) so
-// the frontend + billing/persist tail are unchanged. Event/usage field names
-// were verified live against gpt-5.6 before writing this.
+// Responses API loop — ปล่อย SSE ชุดเดียวกับ Chat Completions เพื่อไม่ต้องแตะ frontend/billing
 
 // Chat Completions tool = {type:'function', function:{name,description,parameters}}
 // Responses tool        = {type:'function', name, description, parameters}  (flat)
@@ -445,27 +391,13 @@ function toResponsesTools(tools) {
 async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, history, tools, sendEvent, acc, isAborted, setStream }) {
     const MAX_TOOL_TURNS = 3;
     const MAX_LENGTH_CONTINUATIONS = 4;   // Phase 32 analog for Responses
-    // Phase 31.1: reasoning tokens SHARE the max_output_tokens budget. At a
-    // fixed 4000 cap, a hard question on high/xhigh could burn the entire
-    // allowance on internal thinking and stream ZERO visible text (the
-    // blank-bubble bug seen in prod). Scale the ceiling with effort — tokens
-    // are billed by actual use, not by the cap, so bigger ceilings cost
-    // nothing on normal answers.
-    // Phase 43: the ceiling used to scale with effort, which conflated two
-    // unrelated things — how hard the model thinks, and how long the answer may
-    // be. The corrected ABAP file is the same size either way, so every level
-    // hit its cap and paid for a continuation round trip. Continuations also
-    // make the model resume without seeing the whole picture. Effort now
-    // controls thinking; these control length, and are generous enough that a
-    // full file fits in one pass. Tokens bill by use, so a higher ceiling costs
-    // nothing on a short answer.
+    // เพดาน output คงที่ต่อ effort สูง ๆ — reasoning แชร์ budget เดียวกับ text, เพดานต่ำเคยได้ bubble เปล่า
+    // token คิดตามใช้จริง เพดานใหญ่ไม่เสียอะไรกับคำตอบสั้น
     const RESP_MAX_OUT = { none: 12000, low: 12000, medium: 16000, high: 24000, xhigh: 24000, max: 32000 };
     const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
     let previousResponseId = null;
-    // Phase 36: with session history, the first call sends an item array
-    // (prior user/assistant turns + the new prompt); without it, the plain
-    // string keeps the original single-turn shape.
+    // มี history = ส่ง item array; ไม่มี = string เดี่ยวแบบเดิม
     let input = (history && history.length)
         ? [...history.map(m => ({ role: m.role, content: m.content })),
            { role: 'user', content: userPrompt }]
@@ -476,9 +408,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     // One streaming Responses call. Accumulates text + tool calls, updates acc
     // usage/text, returns { calls, incomplete, respId }.
     async function once(args) {
-        // Phase 40: count the model calls this single answer costs. On a reasoning
-        // model each call is a fresh full-effort think, so the call count is the
-        // number that explains a slow turn — the token totals alone do not.
+        // นับจำนวน call ต่อคำตอบ — ตัวเลขที่อธิบาย turn ช้า ไม่ใช่ token รวม
         acc.apiCalls = (acc.apiCalls || 0) + 1;
         let stream;
         try {
@@ -509,21 +439,8 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
                     case 'response.function_call_arguments.delta':
                         if (fcalls[ev.item_id]) fcalls[ev.item_id].args += ev.delta;
                         break;
-                    // Phase 40: a response truncated by max_output_tokens ends the
-                    // stream with `response.incomplete`, NOT `response.completed`.
-                    // Handling only the latter cost us three things at once:
-                    //   • usage was never read, so those turns were billed and
-                    //     recorded as ~100 output tokens when the model had really
-                    //     produced ~5,000 — under-charging the user and
-                    //     understating our own OpenAI cost;
-                    //   • incomplete_details was never read, so the continuation
-                    //     branch below could not fire — the truncated answer went
-                    //     to the user cut off mid-statement, silently, and every
-                    //     [chat] line reported "0 cont" because a continuation was
-                    //     never even considered;
-                    //   • response.id was lost, breaking the previous_response_id
-                    //     chain for anything that came after.
-                    // Both events carry the same shape, so they share a case.
+                    // truncated จบด้วย response.incomplete ไม่ใช่ .completed — เคยพลาดจน usage ไม่ถูกอ่าน (บิลขาด),
+                    // continuation ไม่ทำงาน (ไฟล์โดนตัดเงียบ) และ chain ของ response.id ขาด; สอง event รูปเดียวกันเลยแชร์ case
                     case 'response.completed':
                     case 'response.incomplete':
                         respId = ev.response?.id;
@@ -547,11 +464,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             acc.cachedTokens    += usage.input_tokens_details?.cached_tokens     || 0;
             acc.reasoningTokens += usage.output_tokens_details?.reasoning_tokens || 0;
         } else if (!isAborted()) {
-            // Phase 40: no terminal event carried usage. Everything this call
-            // produced is then invisible to billing and to the cost record, which
-            // is exactly how the missing `response.incomplete` case above went
-            // unnoticed for so long. Say so loudly rather than quietly charging
-            // for a fraction of the work.
+            // call จบโดยไม่มี usage = token หายจากบิลทั้งก้อน — ตะโกนไว้ดีกว่าเงียบ
             console.warn('[chat/responses] a call ended with no usage — tokens for it are NOT billed'
                 + ` (text so far ${acc.fullText.length} chars). Unhandled terminal event?`);
         }
@@ -565,13 +478,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             tools: rTools, reasoning: { effort }, store: true,
             input,
         };
-        // Phase 35.3: previous_response_id carries the conversation items but
-        // NOT the instructions — the Responses API intentionally drops them on
-        // chained calls. They must be resent on EVERY call, or the entire
-        // system prompt (skill text, {code} substitution, language rule, KB
-        // nudge) vanishes after the first tool turn. Seen live as the model
-        // replying "I don't see any ABAP code" right after a search_knowledge
-        // call, because the code was embedded in the dropped instructions.
+        // previous_response_id ไม่พก instructions — ต้องส่งใหม่ทุก call ไม่งั้น system prompt หายหลัง tool turn แรก
         args.instructions = instructions;
         if (previousResponseId) args.previous_response_id = previousResponseId;
 
@@ -592,7 +499,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         if (calls.length === 0) return;   // plain answer → done
 
         // Tool calls → execute and feed outputs back on the next turn.
-        // Phase 35.2: attach the document-search query so the UI badge can show it.
+        // attach the document-search query so the UI badge can show it.
         const rQuery = calls.map(c => ragQueryOf(c.name, c.args)).find(q => q != null);
         sendEvent({ type: 'tool_call', tools: calls.map(c => c.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
         const outputs = [];
@@ -608,17 +515,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         acc.toolTurns = (acc.toolTurns || 0) + 1;
     }
 
-    // Hit the tool-turn cap with no answer yet → force one tools-off turn so the
-    // user gets a summary instead of an empty reply (mirrors the chat path).
-    //
-    // Phase 40 fix: the loop exits on the turn cap immediately AFTER building the
-    // last round's tool outputs, so `input` still holds function_call_output items
-    // that were never sent. previous_response_id carries their function_call items,
-    // and the Responses API refuses a chained call that leaves any of them
-    // unanswered — it returns
-    //     400 No tool output found for function call call_...
-    // and the whole answer dies after the user already watched it search documents.
-    // Send the pending outputs alongside the nudge instead of dropping them.
+    // ชน tool-turn cap โดยไม่มีคำตอบ → ยิงปิดท้าย พร้อมส่ง tool output ที่ค้าง — ทิ้งไปจะโดน 400 No tool output
     if (!isAborted() && acc.fullText.length === 0 && previousResponseId) {
         console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`
             + ` (${Array.isArray(input) ? input.length : 0} pending tool output(s) carried over)`);
@@ -626,7 +523,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         await once({
             model, stream: true, max_output_tokens: maxOutputTokens,
             reasoning: { effort }, store: true, tool_choice: 'none',
-            instructions,   // Phase 35.3: not inherited via previous_response_id
+            instructions,   // not inherited via previous_response_id
             previous_response_id: previousResponseId,
             input: Array.isArray(input) ? [...input, nudge] : [nudge],
         });

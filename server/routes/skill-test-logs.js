@@ -11,9 +11,7 @@ const {
 } = ctx;
 const TEST_VERDICTS = ['correct', 'partial', 'incorrect'];
 
-// POST /api/skill-test-logs/:logId/verdict — save (or overwrite) a judgement.
-// Body: { verdict, correctedAnswer, note, category }. Re-judging is allowed:
-// the latest judgement wins (judged_by/judged_at overwritten).
+// verdict: ตัดสินซ้ำได้ อันล่าสุดชนะ
 router.post('/api/skill-test-logs/:logId/verdict', requireTrainer, async (req, res) => {
     const logId = parseInt(req.params.logId, 10);
     if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
@@ -48,10 +46,7 @@ router.post('/api/skill-test-logs/:logId/verdict', requireTrainer, async (req, r
     }
 });
 
-// POST /api/skill-test-logs/:logId/eval-case — Phase 30: promote/demote a
-// judged case into the exam set (⭐). Promotion needs a golden reference:
-// verdict='correct' (the answer itself is the reference) or a
-// corrected_answer supplied by the senior.
+// eval-case (⭐): ต้องมีเฉลย — verdict=correct หรือมี corrected_answer
 router.post('/api/skill-test-logs/:logId/eval-case', requireTrainer, async (req, res) => {
     const logId = parseInt(req.params.logId, 10);
     if (!Number.isInteger(logId)) return res.status(400).json({ ok: false, error: 'bad logId' });
@@ -80,9 +75,7 @@ router.post('/api/skill-test-logs/:logId/eval-case', requireTrainer, async (req,
     }
 });
 
-// GET /api/skill-test-logs?skill=<id>&verdict=<correct|partial|incorrect|pending>&limit&offset
-// List rows (question/answer previews only) + verdict stats for the same filter
-// scope (skill), so the history modal renders header counts in one call.
+// list + สถิติ verdict ใน call เดียว ให้ header ของ modal
 router.get('/api/skill-test-logs', requireTrainer, async (req, res) => {
     const skillId = String(req.query.skill || '').trim();
     const verdict = String(req.query.verdict || '').trim();
@@ -139,12 +132,7 @@ router.get('/api/skill-test-logs/:logId', requireTrainer, async (req, res) => {
     }
 });
 
-// ── Phase 30: eval harness — batch runner + AI judge ──────────────────────
-// One exam sitting: take every ⭐ case of a skill, get a FRESH answer from
-// the model under test (same pipeline as the Lab), then have a judge model
-// compare it against the golden reference and emit a rubric JSON. Results
-// stream into tbl_eval_result; tbl_eval_run carries live progress so the UI
-// can poll. Only ONE run at a time (they're slow + cost real OpenAI money).
+// eval harness: ทุก ⭐ case ตอบใหม่ด้วย model ที่ทดสอบ แล้วให้ judge เทียบเฉลย — รันทีละหนึ่ง (ช้า+เงินจริง)
 
 
 return router;

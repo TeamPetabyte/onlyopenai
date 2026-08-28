@@ -22,16 +22,14 @@ const multer = require('multer');
 // 100MB — large SAP training manuals (e.g. BC430 PDF ~37MB) must fit;
 // OpenAI's own per-file cap is 512MB so this stays well inside it.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
-// KB_FILE_RE is the same allowlist, already driving the boot and local sync.
-// A second copy 4,000 lines away would have to be kept in step by eye — and
-// v1.9.5 added .html to exactly one of the two places it then existed.
+// นามสกุลชุดเดียวกับ KB_FILE_RE ที่ boot ใช้ — เคยมีสองสำเนาแล้ว drift
 const KNOWLEDGE_EXT_LIST = '.txt .md .pdf .doc .docx .html .htm';
 
 // GET /api/knowledge — list files in vector store
 router.get('/api/knowledge', requireAuth, async (req, res) => {
     if (!HAS_API_KEY || !getVectorStoreId()) return res.json({ ok: true, files: [], vectorStoreId: null });
     try {
-        // Phase 38: walk all pages — a bare list() truncates at ~20 files.
+        // walk all pages — a bare list() truncates at ~20 files.
         const entries = [];
         for await (const f of openai.vectorStores.files.list(getVectorStoreId(), { limit: 100 })) entries.push(f);
         const files = await Promise.all(entries.map(async f => {
@@ -64,20 +62,14 @@ router.post('/api/knowledge/upload', requireAdmin, expensiveRateLimiter, upload.
         const uploaded = await openai.files.create({ file: stream, purpose: 'assistants' });
         // add to vector store
         await openai.vectorStores.files.createAndPoll(vsId, { file_id: uploaded.id });
-        // Save a local copy for reference. The name comes from the client, so
-        // it is a path, not an identifier: path.join(dir, '../../x') resolves
-        // outside dir, verified. basename() drops any directory part, and the
-        // resolved path is checked against the directory anyway — belt and
-        // braces, because this writes to disk under a name someone else chose.
+        // ชื่อไฟล์มาจาก client = เป็น path ไม่ใช่ id — basename + เช็ค resolve อยู่ใน dir
         const safeName = path_mod.basename(req.file.originalname || 'upload');
         const localPath = path_mod.join(KNOWLEDGE_DIR, safeName);
         if (!localPath.startsWith(path_mod.resolve(KNOWLEDGE_DIR) + path_mod.sep)
             && path_mod.dirname(localPath) !== path_mod.resolve(KNOWLEDGE_DIR)) {
             return res.json({ ok: false, error: 'Invalid filename' });
         }
-        // await, not writeFileSync: multer holds up to 100MB in memory by
-        // design (SAP manuals), and a synchronous write of that blocks the
-        // event loop — every chat stream on the process stalls with it.
+        // เขียนแบบ async — บัฟเฟอร์ 100MB เขียน sync จะ block ทุก stream ใน process
         await fs_mod.promises.writeFile(localPath, req.file.buffer);
         console.log(`[☁️ RAG] Uploaded: ${req.file.originalname}`);
         res.json({ ok: true, fileId: uploaded.id, name: req.file.originalname });
@@ -99,9 +91,6 @@ router.delete('/api/knowledge/:fileId', requireAdmin, async (req, res) => {
     }
 });
 
-// ══════════════════════════════════════════════════════════
-//  HEALTH CHECK
-// ══════════════════════════════════════════════════════════
 
 
 return router;
