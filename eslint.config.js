@@ -68,7 +68,10 @@ module.exports = [
 
             // Pre-existing debt: warn so it stays visible, but let CI gate on
             // errors only. Phase 47 does not rewrite running code.
-            'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+            'no-unused-vars': [
+                'warn',
+                { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+            ],
             'no-useless-escape': 'warn',
             'no-useless-assignment': 'warn',
             // builtinGlobals:false — the file that DEFINES a shared global is
