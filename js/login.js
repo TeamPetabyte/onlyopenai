@@ -2,22 +2,19 @@
 
 /* exported handleLogin */
 
-        // Show the app version in the footer (single source of truth:
-        // js/config.js AppConfig.VERSION — bump it alongside the git tag
-        // whenever a release ships).
+        // เวอร์ชันที่ footer — source of truth คือ AppConfig.VERSION
         (function () {
             const el = document.getElementById('app-version');
             if (el) el.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
         })();
 
-        // Phase 16.26: removed role tabs — server decides role from the
-        // user record after login, no need to pre-select on the form.
+        // ไม่มี role tab — server ตัดสิน role จาก user record เอง
 
         // Redirect if already logged in
         (function () {
             const session = Auth.getSession();
             if (session) {
-                // Phase 8: pending pw change short-circuits everything else
+                // pending pw change short-circuits everything else
                 if (session.mustChangePassword) {
                     window.location.href = '/change-password';
                     return;
@@ -26,9 +23,7 @@
             }
         })();
 
-        // Phase 19.5: show a friendly message when we got bounced here
-        // because the previous session expired (?expired=1) or the user
-        // explicitly logged out (?loggedout=1).
+        // เด้งมาเพราะ session หมดอายุ (?expired=1) หรือ logout เอง (?loggedout=1) — บอกเหตุผลให้เห็น
         (function () {
             try {
                 const q = new URLSearchParams(window.location.search);
@@ -41,8 +36,7 @@
                 } else if (q.get('loggedout') === '1') {
                     const el = document.getElementById('error-msg');
                     if (el) {
-                        // Soften the styling for "successful logout" — same
-                        // element, neutral text, no scary red.
+                        // logout ปกติ — โทนกลาง ไม่ใช่แดงน่ากลัว
                         el.textContent = '✓ Logged out';
                         el.classList.add('show');
                         el.style.background = 'rgba(34, 197, 94, 0.10)';
@@ -76,7 +70,7 @@
             try {
                 const result = await Auth.login(username, password);
                 if (!result.ok) {
-                    // Phase 8: surface locked-account messages distinctly
+                    // surface locked-account messages distinctly
                     showError(result.locked
                         ? '🔒 ' + (result.error || 'Account locked')
                         : (result.error || 'Invalid credentials'));
@@ -84,7 +78,7 @@
                     btn.textContent = 'Log in';
                     return;
                 }
-                // Phase 8: forced password change → go to dedicated page first
+                // forced password change → go to dedicated page first
                 if (result.mustChangePassword) {
                     window.location.href = '/change-password';
                     return;
@@ -97,5 +91,4 @@
             }
         }
 
-        // Fields start blank — users type their own credentials.
-        // (Browser may still offer saved logins via autocomplete.)
+        // ช่องเริ่มว่าง — ปล่อยให้ browser autocomplete เสนอเอง

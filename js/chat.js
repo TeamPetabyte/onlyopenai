@@ -2,13 +2,11 @@
 
 /* exported autoResize, cancelDeleteChat, changePassword, clearSearch, closeOverlay, confirmDeleteChat, deleteSession, enterRenameMode, exportSession, handleFileSelect, handleInputKey, handleSessionKey, newChat, onEffortChange, onModelChange, onSearchInput, onSearchKey, onSendBtnClick, openChangePassword, openQuotaRequestModal, openUsage, overlayClick, toggleFavorite, toggleSidebar, toggleSidebarCollapsed, toggleTheme, toggleUserMenu */
 
-        // ══════════════════════════════════════════════════════════
-        // STATE
-        // ══════════════════════════════════════════════════════════
+        // ── STATE ──
         const State = {
             selectedSkill: 'auto',
-            selectedModel: 'gpt-5.6-terra',   // Phase 34: model picker default
-            selectedEffort: 'medium',          // Phase 34: reasoning effort default
+            selectedModel: 'gpt-5.6-terra',   // model picker default
+            selectedEffort: 'medium',          // reasoning effort default
             isRunning: false,
             balance: 100,
             usageHistory: [],       // for Usage modal
@@ -22,12 +20,9 @@
                 const s = Auth.getSession(); if (!s) return;
                 this.balance = parseFloat(localStorage.getItem('agenthub_balance_' + s.username) || '100');
                 try { this.usageHistory = JSON.parse(localStorage.getItem('agenthub_history_' + s.username) || '[]'); } catch { this.usageHistory = []; }
-                // Phase 34: restore the user's model + effort choice
+                // restore the user's model + effort choice
                 this.selectedModel  = localStorage.getItem('agenthub_model_'  + s.username) || this.selectedModel;
-                // Phase 43: the picker went from six levels to three. Someone
-                // who had chosen max/xhigh/none still has it saved here, so map
-                // it to the nearest survivor — resetting them to the default
-                // would silently undo a deliberate choice.
+                // map ค่าเก่า max/xhigh/none เป็นตัวที่เหลือ — ไม่รีเซ็ตทิ้งตัวเลือกที่ user ตั้งใจไว้
                 const EFFORT_MAP = { none: 'low', xhigh: 'high', max: 'high' };
                 const savedEffort = localStorage.getItem('agenthub_effort_' + s.username);
                 if (savedEffort) {
@@ -50,56 +45,29 @@
                 this.usageHistory.unshift(entry);
                 if (this.usageHistory.length > 200) this.usageHistory = this.usageHistory.slice(0, 200);
                 this.balance = Math.max(0, this.balance - (entry.cost || 0)); this.save();
-                // NOTE: usage is persisted + billed server-side by /api/chat
-                // (tbl_response + project-pool deduction + credit ledger, all in
-                // one place). The old POST /api/history here ran a SECOND pool
-                // deduction → double-charge, so it was removed. The local
-                // balance/history update above is UI-only.
+                // เงินจริงคิดฝั่ง server ใน /api/chat ที่เดียว — ตรงนี้เป็นแค่ UI (POST /api/history เดิมหักซ้ำ เลยถูกถอด)
             },
         };
 
-        // ══════════════════════════════════════════════════════════
-        // SESSION API HELPERS
-        // ══════════════════════════════════════════════════════════
-        // BASE comes from js/config.js (window.BASE) — loaded before this script.
-        // Fallback to localhost only if config.js failed to load.
+        // ── SESSION API HELPERS ──
+        // BASE มาจาก js/config.js; fallback localhost เฉพาะตอน config.js โหลดไม่ขึ้น
         if (typeof BASE === 'undefined') { var BASE = (window.AppConfig && window.AppConfig.API_BASE) || 'http://localhost:3001'; }
 
-        // Show the app version in the sidebar footer (single source of
-        // truth: js/config.js AppConfig.VERSION — bump it alongside the
-        // git tag when a release ships).
+        // เวอร์ชันที่ sidebar footer — source of truth คือ AppConfig.VERSION
         (function () {
             const el = document.getElementById('app-version');
             if (el) el.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
         })();
 
-        // Phase 12: new API shape.
-        //   list    → GET    /api/chat/sessions           → { sessions: [...] }
-        //   one     → GET    /api/chat/sessions/:id       → { session, messages }
-        //   create  → POST   /api/chat/sessions  body:{title?}
-        //   rename  → PATCH  /api/chat/sessions/:id  body:{title}
-        //   delete  → DELETE /api/chat/sessions/:id       (soft delete)
-        //   export  → GET    /api/chat/sessions/:id/export → text/markdown
-        // All endpoints enforce owner = req.session.userId server-side; the
-        // old frontend passed userId as a query param but the server now
-        // ignores that — the session cookie is the only trusted identity.
+        // REST อยู่ใต้ /api/chat/sessions — ตัวตนมาจาก session cookie เท่านั้น (server เมิน query userId)
         async function apiLoadSessions(q) {
             try {
-                // When caller doesn't pass q explicitly, keep the active
-                // search filter so post-send reloads don't "unfilter" the list.
+                // ไม่ส่ง q มา = คงคำค้นเดิม — รีโหลดหลังส่งแชทต้องไม่ล้าง filter
                 const effective = (q !== undefined) ? q : (State.searchQuery || '');
                 const url = BASE + '/api/chat/sessions' + (effective ? ('?q=' + encodeURIComponent(effective)) : '');
                 const d = await fetch(url, { headers: Auth.authHeaders() }).then(r => r.json());
                 if (d.ok) {
-                    // Phase 19.7.1: coerce id to Number on receive. PostgreSQL
-                    // BIGINT round-trips through node-pg as a *string* (e.g.
-                    // "41"), but inline onclick handlers embed sessionId as a
-                    // numeric literal (`toggleFavorite(event, 41)`). The
-                    // mismatch made `State.sessions.find(s => s.id === id)`
-                    // silently return undefined → toggleFavorite and the
-                    // delete dialog's "find row" lookup just exited with no
-                    // error. Coerce once at the boundary so the rest of the
-                    // UI can rely on a consistent Number id.
+                    // BIGINT ผ่าน node-pg มาเป็น string — coerce เป็น Number ที่ขอบทางเข้า ไม่งั้น find(s.id === id) พลาดเงียบ
                     State.sessions = (d.sessions || []).map(s => ({
                         ...s,
                         id: typeof s.id === 'string' ? Number(s.id) : s.id,
@@ -128,42 +96,26 @@
             } catch { return false; }
         }
 
-        async function apiDeleteSession(sessionId) {
-            try {
-                await fetch(BASE + '/api/chat/sessions/' + sessionId, { method: 'DELETE', headers: Auth.authHeaders() });
-            } catch { }
-        }
-
         function apiExportSessionUrl(sessionId) {
-            // fetch → blob → anchor download (lets us handle errors; the
-            // session cookie rides along automatically). CSRF is not
-            // required on GET. Opens a download dialog with .md file.
+            // fetch → blob → anchor เพื่อจับ error ได้เอง; GET ไม่ต้องมี CSRF
             return fetch(BASE + '/api/chat/sessions/' + sessionId + '/export', { headers: Auth.authHeaders() })
                 .then(r => r.ok ? r.blob() : null);
         }
 
-        // ══════════════════════════════════════════════════════════
-        // INIT
-        // ══════════════════════════════════════════════════════════
+        // ── INIT ──
         document.addEventListener('DOMContentLoaded', async () => {
             if (!Auth.check('user')) return;
             const session = Auth.getSession();
             State.load();
-            syncComposerControls();   // Phase 34: reflect restored model/effort into the pickers
+            syncComposerControls();   // reflect restored model/effort into the pickers
             const displayName = session.displayName || session.username;
             document.getElementById('user-display-name').textContent = displayName;
             document.getElementById('user-avatar').textContent = displayName.charAt(0).toUpperCase();
 
-            // Phase 19.3: track whether ANY init fetch failed so we can
-            // surface a single toast instead of letting fetches die silently.
-            // Used to be: silent catches → UI just sat at "฿—" forever with
-            // no clue to the user why.
+            // รวม error ตอน init ไว้เด้ง toast ครั้งเดียว — เดิม fail เงียบค้างที่ "฿—"
             let initHadError = false;
 
-            // Load balance from server.
-            // Phase 21.10 (Concept B): the spendable money is the PROJECT POOL,
-            // not the per-user wallet (which is now always 0). Drive the sidebar
-            // off /api/quota-status.projectPool so it reflects real funds.
+            // เงินที่ใช้ได้คือ PROJECT POOL (wallet ต่อ user = 0 เสมอ) — อ่านจาก /api/quota-status
             if (session.userId) {
                 try {
                     const q = await fetch(BASE + '/api/quota-status', { headers: Auth.authHeaders() }).then(r => r.json());
@@ -204,27 +156,19 @@
                 if (projName) {
                     document.getElementById('brand-project').textContent = projName;
                     document.getElementById('sidebar-project-label').textContent = projName;
-                    // Phase 19.3: stop overwriting brand-avatar with the
-                    // project initial — Phase 16.7 swapped it to an <img>
-                    // of the Petabyte logo and this line was clobbering it
-                    // (the logo only flashed for <100ms after page load).
+                    // อย่าเขียนทับ brand-avatar — เป็น <img> โลโก้แล้ว เคยโดนทับจนโลโก้แวบหาย
                 }
             }
 
             if (PRICING.skills.length > 0) selectSkill(PRICING.skills[0].id);
             updateBalanceDisplay();
 
-            // Phase 19.3: tell the user once if any init fetch failed —
-            // beats balance / history silently stuck at empty.
+            // บอก user ครั้งเดียวถ้า init ล้มเหลว
             if (initHadError) {
                 showToast(t('u.err.loadPartialFailed'), 'error');
             }
 
-            // Phase 19.4: restore the chat session from URL hash on refresh
-            // (e.g. #s/42). Without this, refreshing the page always dumped
-            // the user back to an empty "new chat" state — even if they were
-            // mid-conversation. Invalid / deleted session ids are silently
-            // ignored (loadSession's apiGetSession returns null → toast).
+            // กู้ session จาก URL hash (#s/42) ตอน refresh — id ที่ใช้ไม่ได้แค่ toast แล้วปล่อยผ่าน
             const m = String(window.location.hash || '').match(/^#\/?s\/(\d+)$/);
             if (m && m[1]) {
                 const sid = Number(m[1]);
@@ -235,9 +179,7 @@
             }
         });
 
-        // Phase 19.4: respond to back/forward button so navigating between
-        // chat sessions also updates the URL — and reloading keeps the same
-        // session pinned.
+        // back/forward ต้องพา session ตาม และ reload ต้องอยู่ที่เดิม
         window.addEventListener('hashchange', () => {
             const m = String(window.location.hash || '').match(/^#\/?s\/(\d+)$/);
             const sid = m && m[1] ? Number(m[1]) : null;
@@ -249,15 +191,11 @@
             }
         });
 
-        // ══════════════════════════════════════════════════════════
-        // NEW CHAT
-        // ══════════════════════════════════════════════════════════
+        // ── NEW CHAT ──
         function newChat() {
-            // Phase 19.3: close mobile drawer (no-op on desktop) after picking
+            // close mobile drawer (no-op on desktop) after picking
             toggleSidebar(false);
-            // Phase 19.4: clear the URL hash so refresh stays on "new chat"
-            // (otherwise we'd snap back to the previous session). Use
-            // replaceState to avoid bloating the history stack.
+            // ล้าง hash ด้วย replaceState — refresh แล้วอยู่หน้า new chat และไม่ปั๊ม history
             try {
                 if (window.location.hash && window.history && window.history.replaceState) {
                     window.history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -266,7 +204,7 @@
             State.currentSessionId = null;
             State.currentMessages = [];
             const area = document.getElementById('chat-area');
-            // Phase 19.2: welcoming empty state on new chat.
+            // welcoming empty state on new chat.
             area.innerHTML = `
         <div class="chat-empty" id="chat-empty">
             <img class="chat-empty-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
@@ -277,12 +215,8 @@
             document.getElementById('chat-input').focus();
         }
 
-        // ══════════════════════════════════════════════════════════
-        // LOAD SESSION FROM HISTORY
-        // ══════════════════════════════════════════════════════════
-        // Phase 19.5 a11y: keyboard activation for .session-item rows.
-        // Enter/Space → load the session, but only when focus is on the row
-        // itself (not on the action buttons, which have their own handlers).
+        // ── LOAD SESSION ──
+        // Enter/Space บนแถว = เปิด session (เฉพาะโฟกัสที่ตัวแถว ไม่ใช่ปุ่มข้างใน)
         function handleSessionKey(e, sessionId) {
             if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
             // Skip if user is pressing inside one of the action buttons
@@ -293,18 +227,14 @@
 
         async function loadSession(sessionId) {
             if (State.isRunning) { showToast(t('u.err.pleaseWait'), 'error'); return; }
-            // Phase 19.3: close mobile drawer on session pick
+            // close mobile drawer on session pick
             toggleSidebar(false);
             const res = await apiGetSession(sessionId);
             if (!res) { showToast(t('u.err.sessionNotFound'), 'error'); return; }
 
-            // Phase 19.7.1: server returns BIGINT as string — coerce so the
-            // active-highlight check `s.id === State.currentSessionId` matches
-            // the Number ids from apiLoadSessions.
+            // server ส่ง BIGINT เป็น string — coerce ให้เทียบกับ Number จาก apiLoadSessions ได้
             State.currentSessionId = Number(res.session.id);
-            // Phase 19.4: pin the session into the URL so refresh restores it.
-            // replaceState (not push) — each session click would otherwise
-            // pollute the back-button history one entry per click.
+            // pin ลง URL ด้วย replaceState — ไม่ให้คลิก session ปั๊ม back-history ทีละอัน
             try {
                 const want = '#s/' + res.session.id;
                 if (window.location.hash !== want && window.history && window.history.replaceState) {
@@ -312,9 +242,7 @@
                 }
             } catch (_) { }
 
-            // Normalise message shape: server uses snake_case for some fields
-            // (created_at, input_tokens, ...) but the renderer expects the
-            // in-memory shape used by the old code (timestamp, cost, ...).
+            // แปลง snake_case จาก server เป็น shape ที่ renderer ใช้
             State.currentMessages = (res.messages || []).map(m => ({
                 role:         m.role,
                 content:      m.content,
@@ -322,27 +250,14 @@
                 cost:         m.cost != null ? Number(m.cost) : undefined,
                 inputTokens:  m.input_tokens || 0,
                 outputTokens: m.output_tokens || 0,
-                // Phase 43: duration is stored now. Rows written before that
-                // migration have none — keep it undefined rather than 0 so the
-                // badge can leave the segment out instead of claiming "0.0s".
+                // แถวก่อน migration ไม่มี duration — ปล่อย undefined อย่าใส่ 0 ไม่งั้น badge อ้าง "0.0s"
                 durationMs:   m.duration_ms != null ? Number(m.duration_ms) : undefined,
-                // Phase 47: every skill whose knowledge reached the model, not
-                // just the one that answered. It was already being stored; the
-                // reload path simply never asked for it, so the audit the
-                // senior asked for could only be seen by querying Postgres.
-                // skill_id is the skill that ANSWERED; skills_used is everything
-                // whose knowledge reached the model. The server stores the
-                // latter as [skillId, ...supporting].filter(Boolean), so when
-                // the router picked nothing the first entry is a SUPPORTING
-                // skill — printing it as the primary announced a skill that
-                // never answered. Read them separately, as the server stores them.
+                // skill_id = ตัวที่ตอบ, skills_used = ทุกตัวที่ความรู้ถึงโมเดล — อ่านแยกกัน อย่าเอาตัวแรกมาแทนตัวตอบ
                 skillId:      m.skill_id || null,
                 skillsUsed:   m.skills_used ? String(m.skills_used).split(',').filter(Boolean) : [],
             }));
 
-            // Pick an appropriate skill if the session has a hint from the
-            // most recent assistant message. If not, leave whatever was
-            // selected alone.
+            // เลือก skill ตาม hint จากคำตอบล่าสุด ไม่มีก็คงของเดิม
             const lastSkillId = [...(res.messages || [])].reverse()
                 .find(m => m.skill_id)?.skill_id;
             if (lastSkillId) selectSkill(lastSkillId);
@@ -351,9 +266,7 @@
             renderSessionList();
         }
 
-        // ══════════════════════════════════════════════════════════
-        // RENDER ALL MESSAGES IN CHAT AREA
-        // ══════════════════════════════════════════════════════════
+        // ── RENDER MESSAGES ──
         function renderChatMessages(messages) {
             const area = document.getElementById('chat-area');
             area.innerHTML = '';
@@ -383,25 +296,18 @@
                     div.appendChild(bubble);
                     // ⧉ Copy + ↻ Regenerate toolbar
                     const actions = MD.attachMessageCopy(bubble, msg.content || '');
-                    // Phase 45: recover the uploaded name from the user turn that
-                    // prompted this answer, so a reopened chat downloads the same
-                    // filename a live one would.
+                    // เอาชื่อไฟล์จาก turn ที่ถามมา — reopen แล้วดาวน์โหลดได้ชื่อเดียวกับตอน live
                     const askedWith = (messages[idx - 1] || {}).content || '';
                     const fileTag = /\[File:\s*([^\]\n]+)\]/.exec(askedWith);
                     if (actions) MD.attachMessageDownload(actions, msg.content || '',
                         fileTag ? fileTag[1].trim() : undefined);
                     if (actions && isLast) addRegenerateButton(actions);
-                    // Phase 47: show the same 🎯 line a live answer shows, so
-                    // reopening a chat does not quietly lose which checks ran.
+                    // reopen แล้วต้องเห็นแถบ 🎯 เหมือนตอน live
                     if (msg.skillId || (msg.skillsUsed && msg.skillsUsed.length)) {
                         const sb = document.createElement('div');
                         sb.className = 'skill-badge';
                         const others = (msg.skillsUsed || []).filter(x => x !== msg.skillId);
-                        // The live badge prints the skill's label; printing the
-                        // raw id here made the same answer read differently
-                        // before and after a refresh. PRICING.skills already
-                        // holds the mapping, and the id is the honest fallback
-                        // for a skill the catalog no longer lists.
+                        // พิมพ์ label ไม่ใช่ raw id — id เป็น fallback เมื่อ catalog ไม่รู้จักแล้ว
                         const skillLabel = (id) =>
                             (PRICING.skills.find(x => x.id === id) || {}).name || id;
                         sb.textContent = msg.skillId
@@ -419,9 +325,7 @@
                         const tok = (msg.inputTokens || 0) + (msg.outputTokens || 0);
                         const badge = document.createElement('div');
                         badge.className = 'cost-badge';
-                        // Phase 43: only claim a duration when we actually have
-                        // one. Messages from before duration was stored print
-                        // just the token count instead of a false "0.0s".
+                        // ไม่มี duration จริงก็อย่าอ้าง "0.0s" — พิมพ์แค่ token
                         badge.textContent = tok.toLocaleString() + ' tokens'
                             + (msg.durationMs ? ' · ' + (msg.durationMs / 1000).toFixed(1) + 's' : '');
                         div.appendChild(badge);
@@ -432,16 +336,9 @@
             scrollToBottom(area, true);
         }
 
-        // ══════════════════════════════════════════════════════════
-        // RENDER SESSION LIST (SIDEBAR)
-        //   Phase 19.7: favorites get a "⭐ Favorites" group pinned at the
-        //   top, separate from the date-bucketed history. A single row
-        //   helper keeps search/grouped/favorites rendering identical.
-        // ══════════════════════════════════════════════════════════
+        // ── RENDER SESSION LIST ── favorites ปักบนสุด แยกจากกลุ่มวันที่
 
-        // Render a single session row as an HTML string. Centralised so
-        // search results, favorites group, and date groups all share the
-        // same markup (and same a11y / keyboard handling).
+        // แถว session เป็น HTML string ที่เดียว — search/favorites/date ใช้ markup + a11y ชุดเดียวกัน
         function _renderSessionRow(s) {
             const active = s.id === State.currentSessionId ? 'active' : '';
             const isFav  = (s.isFavorite || s.is_favorite) ? 'is-favorite' : '';
@@ -467,8 +364,7 @@
             const list = document.getElementById('history-list');
             const searching = (State.searchQuery || '').length > 0;
             if (!State.sessions || State.sessions.length === 0) {
-                // Phase 19.8: matched-set empty (search returned 0) vs
-                // never-had-any-chat empty get different treatments.
+                // ค้นแล้วว่าง vs ยังไม่เคยมีแชท — คนละข้อความ
                 if (searching) {
                     list.innerHTML =
                         '<div class="history-empty no-result">' +
@@ -488,8 +384,7 @@
                 return;
             }
 
-            // While searching, skip grouping — show flat list of matches
-            // (server already sorted favorites first, then by updatedAt DESC).
+            // ตอนค้นหาไม่จัดกลุ่ม — server เรียง favorites ก่อนแล้ว
             if (searching) {
                 let sh = '<div class="date-group-label">' + esc(tf('u.sess.searchResultsCount', { n: State.sessions.length })) + '</div>';
                 State.sessions.forEach(s => { sh += _renderSessionRow(s); });
@@ -497,15 +392,11 @@
                 return;
             }
 
-            // Split favorites out first — they're not also shown in date
-            // buckets (Claude/Slack-style "starred = own section, no dupes").
+            // favorites อยู่ section เดียว ไม่โผล่ซ้ำใน bucket วันที่
             const favs   = State.sessions.filter(s => (s.isFavorite || s.is_favorite));
             const others = State.sessions.filter(s => !(s.isFavorite || s.is_favorite));
 
-            // Group the non-favorite sessions by date (buckets relative to
-            // today's local-midnight). Keys stay language-agnostic; the
-            // display label is looked up separately so the language toggle
-            // doesn't need to touch the grouping logic.
+            // จัดกลุ่มตามวัน (เทียบเที่ยงคืน local) — key เป็นภาษากลาง ป้ายค่อย lookup ตามภาษา
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             const yesterdayStart = todayStart - 86400000;
@@ -514,8 +405,7 @@
 
             const groups = { today: [], yesterday: [], week: [], month: [], older: [] };
             others.forEach(s => {
-                // Server returns camelCase `updatedAt`; legacy code used
-                // `updated_at`. Accept either for forwards-compat.
+                // รับทั้ง updatedAt และ updated_at
                 const when = s.updatedAt || s.updated_at;
                 const ts = new Date(when).getTime();
                 const d = new Date(when);
@@ -543,14 +433,8 @@
             list.innerHTML = html;
         }
 
-        // ══════════════════════════════════════════════════════════
-        // SESSION ACTIONS — rename / export / delete
-        // ══════════════════════════════════════════════════════════
-        // Inline rename — double-click on title (or ✎ button) swaps the
-        // span for an <input>. Enter / blur = save, Esc = cancel.
-        // We guard against re-entering while already editing the same row,
-        // and suppress loadSession() on the row while an input is present
-        // (the input's stopPropagation does the heavy lifting).
+        // ── SESSION ACTIONS: rename / export / delete ──
+        // dblclick หรือ ✎ สลับ span เป็น <input>; Enter/blur = save, Esc = cancel
         function enterRenameMode(e, sessionId) {
             e.stopPropagation();
             if (e.preventDefault) e.preventDefault();
@@ -624,8 +508,7 @@
 
             row.classList.add('is-editing');
             titleEl.replaceWith(input);
-            // Focus + select-all so the user can type immediately or
-            // overwrite, matching Notion / ChatGPT behaviour.
+            // focus + select-all ให้พิมพ์ทับได้ทันที
             input.focus();
             input.select();
         }
@@ -643,12 +526,7 @@
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
-        // ══════════════════════════════════════════════════════════
-        // FAVORITE (Phase 19.7)
-        //   Star/unstar a chat session. Optimistic UI: flip local state +
-        //   re-render immediately, then PATCH the server. On failure roll
-        //   back and toast.
-        // ══════════════════════════════════════════════════════════
+        // ── FAVORITE ── optimistic: flip local ก่อนแล้ว PATCH; ล้มเหลวค่อย roll back + toast
         async function toggleFavorite(e, sessionId) {
             if (e && e.stopPropagation) e.stopPropagation();
             const sess = (State.sessions || []).find(s => s.id === sessionId);
@@ -676,11 +554,7 @@
             }
         }
 
-        // Phase 19: chat-delete uses a custom in-app modal (not window.confirm).
-        // The pending session is stashed so the modal's Confirm button knows
-        // which one to delete. We also re-fetch sessions from the server after
-        // success — fixes the bug where the deleted row could pop back later
-        // if any other code path triggered apiLoadSessions.
+        // ลบแชทผ่าน modal ใน-แอป — จำ id ให้ปุ่ม Confirm และ re-fetch หลังลบกันแถวเด้งกลับ
         let _pendingDeleteSessionId = null;
 
         function deleteSession(e, sessionId) {
@@ -688,11 +562,7 @@
             _pendingDeleteSessionId = sessionId;
             const sess = (State.sessions || []).find(s => s.id === sessionId);
             const titleEl = document.getElementById('confirm-delete-target');
-            // Phase 19.6.1: if the chat has no title (or we couldn't find the
-            // row in local state), hide the chip entirely instead of showing
-            // "(ไม่พบแชท)" / "(ไม่มีชื่อ)" — the sentence reads fine without it:
-            //   "[chip] จะถูกลบถาวร — ..."   becomes
-            //   "จะถูกลบถาวร — ..."          which is still clear in context.
+            // ไม่มีชื่อแชท → ซ่อน chip ไปเลย — ประโยค "จะถูกลบถาวร" อ่านรู้เรื่องอยู่แล้ว
             const title = (sess && sess.title) ? String(sess.title).trim() : '';
             if (titleEl) {
                 if (title) {
@@ -704,8 +574,7 @@
                 }
             }
             const btn = document.getElementById('confirm-delete-btn');
-            // Phase 19.6: button text is now "Delete" (consistent with Cancel
-            // in English to match the Claude-style look) — reset on every open.
+            // รีเซ็ตปุ่มทุกครั้งที่เปิด
             if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
             const overlay = document.getElementById('confirm-delete-chat');
             overlay.classList.add('open');
@@ -753,10 +622,7 @@
             // 2) If we deleted the active chat, reset the chat area to empty
             if (wasCurrent) newChat();
             else renderSessionList();
-            // 3) Resync from server in the background — handles the case where
-            //    a concurrent action (e.g. a recently-sent chat) repopulated
-            //    State.sessions from /api/chat/sessions. Without this the
-            //    deleted item could "come back" on the next list fetch.
+            // resync จาก server — กันแถวที่ลบแล้วเด้งกลับจาก fetch อื่นที่ค้างอยู่
             apiLoadSessions();
             // 4) Close the modal + toast
             _pendingDeleteSessionId = null;
@@ -772,33 +638,21 @@
             }
         });
 
-        // ══════════════════════════════════════════════════════════
-        // SKILL SELECTION
-        //   Phase 19.3: removed openSkillPicker() — the overlay & trigger
-        //   were already disabled in Phase 19.1 (header just shows
-        //   "PetabyteAi"). selectSkill is still called by the router /
-        //   intent classifier on the server side.
-        // ══════════════════════════════════════════════════════════
+        // ── SKILL SELECTION ── (picker ถูกถอดแล้ว — router ฝั่ง server เป็นคนเลือก)
         function selectSkill(skillId) {
             State.selectedSkill = skillId;
-            // Phase 19.1: keep the header label as "PetabyteAi" no matter which
-            // skill the user picks (or the router selects). The skill is still
-            // tracked in State.selectedSkill and sent to the backend — we just
-            // don't surface the specific skill name in the chat header any more.
-            // (Reverted from skill.emoji + ' ' + skill.name.)
+            // header คงคำว่า "PetabyteAi" เสมอ — skill ยังถูก track และส่งไป backend ตามปกติ
             const el = document.getElementById('current-skill-name');
             if (el) el.textContent = 'PipekAI';   // emoji replaced by the mascot <img> beside it
         }
 
-        // ══════════════════════════════════════════════════════════
-        // SEND MESSAGE
-        // ══════════════════════════════════════════════════════════
+        // ── SEND MESSAGE ──
         async function sendMessage() {
             if (State.isRunning) return;
             const inputEl = document.getElementById('chat-input');
             let userText = inputEl.value.trim();
             if (!userText && !State.attachedFile) { showToast(t('u.err.enterMessage'), 'error'); return; }
-            // Phase 19.8: align with the in-sidebar warning copy + emoji
+            // align with the in-sidebar warning copy + emoji
             if (State.balance <= 0) {
                 showToast(t('u.err.creditDepletedContactAdmin'), 'error');
                 return;
@@ -808,9 +662,7 @@
             const skill = PRICING.skills.find(s => s.id === selectedSkillId) || PRICING.skills[0];
             const displayText = userText || '[File: ' + (State.attachedFile ? State.attachedFile.name : '') + ']';
             let prompt = userText;
-            // Phase 45: keep the uploaded name — removeFile() clears it, and the
-            // Download button needs it so the corrected file comes back as
-            // Zlmmrp29_batch.abap rather than pipekai-response.abap.
+            // เก็บชื่อไฟล์ก่อน removeFile() ล้าง — ไฟล์ที่แก้แล้วต้องกลับไปชื่อเดิม ไม่ใช่ pipekai-response.abap
             const uploadedName = State.attachedFile ? State.attachedFile.name : null;
             if (State.attachedFile) { prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content; removeFile(); }
             inputEl.value = ''; inputEl.style.height = 'auto';
@@ -826,8 +678,7 @@
             userDiv.innerHTML = '<div class="msg-bubble">' + esc(displayText) + '</div>';
             area.appendChild(userDiv); area.scrollTop = area.scrollHeight;
 
-            // Flip send button → stop button. Keep enabled so the user
-            // can click it to cancel; isRunning guards against re-send.
+            // ปุ่ม send กลายเป็นปุ่ม stop — คงกดได้เพื่อยกเลิก, isRunning กันส่งซ้ำ
             State.isRunning = true;
             const sendBtn = document.getElementById('send-btn');
             sendBtn.classList.add('is-stop');
@@ -846,12 +697,9 @@
 
             let accumulated = '', responseMsgEl = null, streamBubble = null;
 
-            // Phase 35.2: RAG badge — pinned above the answer bubble, created
-            // as soon as the model starts a document search (often BEFORE the
-            // first text chunk, so the shell must be creatable from either side).
+            // RAG badge อาจมาก่อน text chunk แรก — shell ต้องสร้างได้จากทั้งสองฝั่ง
             let ragBadgeEl = null, ragQuery = '';
-            // Phase 40: the skill badge sits above the RAG badge — "which prompt
-            // was applied" comes before "what it looked up".
+            // skill badge อยู่เหนือ RAG badge — "ใช้ prompt ไหน" มาก่อน "ค้นอะไร"
             let skillBadgeEl = null;
             function ensureResponseShell() {
                 if (!responseMsgEl) {
@@ -866,7 +714,7 @@
                     ensureResponseShell();
                     if (!ragBadgeEl) {
                         ragBadgeEl = document.createElement('div');
-                        // Phase 40: below the skill badge when both are present.
+                        // below the skill badge when both are present.
                         responseMsgEl.insertBefore(ragBadgeEl,
                             skillBadgeEl ? skillBadgeEl.nextSibling : responseMsgEl.firstChild);
                     }
@@ -897,11 +745,7 @@
                 }
             };
 
-            // Phase 40: skill badge. The server has always told us which Skill
-            // prompt its router matched (SSE `routed`), but the client dropped
-            // the event — so a tester saw the 🔍 document-search badge and no
-            // sign at all of the skill prompt, which is exactly why the skills
-            // looked like they never ran. `source` also says HOW it was picked.
+            // SSE routed = router จับ skill ไหน/เลือกยังไง — เดิม client ทิ้ง event จน skill ดูไม่ทำงาน
             const onRouted = (ev) => {
                 ensureResponseShell();
                 if (!skillBadgeEl) {
@@ -922,9 +766,7 @@
                         src.textContent = ' · ' + t(srcKey, '');
                         skillBadgeEl.appendChild(src);
                     }
-                    // Phase 45: the other checks that fed this answer. Named, not
-                    // counted — "+3" tells the tester nothing about which check
-                    // ran, and that is the question they are actually asking.
+                    // โชว์ชื่อ check ที่ร่วมตอบ ไม่ใช่ "+3" — tester อยากรู้ว่าตัวไหนรัน
                     if (Array.isArray(ev.supporting) && ev.supporting.length) {
                         const extra = document.createElement('span');
                         extra.className = 'skill-badge-src';
@@ -938,13 +780,7 @@
                 scrollToBottom(area);
             };
 
-            // Phase 34: reveal at a capped pace instead of painting every SSE
-            // chunk the instant it arrives. Raw tokens can burst in faster
-            // than a user can react, so a long/fast answer used to "pop"
-            // onto screen almost fully formed — no real window to notice
-            // and hit Stop. Pacing the reveal also throttles DOM repaints
-            // for long responses (fewer, steadier updates instead of one
-            // per token).
+            // เผยข้อความแบบจำกัดความเร็ว — กันคำตอบโผล่พรวดจนกด Stop ไม่ทัน และลด DOM repaint
             let displayedLen = 0;
             let revealTimer = null;
             const REVEAL_TICK_MS = 20;
@@ -958,16 +794,13 @@
                 revealTimer = setInterval(() => {
                     if (displayedLen >= accumulated.length) return;
                     displayedLen = Math.min(accumulated.length, displayedLen + REVEAL_CHARS_PER_TICK);
-                    // During streaming we escape (fast, safe). Markdown rendering
-                    // happens once at finalize — partial markdown is unparseable.
+                    // ระหว่าง stream ใช้ textContent (เร็ว/ปลอดภัย) — markdown render ทีเดียวตอนจบ
                     if (streamBubble) streamBubble.textContent = accumulated.slice(0, displayedLen);
                     scrollToBottom(area);
                 }, REVEAL_TICK_MS);
             }
 
-            // Phase 21.10 — Concept B: server may block with 402 (pool empty)
-            // or 429 (daily cap). Show a clear in-chat block bubble with the
-            // right action (top-up vs request more).
+            // 402 = pool หมด, 429 = ติด daily cap — bubble คนละข้อความคนละปุ่ม
             const onChatBlocked = (info) => {
                 const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
                 showBlockBubble(area, info);
@@ -978,8 +811,7 @@
                 chunk => {
                     accumulated += chunk;
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
-                    // Phase 35.2: the shell may already exist (RAG badge created
-                    // it first) — only the text bubble itself is created here.
+                    // shell อาจมีแล้ว (RAG badge สร้างก่อน) — ตรงนี้สร้างเฉพาะ text bubble
                     ensureResponseShell();
                     if (!streamBubble) {
                         streamBubble = document.createElement('div');
@@ -991,11 +823,9 @@
                 async result => {
                     stopReveal();
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
-                    // Phase 31.1: the server finished but streamed no text at all
-                    // (e.g. reasoning consumed the whole token budget). Without
-                    // this, the user gets silent blank space below their bubble.
+                    // จบแบบไม่มี text เลย (เช่น reasoning กินโควตาหมด) — ต้องมี bubble ไม่ปล่อยว่าง
                     if (!streamBubble && accumulated === '' && !result.stopped && !result.blocked) {
-                        // Phase 35.2: shell may already exist (RAG badge) — reuse it.
+                        // shell may already exist (RAG badge) — reuse it.
                         ensureResponseShell();
                         streamBubble = document.createElement('div');
                         streamBubble.className = 'msg-bubble';
@@ -1003,10 +833,7 @@
                             '⚠️ โมเดลคิดนานจนหมดโควต้าคำตอบ — ลองส่งใหม่อีกครั้ง หรือลดระดับ effort ลงหนึ่งขั้น');
                         responseMsgEl.appendChild(streamBubble);
                     }
-                    // Phase 30: trust the server's cost (tbl_pricing-based, same
-                    // source tbl_daily_usage/spentToday uses) — no more local
-                    // recompute off the legacy tbl_project rates, which could
-                    // disagree with what was actually charged.
+                    // ใช้ cost จาก server — เลิกคำนวณเองจาก rate เก่าที่อาจไม่ตรงกับที่หักจริง
                     const cost = result.cost != null ? result.cost : 0;
 
                     // Finalize bubble: render markdown, highlight code, attach copy/regenerate
@@ -1031,16 +858,12 @@
                     };
                     State.currentMessages.push(assistantMsg);
 
-                    // Phase 12: the backend persisted both turns inside
-                    // /api/chat and echoed back the sessionId. We just pin
-                    // it locally and refresh the sidebar so the new thread
-                    // appears (or moves to the top after subsequent sends).
+                    // backend บันทึกทั้งสอง turn แล้ว echo sessionId — pin ไว้แล้ว refresh sidebar
                     if (result.sessionId) {
                         const wasFresh = !State.currentSessionId;
-                        // Phase 19.7.1: coerce — see apiLoadSessions note.
+                        // coerce — see apiLoadSessions note.
                         State.currentSessionId = Number(result.sessionId);
-                        // Phase 19.4: pin the new session into the URL so a
-                        // mid-chat refresh keeps the thread loaded.
+                        // pin ลง URL — refresh กลางแชทแล้วยังอยู่ thread เดิม
                         try {
                             const want = '#s/' + result.sessionId;
                             if (window.location.hash !== want && window.history && window.history.replaceState) {
@@ -1058,11 +881,7 @@
                         inputTokens: result.inputTokens, outputTokens: result.outputTokens, cost, durationMs: result.durationMs
                     });
 
-                    // Phase 34: fetch real post-spend numbers instead of just
-                    // re-rendering the stale client-side State.balance — was
-                    // only ever set once on page load, so the sidebar balance
-                    // and cap-usage card wouldn't reflect this turn's cost
-                    // until the next 60s poll (or a manual refresh).
+                    // ดึงตัวเลขจริงหลังหักเงิน — ไม่รอ poll 60s
                     refreshQuotaWarning();
                     if (result.stopped) {
                         showToast(t('u.stop.stoppedGenerating'), 'success');
@@ -1077,15 +896,13 @@
                     sb.title = '';
                 },
                 rates,
-                State.currentSessionId,   // Phase 12: thread into an existing chat
-                onChatBlocked,             // Phase 21.10: 402/429 → block UI
+                State.currentSessionId,   // thread into an existing chat
+                onChatBlocked,             // 402/429 → block UI
                 { model: State.selectedModel, effort: State.selectedEffort, onTool, onRouted }  // Phase 34 + 35.2 + 39
             );
         }
 
-        // Phase 21.10 — render an inline "blocked" bubble in the chat area
-        // when the server refuses the message (pool empty or cap reached).
-        // Distinct copy for each cause + action button when applicable.
+        // bubble "โดนบล็อก" ในแชท — pool หมด/ติด cap คนละ copy คนละปุ่ม
         function showBlockBubble(area, info) {
             const div = document.createElement('div');
             div.className = 'chat-msg assistant';
@@ -1136,9 +953,7 @@
             .then(r => r.json())
             .then(d => {
                 if (!d.ok) {
-                    // Translate known error codes so the toast follows the
-                    // user's language; unknown codes fall back to the server
-                    // message (English).
+                    // แปล error code ที่รู้จักตามภาษา user; ไม่รู้จักใช้ข้อความจาก server
                     const msg = d.error === 'pending_request_exists'
                         ? t('u.quota.pendingExists')
                         : (d.message || d.error || t('u.quota.requestFailed'));
@@ -1152,14 +967,8 @@
         // Expose for the inline onclick in the block bubble.
         window.openQuotaRequestModal = openQuotaRequestModal;
 
-        // ══════════════════════════════════════════════════════════
-        // UI HELPERS
-        // ══════════════════════════════════════════════════════════
-        // Phase 19.8: when the balance is running out, paint the card and
-        // surface a one-line warning inside it. Two thresholds:
-        //   <= 0      → critical (red border + "เครดิตหมด" + block sends)
-        //   < BALANCE_WARN_THRESHOLD → warn (orange border + "ใกล้หมด")
-        //   otherwise → normal
+        // ── UI HELPERS ──
+        // การ์ด balance: <= 0 แดง + บล็อกส่ง, ต่ำกว่า threshold ส้มเตือน
         const BALANCE_WARN_THRESHOLD = 10;        // baht — adjust if needed
         function updateBalanceDisplay() {
             const card = document.getElementById('balance-card');
@@ -1185,9 +994,7 @@
             }
         }
 
-        // Phase 28: sidebar cap-usage card — spent-today vs the user's
-        // effective daily cap, with a progress bar. dailyCap === null means
-        // no cap is set for this user (unlimited) — show spend only, no bar.
+        // การ์ด cap-usage: spend วันนี้ vs cap; dailyCap null = ไม่มี cap โชว์แค่ spend
         function updateCapUsageCard(d) {
             const spentEl = document.getElementById('cap-usage-spent');
             const ofEl    = document.getElementById('cap-usage-of');
@@ -1208,18 +1015,14 @@
             }
         }
 
-        // Phase 21.10 — Concept B: poll /api/quota-status, show 80% warning above input
-        // + drive the sidebar cap-usage card. Fail-silent: a network/auth hiccup just
-        // hides the banner; the real gate is server-side anyway.
+        // poll /api/quota-status — fail เงียบได้ เกตจริงอยู่ฝั่ง server
         async function refreshQuotaWarning() {
             try {
                 const r = await fetch(BASE + '/api/quota-status', { headers: Auth.authHeaders() });
                 if (!r.ok) return;
                 const d = await r.json();
                 if (!d.ok) return;
-                // Phase 34: this is also called right after each chat turn finishes,
-                // so the sidebar balance updates with the real post-spend number
-                // instead of waiting up to 60s for the next poll tick.
+                // ถูกเรียกหลังจบแต่ละ turn ด้วย — sidebar เห็นตัวเลขจริงไม่ต้องรอ poll
                 State.balance = parseFloat(d.projectPool) || 0;
                 State.save();
                 updateBalanceDisplay();
@@ -1244,8 +1047,7 @@
                 }
             } catch (_) { /* silent */ }
         }
-        // Phase 28: run right away (the sidebar card needs data on first paint,
-        // not just the once-in-a-while input-area banner) + every 60s after.
+        // รันทันทีหนึ่งครั้ง (การ์ดต้องมีข้อมูลตั้งแต่ paint แรก) แล้ววนทุก 60s
         refreshQuotaWarning();
         setInterval(refreshQuotaWarning, 60_000);
 
@@ -1254,15 +1056,12 @@
         function toggleUserMenu() { document.getElementById('user-dropdown').classList.toggle('open'); }
         document.addEventListener('click', e => { if (!document.getElementById('user-area').contains(e.target)) document.getElementById('user-dropdown').classList.remove('open'); });
 
-        // Phase 27: when the language switches, re-apply static labels and
-        // re-render whatever is JS-built (session list, quota banner) so
-        // those strings pick up the new language too — mirrors admin.js.
+        // สลับภาษา → re-apply label คงที่ + re-render ส่วนที่ JS สร้าง (เหมือน admin.js)
         window.addEventListener('i18n:change', () => {
             if (typeof I18N !== 'undefined') I18N.apply();
             try { renderSessionList(); } catch (_) {}
             try { refreshQuotaWarning(); } catch (_) {}
-            // Re-render whichever empty state (if any) is currently showing —
-            // leaves an in-progress conversation's history untouched.
+            // re-render เฉพาะ empty state ที่โชว์อยู่ — ไม่แตะบทสนทนา
             if (document.getElementById('chat-empty')) {
                 try {
                     if (State.currentSessionId) renderChatMessages(State.currentMessages);
@@ -1271,33 +1070,26 @@
             }
         });
 
-        // Phase 19.3: open/close the sidebar drawer on mobile. force=false
-        // always closes, force=true always opens, omitted = toggle.
-        // Also auto-closes when a session is clicked (handled by callers).
+        // sidebar มือถือ: force=false ปิด, true เปิด, ไม่ส่ง = toggle
         function toggleSidebar(force) {
             const open = (typeof force === 'boolean') ? force : !document.body.classList.contains('sidebar-open');
             document.body.classList.toggle('sidebar-open', open);
         }
 
-        // Phase 33 (v1.7.0): desktop sidebar collapse — persists across
-        // reloads so a "wide reading mode" preference sticks.
+        // ยุบ sidebar เดสก์ท็อป — จำข้าม reload
         function toggleSidebarCollapsed() {
             const collapsed = !document.body.classList.contains('sidebar-collapsed');
             document.body.classList.toggle('sidebar-collapsed', collapsed);
             try { localStorage.setItem('pipek_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
         }
-        // Restore on load (before first paint of the chat area is fine — the
-        // sidebar transition only animates on user toggles thereafter).
+        // restore ตอนโหลด — transition ค่อยเล่นตอน user กดเอง
         try {
             if (localStorage.getItem('pipek_sidebar_collapsed') === '1') {
                 document.body.classList.add('sidebar-collapsed');
             }
         } catch (_) {}
 
-        // Phase 19.8: light ↔ dark theme. Persist via localStorage (key
-        // 'ag_theme' — same as admin so the choice carries across pages).
-        // The bootstrap script in <head> applies it before first paint so
-        // there's no flash on subsequent loads.
+        // สลับ light/dark — key 'ag_theme' ใช้ร่วมกับ admin; bootstrap ใน <head> กัน flash
         function toggleTheme() {
             const html = document.documentElement;
             const now = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -1324,12 +1116,7 @@
         // Sync icon/label once DOM is ready
         document.addEventListener('DOMContentLoaded', _refreshThemeUI);
 
-        // Phase 19.3: cap attachment size before reading. Larger files
-        // would (a) freeze the browser while FileReader gulps them down,
-        // (b) blow past the model's context window if sent, and (c) leak
-        // huge strings into State that survive until the next reload.
-        // Phase 33: raised 256 KB → 1 MB to cover bigger ABAP source dumps;
-        // server's express.json limit is 2 MB so this still leaves headroom.
+        // cap ไฟล์แนบ 1MB — กัน FileReader ค้าง/ทะลุ context/สตริงยักษ์ค้างใน State (express.json รับ 2MB)
         const MAX_ATTACHMENT_BYTES = 1024 * 1024;
 
         function handleFileSelect(e) {
@@ -1354,10 +1141,7 @@
 
         function removeFile() { State.attachedFile = null; document.getElementById('attached-file-display').innerHTML = ''; }
 
-        // ── Phase 34: model + reasoning-effort pickers ──────────────
-        // Effort only applies to the gpt-5.6 reasoning family; hide it for
-        // models that don't accept it (e.g. gpt-5.5) so we never send an
-        // invalid param.
+        // ── MODEL + EFFORT PICKERS ── effort มีเฉพาะตระกูล gpt-5.6 — ซ่อนเพื่อไม่ส่ง param ผิด
         function onModelChange(v) {
             State.selectedModel = v; State.save();
             const eff = document.getElementById('effort-select');
@@ -1372,8 +1156,7 @@
             if (e) { e.value = State.selectedEffort; e.style.display = State.selectedModel.startsWith('gpt-5.6') ? '' : 'none'; }
         }
 
-        // Unified send-button handler — while idle, send; while streaming,
-        // clicking the (now-red square) button stops generation.
+        // ปุ่มเดียว: idle = send, กำลัง stream = stop
         function onSendBtnClick() {
             if (State.isRunning) { stopGeneration(); }
             else                 { sendMessage(); }
@@ -1399,9 +1182,7 @@
             }
         });
 
-        // ── Session search ──────────────────────────────────────
-        // Debounce 200ms so typing doesn't hammer the server. Clearing the
-        // input reverts to the unfiltered listing.
+        // ── SESSION SEARCH ── debounce 200ms; ล้าง input = กลับ list เต็ม
         let _searchTimer = null;
         function onSearchInput(val) {
             const q = String(val || '');
@@ -1426,9 +1207,7 @@
         }
         function handleInputKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
-        // Phase 19.3: escape quotes too so esc() is safe inside attribute
-        // values like title="${esc(name)}". Was previously XSS-prone if a
-        // session title contained a `"` (would break out of the attribute).
+        // escape เครื่องหมายคำพูดด้วย — esc() ถูกใช้ใน attribute, เคย XSS ได้ถ้า title มี "
         function esc(t) {
             return String(t)
                 .replace(/&/g, '&amp;')
@@ -1438,12 +1217,7 @@
                 .replace(/'/g, '&#39;');
         }
 
-        // ══════════════════════════════════════════════════════════
-        // SMART AUTO-SCROLL
-        //   Only auto-scrolls when user is already near the bottom.
-        //   If user has scrolled up to read earlier content, we leave
-        //   them alone and show a "↓ new messages" button instead.
-        // ══════════════════════════════════════════════════════════
+        // ── SMART AUTO-SCROLL ── เลื่อนตามเฉพาะตอน user อยู่ใกล้ล่างสุด ไม่งั้นโชว์ปุ่ม ↓ แทน
         const SCROLL_THRESHOLD = 80;    // px from bottom still counts as "at bottom"
         function isNearBottom(area) {
             return area.scrollHeight - area.scrollTop - area.clientHeight < SCROLL_THRESHOLD;
@@ -1484,12 +1258,7 @@
             area.addEventListener('scroll', () => { if (isNearBottom(area)) hideNewMsgIndicator(); });
         });
 
-        // ══════════════════════════════════════════════════════════
-        // REGENERATE LAST ANSWER
-        //   Attaches a ↻ button to the last assistant message's toolbar.
-        //   Clicking removes the last assistant message and re-sends
-        //   the previous user prompt — same skill, same input.
-        // ══════════════════════════════════════════════════════════
+        // ── REGENERATE ── ปุ่ม ↻ ท้ายคำตอบล่าสุด: ถอดคำตอบแล้วส่ง prompt เดิมซ้ำ
         function addRegenerateButton(actionsEl) {
             if (!actionsEl || actionsEl.querySelector('.msg-action-regen')) return;
             const btn = document.createElement('button');
@@ -1519,10 +1288,7 @@
             // Re-render the whole list so the old answer disappears cleanly
             renderChatMessages(msgs);
 
-            // Re-submit through the normal pipeline by pushing the prompt
-            // into the input and calling sendMessage(). But sendMessage()
-            // appends a new user row — so we instead pop the previous user
-            // message first and let sendMessage re-add it identically.
+            // pop user message เดิมก่อน — sendMessage() จะ append กลับมาเองไม่ให้ซ้ำ
             msgs.pop();   // remove the user we just re-rendered; sendMessage will re-append
             renderChatMessages(msgs);
 
@@ -1531,9 +1297,7 @@
             await sendMessage();
         }
 
-        // ══════════════════════════════════════════════════════════
-        // USAGE MODAL
-        // ══════════════════════════════════════════════════════════
+        // ── USAGE MODAL ──
         function openUsage() {
             document.getElementById('user-dropdown').classList.remove('open');
             document.getElementById('usage-balance').textContent = '฿ ' + State.balance.toFixed(2);
@@ -1545,9 +1309,7 @@
             document.getElementById('usage-modal').classList.add('open');
         }
 
-        // ══════════════════════════════════════════════════════════
-        // CHANGE PASSWORD
-        // ══════════════════════════════════════════════════════════
+        // ── CHANGE PASSWORD ──
         function openChangePassword() {
             document.getElementById('user-dropdown').classList.remove('open');
             document.getElementById('password-modal').classList.add('open');
@@ -1560,7 +1322,7 @@
             if (newPwd !== confirmPwd) { showToast(t('err.pwMismatch'), 'error'); return; }
             const session = Auth.getSession(); if (!session) return;
             try {
-                // Phase 6.1: dedicated self-only endpoint (no admin rights needed)
+                // dedicated self-only endpoint (no admin rights needed)
                 const r = await fetch(BASE + '/api/users/' + session.userId + '/password', {
                     method: 'PUT',
                     headers: Auth.authHeaders(),
@@ -1575,9 +1337,7 @@
             showToast(t('u.pw.changed'), 'success');
         }
 
-        // ══════════════════════════════════════════════════════════
-        // TOAST
-        // ══════════════════════════════════════════════════════════
+        // ── TOAST ──
         function showToast(msg, type = 'info') {
             const c = document.getElementById('toast-container');
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
