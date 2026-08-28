@@ -9,7 +9,7 @@
         "migrate": "node migrate-schema.js",
         "migrate:status": "node migrate-schema.js --status",
         "reset-admin": "node reset-admin.js",
-        "test": "node --test \"test/*.test.js\""
+        "test": "node --test"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
