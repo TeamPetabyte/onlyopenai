@@ -35,3 +35,4 @@ _ux-mockup/
 
 # ── Legacy / archived code (kept on disk, out of git+deploy) ─
 _archive/
+dist/
