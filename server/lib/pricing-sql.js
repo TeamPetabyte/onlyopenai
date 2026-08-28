@@ -1,3 +1,4 @@
+// @ts-check
 // pricing-sql.js — SQL ชิ้นที่คิดราคา/ต้นทุนต่อแถว ใช้ร่วมกันใน history และ cost-by-day
 
 // LATERAL หาแถว tbl_pricing ที่ active ณ r.created_at — ตรรกะเดียวกับ fn_build_daily_usage

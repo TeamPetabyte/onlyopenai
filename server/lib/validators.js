@@ -1,3 +1,4 @@
+// @ts-check
 // validators.js — กติกา input ที่ใช้ร่วมกันทุก route (pure, ไม่มี pool)
 
 /** Phase 7: stricter password policy. Returns null if OK, error string if bad. */

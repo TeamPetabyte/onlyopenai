@@ -34,6 +34,9 @@ jobs:
       - name: Global contract
         run: node scripts/check-globals.mjs
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm test
 
