@@ -12,6 +12,7 @@
     "format": "prettier --write",
     "format:check": "prettier --check .",
     "test": "npm --prefix server test",
+    "smoke": "node scripts/smoke.mjs",
     "check": "npm run lint && node scripts/check-globals.mjs && node scripts/check-requires.mjs && npm run typecheck && npm test"
   },
   "devDependencies": {
