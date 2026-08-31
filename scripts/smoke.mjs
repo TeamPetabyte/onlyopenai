@@ -73,7 +73,8 @@ for await (const chunk of chatRes.body) {
     if (done) break;
 }
 if (!done) die('stream จบโดยไม่มี done frame');
-step(`ได้คำตอบ ${text.length} ตัวอักษร, cost = ${done.cost}, skill = ${done.detectedSkill ?? '-'}`);
+const skillName = done.detectedSkill && (done.detectedSkill.id || done.detectedSkill.name || done.detectedSkill);
+step(`ได้คำตอบ ${text.length} ตัวอักษร, cost = ${done.cost}, skill = ${typeof skillName === 'string' ? skillName : '-'}`);
 if (!(done.cost > 0)) die(`cost ไม่เป็นบวก: ${done.cost}`);
 
 // การตัดเครดิต commit ก่อน done frame — อ่านยอดตอนนี้เชื่อถือได้
