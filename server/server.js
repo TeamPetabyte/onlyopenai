@@ -8,6 +8,7 @@ const express      = require('express');
 const cors         = require('cors');
 const helmet       = require('helmet');
 const path         = require('path');
+const fs           = require('fs');
 const crypto       = require('crypto');
 const cookieParser = require('cookie-parser');    // Phase 9
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
@@ -220,10 +221,20 @@ const STATIC_OPTS = {
         }
     },
 };
-// Phase 50: build แล้วเสิร์ฟ dist ก่อน — ของที่ไม่ได้ build (js/vendor, /assets รูป)
-// ตกลงมาที่ source tree ข้างล่าง; ยังไม่ build ก็ยังรันได้เพราะหน้าเป็น native ESM
+// เสิร์ฟ dist ก่อนแล้วตกลง source tree — dist ที่ build จาก commit อื่นต้องข้าม ไม่งั้นได้หน้าเก่าคู่ API ใหม่
 const DIST_DIR = path.join(__dirname, '..', 'dist');
-if (require('fs').existsSync(DIST_DIR)) {
+function distIsCurrent() {
+    if (!fs.existsSync(DIST_DIR)) return false;
+    let meta = null, head = null;
+    try { meta = JSON.parse(fs.readFileSync(path.join(DIST_DIR, 'build-meta.json'), 'utf8')); } catch (_) { /* build เก่าก่อนมี meta */ }
+    try { head = require('child_process').execSync('git rev-parse HEAD', { cwd: path.join(__dirname, '..'), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (_) { /* ไม่มี git */ }
+    const built = meta && meta.commit;
+    if (built && head && built === head) return true;
+    const why = !meta ? 'no build-meta.json' : !built ? 'no commit in build-meta' : !head ? 'cannot read git HEAD' : 'built at ' + built.slice(0, 7) + ' but HEAD is ' + head.slice(0, 7);
+    console.warn('[static] dist/ skipped (' + why + ') — serving source tree; run npm run build');
+    return false;
+}
+if (distIsCurrent()) {
     app.use(express.static(DIST_DIR, STATIC_OPTS));
     console.log('[static] dist/ (built) first, source tree as fallback');
 }

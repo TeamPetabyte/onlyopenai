@@ -18,7 +18,7 @@ const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
 let _tempUnsupported = false;
 
 // registry model อยู่ lib/models.js — gpt-5.6 วิ่ง Responses API, gpt-5.5 วิ่ง Chat Completions
-const _models = require('./lib/models');
+const _models = require('../../lib/models');
 const resolveModel  = (requested) => _models.resolveModel(requested, MODEL);
 const resolveEffort = _models.resolveEffort;
 

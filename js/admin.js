@@ -2,7 +2,7 @@
  * admin.js — ประกอบหน้า admin จากโมดูลตามแท็บใน js/admin/
  * แต่ละ slice เป็น object ของ method; spread รวมเป็นก้อนเดียว this จึงทำงานเหมือนเดิม
  */
-import { hideModal } from './admin/helpers.js';
+import { flash, hideModal } from './admin/helpers.js';
 import core from './admin/core.js';
 import overview from './admin/overview.js';
 import sync from './admin/sync.js';
@@ -43,3 +43,4 @@ document.addEventListener('DOMContentLoaded', function () {
 // onclick ใน admin.html และ HTML ที่ JS สร้าง เรียกผ่าน window
 window.admin = admin;
 window.hideModal = hideModal;
+window.flash = flash;

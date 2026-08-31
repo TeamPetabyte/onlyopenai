@@ -5,10 +5,10 @@
 
 set -e
 
-echo "[pre-commit] lint"
-npm run --silent lint
+echo "[pre-commit] check: lint, global contract, require contract, typecheck, test"
+npm run --silent check
 
-echo "[pre-commit] test"
-npm test --silent
+echo "[pre-commit] build"
+npm run --silent build
 
 echo "[pre-commit] ok"

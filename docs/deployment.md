@@ -410,10 +410,17 @@ sudo crontab -e
 cd C:\petabyte\onlyopenai-master
 git fetch
 git reset --hard origin/master
-npm ci                # devDependencies ที่ root (vite/eslint) — ครั้งแรกหรือเมื่อ package.json เปลี่ยน
+npm ci --include=dev  # devDependencies ที่ root (vite/eslint) — ครั้งแรกหรือเมื่อ package.json เปลี่ยน
+                      # ต้องมี --include=dev เพราะ NODE_ENV=production ทำให้ npm ข้าม devDependencies
 npm run build         # สร้าง dist/ — express เสิร์ฟ dist ก่อน แล้วตกลงมาที่ source tree
 nssm restart PetabyteAi
 ```
 
 ข้อกันพลาด: ถ้าลืม build — แอป **ยังทำงาน** เพราะหน้า source เป็น native ESM
 และ express fallback ไปที่ source tree ให้เอง แค่ไม่ได้ไฟล์ minify/hash เท่านั้น
+`dist/` ถูก gitignore จึงรอด `git reset --hard` มาได้ — server เทียบ commit ใน
+`dist/build-meta.json` กับ `HEAD` ตอน boot ถ้าไม่ตรง (build ค้างจากรอบก่อน) จะข้าม dist
+ไปใช้ source tree และขึ้น log `[static] dist/ skipped (...)` จึงไม่มีทางได้หน้าเก่าคู่กับ API ใหม่
+
+ทดสอบ build ในเครื่อง: `npm run build` แล้ว start server ตามปกติ — server เสิร์ฟ dist ก่อนอยู่แล้ว
+(ไม่ใช้ `vite preview`: มันไม่ inject `__API_BASE__` และไม่มี js/vendor ทำให้ login/chat ไม่ทำงาน)

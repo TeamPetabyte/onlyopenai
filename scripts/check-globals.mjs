@@ -14,14 +14,36 @@ const PAGES = {
     'change-password.html': ['js/config.js', 'js/auth.js', 'js/change-password.js'],
 };
 // ชื่อที่ browser มีให้เอง หรือมาจาก classic <script> (vendor)
-const BUILTIN = new Set(['document', 'event', 'this', 'if', 'window', 'location',
+const BUILTIN = new Set(['document', 'event', 'this', 'if', 'window', 'location', 'navigator',
     'localStorage', 'marked', 'DOMPurify', 'hljs']);
 
-const HANDLER_RE = /\son[a-z]+="([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(/g;
-
-function handlersIn(text) {
+// ค่าของ on*="..." ทั้งก้อน — ใน .js มันอยู่ในสตริง '...'/`...` ที่ต่อกันด้วย + จึงต้องเดินข้าม \'
+// ช่วง expression ระหว่าง literal และ ${…} (แทนด้วย \0) ไปจนถึง " ที่ปิด attribute
+function handlerValues(text, isJs) {
+    const out = [];
+    for (const m of text.matchAll(/\son[a-z]+="/g)) {
+        let i = m.index + m[0].length, val = '', inLit = true;
+        while (i < text.length) {
+            const c = text[i];
+            if (!inLit) { if (c === "'" || c === '`') { inLit = true; val += '\0'; } i++; continue; }
+            if (c === '\\' && isJs) { val += text[i + 1]; i += 2; continue; }
+            if (c === '$' && text[i + 1] === '{' && isJs) { const end = text.indexOf('}', i); val += '\0'; i = end === -1 ? text.length : end + 1; continue; }
+            if (c === '"') break;
+            if ((c === "'" || c === '`') && isJs) { inLit = false; i++; continue; }
+            val += c; i++;
+        }
+        out.push(val);
+    }
+    return out;
+}
+// ทุก call ในค่านั้น เอาเฉพาะชื่อต้นของ chain (admin.x() → admin, ()=>flash() → flash)
+// ชื่อในสตริงย่อย ('rgba(...)', 'var(--x)') ไม่นับ
+function handlersIn(text, isJs) {
     const out = new Set();
-    for (const m of text.matchAll(HANDLER_RE)) out.add(m[1].split('.')[0]);
+    for (const v of handlerValues(text, isJs)) {
+        const code = v.replace(/'[^']*'/g, "''");
+        for (const m of code.matchAll(/(^|[^\w$.])([A-Za-z_$][\w$]*)(?:\.[A-Za-z_$][\w$]*)*\s*\(/g)) out.add(m[2]);
+    }
     return out;
 }
 function windowNamesIn(src) {
@@ -47,8 +69,8 @@ for (const [page, chain] of Object.entries(PAGES)) {
     // inline <script> ในหน้า (theme bootstrap ฯลฯ) ก็ประกาศ function ได้
     for (const m of html.matchAll(/function ([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g)) provided.add(m[1]);
 
-    const needed = handlersIn(html);
-    for (const s of sources) for (const n of handlersIn(s)) needed.add(n);
+    const needed = handlersIn(html, false);
+    for (const s of sources) for (const n of handlersIn(s, true)) needed.add(n);
 
     for (const n of needed) {
         if (BUILTIN.has(n) || provided.has(n)) continue;
