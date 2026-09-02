@@ -10,6 +10,8 @@ dist/
 # Third-party bundles — never reformat
 js/vendor/
 css/vendor/
+.agents/
+skills-lock.json
 
 # Generated / machine-written
 server/package-lock.json

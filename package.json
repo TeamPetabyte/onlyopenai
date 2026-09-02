@@ -4,6 +4,7 @@
   "private": true,
   "description": "Dev tooling only. Runtime deps live in server/package.json.",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || exit 0",
     "lint": "eslint .",
     "dev": "vite",
     "build": "vite build",

@@ -89,6 +89,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 **Prerequisites:** Node.js ≥ 18, a PostgreSQL database, an OpenAI API key.
 
 ```bash
+npm install                          # dev tooling (eslint/vite/tsc) + wires the pre-commit hook
 cd server
 npm install
 cp .env.production.example .env      # then fill in your values (see below)
@@ -96,7 +97,10 @@ npm run migrate                      # create/seed the schema (also auto-runs on
 npm start                            # http://localhost:3001
 ```
 
-Open `http://localhost:3001/login.html`.
+Open `http://localhost:3001/login.html`. An unbuilt checkout serves the source tree
+as native ES modules; `npm run build` (root) produces the minified `dist/` that
+production serves. `npm run check` = lint + contracts + typecheck + tests, and the
+pre-commit hook runs it before every commit.
 
 ---
 

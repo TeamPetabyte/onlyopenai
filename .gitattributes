@@ -3,3 +3,5 @@
 # Deliberately NOT repo-wide: the rest of the tree is CRLF on disk and a global
 # rule would renormalise all 19,405 lines in one commit.
 .githooks/** text eol=lf
+# Same reason: agent-skill scripts run under bash on every OS.
+.agents/**/*.sh text eol=lf
