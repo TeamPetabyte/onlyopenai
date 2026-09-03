@@ -102,6 +102,12 @@ as native ES modules; `npm run build` (root) produces the minified `dist/` that
 production serves. `npm run check` = lint + contracts + typecheck + tests, and the
 pre-commit hook runs it before every commit.
 
+`npm run test:routes` boots the real server on a throwaway database
+(`petabyte_route_test`, dropped and recreated every run) and exercises login,
+the auth gates and the money gates over HTTP. It needs a reachable Postgres:
+`DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS` (defaults `127.0.0.1:5433`, `postgres`).
+CI runs it against a Postgres service; the pre-commit hook does not.
+
 ---
 
 ## ⚙️ Configuration (`server/.env`)

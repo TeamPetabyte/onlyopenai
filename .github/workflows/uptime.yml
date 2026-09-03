@@ -1,0 +1,36 @@
+name: Uptime
+
+# Probes the public /api/health from outside the tunnel every 10 minutes. A failed
+# run emails whoever last committed this file — GitHub's default for scheduled
+# workflows — so nothing else has to be signed up for.
+#
+# One-time setup: Settings → Secrets and variables → Actions → Variables →
+#   HEALTH_URL = https://<public host>/api/health
+# Until it is set, the job is skipped. GitHub pauses schedules after 60 days
+# without a push; any push re-arms it.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    if: vars.HEALTH_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: GET health, three tries 20s apart
+        env:
+          URL: ${{ vars.HEALTH_URL }}
+        run: |
+          for i in 1 2 3; do
+            if body=$(curl -fsS --max-time 15 "$URL") && echo "$body" | grep -q '"ok":true'; then
+              echo "up: $body"
+              exit 0
+            fi
+            echo "attempt $i failed"
+            sleep 20
+          done
+          echo "::error::$URL did not answer ok three times in a row"
+          exit 1

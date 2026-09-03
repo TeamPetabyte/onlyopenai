@@ -175,3 +175,30 @@ schtasks /Create /F /TN "PetabyteAi DB Backup" /SC DAILY /ST 02:00 /RU SYSTEM `
 - สคริปต์อ่านรหัสจาก `server\.env` เอง — **ไม่มี secret ในสคริปต์** (repo เป็น public)
 - **กู้คืน:** `pg_restore -h localhost -U <DB_USER> -d OpenAI_DB -c "C:\petabyte\backups\<ไฟล์>.dump"`
 - แนะนำเพิ่ม: คัดลอกโฟลเดอร์ backups ไปเก็บนอกเครื่อง (NAS/Drive) — backup ที่อยู่เครื่องเดียวกับ DB กันได้แค่ลบพลาด กันดิสก์พังไม่ได้
+
+**ตรวจว่า backup รันจริง** (รันเดือนละครั้ง หรือหลังย้ายเครื่อง):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\petabyte\onlyopenai-master\windows\verify-backup.ps1 -RestoreTest
+```
+
+เช็ค 4 อย่าง: task ลงทะเบียนและรอบล่าสุด exit 0, ไฟล์ dump ล่าสุดอายุไม่เกิน 26 ชม., `pg_restore --list` อ่าน archive ได้,
+และ (`-RestoreTest`) restore ลง DB ชั่วคราวชื่อ `openai_db_restoretest` แล้วนับแถว `tbl_user` ก่อนลบทิ้ง — ไม่แตะ DB จริง
+(PostgreSQL ติดตั้งไว้ที่อื่นที่ไม่ใช่ `C:\Program Files\PostgreSQL` ให้เพิ่ม `-PgBin <โฟลเดอร์ที่มี pg_restore.exe>`)
+ผลลัพธ์บรรทัดสุดท้ายต้องเป็น `BACKUP OK`; ถ้าเป็น `BACKUP NEEDS ATTENTION` บรรทัด `FAIL` บอกว่าต้องแก้อะไร
+
+---
+
+## 📡 ภาคผนวก C — แจ้งเตือนเมื่อ server ล่ม
+
+GitHub Actions (`.github/workflows/uptime.yml`) ยิง `/api/health` ผ่าน URL สาธารณะทุก 10 นาที ถ้าล้มติดกัน 3 ครั้ง
+workflow จะ fail และ GitHub ส่งอีเมลถึงคนที่ commit ไฟล์ workflow ล่าสุด — ไม่ต้องสมัครบริการอื่น
+
+**ตั้งค่าครั้งเดียว:** ใน GitHub repo → Settings → Secrets and variables → Actions → แท็บ **Variables** → New repository variable
+
+| Name | Value |
+|------|-------|
+| `HEALTH_URL` | `https://<โดเมนที่ใช้จริง>/api/health` |
+
+ยังไม่ตั้ง = job ถูกข้าม ไม่มี noise; ทดสอบทันทีได้ที่แท็บ Actions → Uptime → Run workflow
+ข้อจำกัด: GitHub หยุด schedule ถ้า repo ไม่มี push เกิน 60 วัน (push อะไรก็ได้แล้วกลับมาทำงาน) และเวลาอาจคลาดจาก 10 นาทีบ้าง

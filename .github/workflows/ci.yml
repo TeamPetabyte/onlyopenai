@@ -14,6 +14,19 @@ jobs:
         # 20 matches the Dockerfile, 24 matches the dev machine.
         node: [20, 24]
 
+    # the route tests boot the real server on a throwaway database
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +55,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Route tests
+        run: npm run test:routes
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_USER: postgres
+          DB_PASS: postgres
 
       - name: Build
         run: npm run build
