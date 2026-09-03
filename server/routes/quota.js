@@ -32,7 +32,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
             SELECT request_id FROM tbl_quota_request
              WHERE user_id = $1
                AND status   = 'pending'
-               AND created_at::date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date`,
+               AND (created_at AT TIME ZONE 'Asia/Bangkok')::date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date`,
             [uid]);
         if (dup.rowCount) {
             return res.status(409).json({
