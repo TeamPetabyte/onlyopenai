@@ -1,5 +1,5 @@
 // overview.js — หน้า Overview + transaction by date + topup
-import { escapeHtml, flash, formatMoney, formatTHB, hideModal, showModal } from './helpers.js';
+import { escapeHtml, jsArg, flash, formatMoney, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
   // ── OVERVIEW ──────────────────────────────────────────
@@ -397,7 +397,7 @@ export default {
       +   '<div style="flex:1;min-width:240px">'
       +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
       +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
-      +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escapeHtml(p.id) + '\').then(()=>flash(\'✓ Copied: ' + escapeHtml(p.id) + '\'))" '
+      +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
       +         'style="font-family:Geist Mono,monospace;font-size:.72rem;padding:3px 9px;'
       +         'background:var(--accent-soft-bg);color:var(--accent);'
       +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer;'
@@ -416,7 +416,7 @@ export default {
       +     '</div>'
       +   '</div>'
       +   '<button class="btn-action btn-primary-sm" style="padding:10px 22px;font-size:.88rem;font-weight:700"'
-      +     ' onclick="admin.openTopup(\'' + p.id + '\')">' + TT('btn.topupProject','+ เติมเงิน Project') + '</button>'
+      +     ' onclick="admin.openTopup(\'' + jsArg(p.id) + '\')">' + TT('btn.topupProject','+ เติมเงิน Project') + '</button>'
       + '</div>';
 
     // การ์ด budget สามสถานะ: not-funded / depleted / normal

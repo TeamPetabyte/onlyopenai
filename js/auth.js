@@ -193,11 +193,6 @@ const Auth = {
         } catch (_) {}
     },
 
-    // ── Built-in admin credentials (not stored in users list) ──
-    ADMIN_CREDS: [
-        { username: 'admin', password: 'admin123', role: 'admin', displayName: 'System Admin' },
-    ],
-
     // ── Default projects ──────────────────────────────────────
     DEFAULT_PROJECTS: [
         {
@@ -310,31 +305,10 @@ const Auth = {
                 return { ok: true, session, mustChangePassword: mustChangePw };
             })
             .catch(function (e) {
-                // Fallback: offline/server-not-running — use localStorage
-                console.warn('[Auth] API unavailable, fallback to localStorage:', e.message);
-                return Auth._loginLocal(username, password);
+                // เซิร์ฟเวอร์คือที่เดียวที่ยืนยันตัวตนได้ — เดิม fallback ไป localStorage แล้วได้ session ปลอม
+                console.warn('[Auth] API unavailable:', e.message);
+                return { ok: false, error: 'ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง' };
             });
-    },
-
-    // localStorage fallback (used when server is offline)
-    _loginLocal(username, password) {
-        this.initDefaults();
-        const adminMatch = this.ADMIN_CREDS.find(a => a.username === username && a.password === password);
-        if (adminMatch) {
-            const session = { username: adminMatch.username, displayName: adminMatch.displayName, role: 'admin', loginTime: new Date().toISOString() };
-            localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
-            return { ok: true, session };
-        }
-        const users = JSON.parse(localStorage.getItem(this.USERS_KEY) || '[]');
-        const match = users.find(u => u.username === username && u.password === password);
-        if (!match) return { ok: false, error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
-        const session = { username: match.username, displayName: match.displayName, role: 'user', projectId: match.projectId, loginTime: new Date().toISOString() };
-        localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
-        const bal = localStorage.getItem(`agenthub_balance_${match.username}`) || match.balance.toString();
-        localStorage.setItem('agenthub_balance', bal);
-        localStorage.setItem('agenthub_history', localStorage.getItem(`agenthub_history_${match.username}`) || '[]');
-        if (match.projectId) localStorage.setItem('agenthub_project', match.projectId);
-        return { ok: true, session };
     },
 
     // ── Session ───────────────────────────────────────────────

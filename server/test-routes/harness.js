@@ -79,14 +79,21 @@ async function start() {
 
     const pool = new Pool({ host: DB.host, port: DB.port, user: DB.user, password: DB.password, database: DB.name, max: 2 });
 
-    // role_id 1 = admin; the seeded 'admin' is promoted to trainer by a migration, so make our own
-    async function createAdmin(username, password) {
+    // role_id 1 = admin, 3 = trainer; the seeded 'admin' is promoted to trainer by a migration, so make our own
+    async function createStaff(username, password, roleId = 1) {
         const hash = await bcrypt.hash(password, 10);
         const r = await pool.query(
             `INSERT INTO tbl_user (project_id, role_id, username, password, name, surname, created_date, acc_status_id, must_change_password)
-             VALUES (NULL, 1, $1, $2, 'Route', 'Admin', CURRENT_DATE, 1, FALSE) RETURNING user_id`,
-            [username, hash]);
+             VALUES (NULL, $3, $1, $2, 'Route', 'Staff', CURRENT_DATE, 1, FALSE) RETURNING user_id`,
+            [username, hash, roleId]);
         return r.rows[0].user_id;
+    }
+    const createAdmin = (u, p) => createStaff(u, p, 1);
+
+    // raw path fetch — curl-style, no normalisation, for the static-file guard tests
+    async function rawGet(pathWithQuery) {
+        const res = await fetch(base + pathWithQuery, { signal: AbortSignal.timeout(10000) });
+        return { status: res.status };
     }
 
     async function req(method, urlPath, { body, auth, headers, timeoutMs = 15000 } = {}) {
@@ -121,7 +128,7 @@ async function start() {
         }
     }
 
-    return { base, req, login, createAdmin, pool, stop, output: () => output.join('') };
+    return { base, req, login, createAdmin, createStaff, rawGet, pool, stop, output: () => output.join('') };
 }
 
 module.exports = { start, DB };

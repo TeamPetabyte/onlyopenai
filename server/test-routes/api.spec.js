@@ -207,4 +207,114 @@ test.describe('money gates', () => {
         const r = await srv.req('POST', '/api/quota-requests/1/resolve', { auth: user, body: { action: 'deny' } });
         assert.equal(r.status, 403);
     });
+
+    test('the project pool cannot be rewritten through the project edit route', async () => {
+        const r = await srv.req('PUT', `/api/projects/${PROJECT}`, { auth: admin, body: { name: 'Route Test', credits: 999999 } });
+        assert.equal(r.status, 400, r.text);
+        assert.equal(r.json.error, 'credits_not_editable');
+        const q = await srv.req('GET', '/api/quota-status', { auth: user });
+        assert.equal(q.json.projectPool, 100);
+    });
+});
+
+// สิ่งที่รีวิว PTB-CR-FR-2026-003 พบ — เทสต์กันไม่ให้ย้อนกลับมาอีก
+test.describe('tenant isolation', () => {
+    let user, otherId;
+    test.before(async () => {
+        user = (await srv.login(USER.username, USER.password)).auth;
+        const other = await srv.req('POST', '/api/users', { auth: admin,
+            body: { username: 'rt_other', password: 'RouteOther#1', projectId: PROJECT } });
+        otherId = other.json.id;
+        await srv.req('POST', '/api/projects', { auth: admin, body: { name: 'Other Tenant', projectId: 'proj_other_tenant' } });
+    });
+
+    test('history is scoped to the caller, with or without a userId parameter', async () => {
+        const mine = await srv.req('GET', '/api/history', { auth: user });
+        assert.equal(mine.status, 200, mine.text);
+        const spoofed = await srv.req('GET', `/api/history?userId=${otherId}`, { auth: user });
+        assert.equal(spoofed.status, 200);
+        for (const row of [...(mine.json.history || []), ...(spoofed.json.history || [])]) {
+            assert.equal(row.user_id, userId, 'history leaked another user row');
+        }
+    });
+
+    test('a user cannot read another user profile', async () => {
+        const r = await srv.req('GET', `/api/users/${otherId}`, { auth: user });
+        assert.equal(r.status, 403);
+        const self = await srv.req('GET', `/api/users/${userId}`, { auth: user });
+        assert.equal(self.status, 200, self.text);
+    });
+
+    test('a user sees only their own project, without money or key fields', async () => {
+        const r = await srv.req('GET', '/api/projects', { auth: user });
+        assert.equal(r.json.projects.length, 1, JSON.stringify(r.json.projects));
+        const p = r.json.projects[0];
+        assert.equal(p.id, PROJECT);
+        for (const f of ['balance', 'lifetime_amount', 'api_key_preview', 'credit_limit']) {
+            assert.equal(p[f], undefined, `field ${f} still exposed to a plain user`);
+        }
+        const asAdmin = await srv.req('GET', '/api/projects', { auth: admin });
+        assert.ok(asAdmin.json.projects.length >= 2, 'admin should still see every project');
+    });
+});
+
+test.describe('privilege boundaries', () => {
+    let trainerId;
+    test.before(async () => { trainerId = await srv.createStaff('rt_trainer', 'RouteTrainer#1', 3); });
+
+    test('an admin cannot reset a trainer password, demote them, or delete them', async () => {
+        const pw = await srv.req('PUT', `/api/users/${trainerId}/password`, { auth: admin, body: { password: 'Taken0ver#1' } });
+        assert.equal(pw.status, 403, pw.text);
+        const demote = await srv.req('PUT', `/api/users/${trainerId}`, { auth: admin, body: { role: 'user' } });
+        assert.equal(demote.status, 403);
+        const del = await srv.req('DELETE', `/api/users/${trainerId}`, { auth: admin });
+        assert.equal(del.status, 403);
+        const still = await srv.login('rt_trainer', 'RouteTrainer#1');
+        assert.equal(still.status, 200, 'the trainer password must be unchanged');
+    });
+
+    test('deactivating a user kills their live session on the next request', async () => {
+        const victim = { username: 'rt_victim', password: 'RouteVictim#1' };
+        const c = await srv.req('POST', '/api/users', { auth: admin,
+            body: { username: victim.username, password: victim.password, projectId: PROJECT } });
+        const vid = c.json.id;
+        const first = await srv.login(victim.username, victim.password);
+        await srv.req('PUT', `/api/users/${vid}/password`, { auth: first.auth, body: { password: 'RouteVictim#2' } });
+        const live = await srv.login(victim.username, 'RouteVictim#2');
+        assert.equal((await srv.req('GET', '/api/quota-status', { auth: live.auth })).status, 200);
+
+        await srv.req('PUT', `/api/users/${vid}`, { auth: admin, body: { accStatusId: 2 } });
+        const after = await srv.req('GET', '/api/quota-status', { auth: live.auth });
+        assert.equal(after.status, 401, 'a disabled account must not keep working');
+    });
+
+    test('logout without a session cannot stamp another user audit row', async () => {
+        const before = await srv.pool.query(
+            `SELECT count(*)::int AS n FROM tbl_audit_log WHERE user_id = $1 AND event_type = 'login_ok' AND log_out_time IS NULL`,
+            [userId]);
+        const r = await srv.req('POST', '/api/logout', { body: { userId } });
+        assert.equal(r.json.ok, true);
+        const after = await srv.pool.query(
+            `SELECT count(*)::int AS n FROM tbl_audit_log WHERE user_id = $1 AND event_type = 'login_ok' AND log_out_time IS NULL`,
+            [userId]);
+        assert.equal(after.rows[0].n, before.rows[0].n, 'an unauthenticated logout closed a session row');
+    });
+});
+
+test.describe('static files', () => {
+    test('server source, git objects and lockfiles stay unreachable through encoded paths', async () => {
+        const blocked = ['/server/package.json', '//server/package.json', '/./server/package.json',
+                         '/%2E/server/package.json', '/%73erver/server.js', '//package-lock.json',
+                         '//.git/HEAD', '/./.git/HEAD', '/backups%2Fx.json', '//server/logs/app.log',
+                         '/server%2F.env', '/windows/backup-db.ps1'];
+        for (const p of blocked) {
+            assert.equal((await srv.rawGet(p)).status, 404, `${p} is reachable`);
+        }
+    });
+
+    test('the pages and their assets still load', async () => {
+        for (const p of ['/', '/login', '/js/auth.js', '/css/style.css']) {
+            assert.equal((await srv.rawGet(p)).status, 200, `${p} broke`);
+        }
+    });
 });

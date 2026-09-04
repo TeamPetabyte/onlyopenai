@@ -41,6 +41,7 @@ if (HELP) {
   --user <name>       account to reset (default: admin)
   --password <pw>     new password in clear text (default: admin123)
   --list              list admin accounts and exit, change nothing
+  --show              print the new password to stdout (off by default — service logs keep stdout)
   --help, -h          this text
 
 Env: DB_HOST DB_PORT DB_NAME DB_USER DB_PASS (from .env)`);
@@ -98,7 +99,7 @@ const pool = new Pool({
         console.log(`[reset-admin] target: #${userId} ${USER_TO_RESET} (role=${role})`);
 
         // hash + update + unlock
-        const hash = await bcrypt.hash(NEW_PASSWORD, 10);
+        const hash = await bcrypt.hash(NEW_PASSWORD, 12);
         await client.query('BEGIN');
         await client.query(
             `UPDATE tbl_user
@@ -122,7 +123,9 @@ const pool = new Pool({
         console.log(`[reset-admin] ✓ must_change_password = TRUE (forces reset on login)`);
         console.log(`[reset-admin] ✓ revoked ${killed.rowCount} active session(s)`);
         console.log('');
-        console.log(`   Login with:  ${USER_TO_RESET} / ${NEW_PASSWORD}`);
+        // stdout ของ service ถูกเก็บเป็นไฟล์ (nssm) — รหัสจึงพิมพ์ต่อเมื่อสั่ง --show เท่านั้น
+        if (flag('--show')) console.log(`   Login with:  ${USER_TO_RESET} / ${NEW_PASSWORD}`);
+        else console.log(`   Login with:  ${USER_TO_RESET} / (รหัสที่ส่งมาทาง --password; ใช้ --show เพื่อพิมพ์ออกมา)`);
         console.log('   …then change the password immediately.');
     } catch (e) {
         await client.query('ROLLBACK').catch(() => {});

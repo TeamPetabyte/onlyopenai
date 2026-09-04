@@ -31,13 +31,18 @@ const {
     resolveEffort,
     resolveModel,
     runResponsesTurn,
+    safeError,
+    schemas,
+    skillPrompts,
     skillsForCode,
     supportingKnowledgeBlock,
+    validate,
 } = ctx;
-router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
+router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), async (req, res) => {
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true, reason: 'no_api_key' }); return; }
 
-    const { prompt, systemPrompt, inputRate = 0.50, outputRate = 1.50, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
+    // ไม่มี systemPrompt/rate จาก body — schema ทิ้งไปแล้ว; prompt มาจาก tbl_prompt, ราคามาจาก tbl_pricing
+    const { prompt, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
     // เกตเดียวเช็คทั้ง pool และ daily cap — error code แยกให้ UI; fail-OPEN บน DB สะดุด
@@ -159,17 +164,20 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         // ── Step 1: Intent Detection (Phase 1 — Router) ──────────────
         let detectedSkill = null;
         let supportingSkillIds = [];
-        let finalSystemPrompt = systemPrompt || 'คุณเป็น AI assistant ที่ช่วยงาน SAP ABAP';
+        // skill ที่ client เลือกถูก resolve จาก catalog ฝั่ง server — เคยรับเนื้อ prompt จาก body ตรง ๆ
+        const pickedSkill = (skillId && skillId !== 'auto') ? skillPrompts.getSkill(skillId) : null;
+        let finalSystemPrompt = pickedSkill?.content || 'คุณเป็น AI assistant ที่ช่วยงาน SAP ABAP';
         let finalUserPrompt   = prompt;
+        if (pickedSkill) {
+            detectedSkill = { skillId: pickedSkill.id, label: pickedSkill.name || pickedSkill.id,
+                              intent: 'manual', confidence: 1, reason: 'user picked', source: 'manual' };
+        }
 
         // resolve client ของ project ครั้งเดียว — router กับ main call ใช้ key เดียวกัน billing ตรง
         const oai = await getProjectOpenAI(req.session.userId);
 
-        // auto-mode ตัดสินจาก skillId ('auto'/ไม่ส่ง) — เคย match string จาก systemPrompt แล้วพลาด
-        const isAutoMode = (!skillId || skillId === 'auto')
-            || !systemPrompt
-            || systemPrompt.includes('automatically detect')
-            || systemPrompt.includes('PetabyteAi');
+        // auto-mode = ไม่ได้ระบุ skill หรือระบุมาแล้วหาไม่เจอใน catalog
+        const isAutoMode = !pickedSkill;
         if (useRouter && isAutoMode) {
             // router เลือกจาก catalog (tbl_prompt) — ส่ง history ไปด้วย ไม่งั้น follow-up สั้น ๆ ได้ "none" ตลอด
             const catalogPick = await pickSkillFromCatalog(prompt, oai, chatHistory);
@@ -257,6 +265,8 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             if (clientAborted) break;
             const streamArgs = {
                 model: reqModel, stream: true, max_completion_tokens: 3000,
+                // ไม่มีบรรทัดนี้ chunk.usage เป็น null ทุก chunk แล้วเงินถูกคิดจาก ตัวอักษร/3.5
+                stream_options: { include_usage: true },
                 messages,
                 tools:        chatTools,
                 tool_choice:  'auto',
@@ -362,7 +372,10 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
             });
 
             for (const tc of pendingToolCalls) {
-                const args   = JSON.parse(tc.function.arguments || '{}');
+                // โมเดลส่ง arguments พังมาได้ — parse ล้มแล้ว throw จะทิ้งทั้ง turn โดยไม่คิดเงิน
+                let args = {};
+                try { args = JSON.parse(tc.function.arguments || '{}'); }
+                catch (_) { console.warn('[chat] bad tool arguments from model for', tc.function.name); }
                 const result = await executeTool(tc.function.name, args);
                 if (tc.function.name === 'search_knowledge') sendEvent(ragResultEvent(result));
                 messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
@@ -424,17 +437,16 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         }
 
         const durationMs = Date.now() - startTime;
-        // ราคาจาก tbl_pricing — ค่าจาก body เป็นแค่ fallback ตอน model ยังไม่ seed
-        const pricing = await getActivePricing(reqModel, { inputRate, outputRate });
+        // ราคาจาก tbl_pricing เท่านั้น; ไม่มีแถว = ค่า default ฝั่ง server (เคยรับ rate จาก body = ตั้งราคาเองได้)
+        const pricing = await getActivePricing(reqModel);
         const useInput  = pricing.inputPrice;
         const useOutput = pricing.outputPrice;
-        const useCached = (typeof req.body.cachedInputRate === 'number')
-            ? req.body.cachedInputRate
-            : pricing.cachedPrice;
+        const useCached = pricing.cachedPrice;
         const nonCachedInputTokens = Math.max(0, (inputTokens || 0) - (cachedTokens || 0));
-        const cost = (nonCachedInputTokens / 1000) * useInput
+        // clamp ที่ 0 — cost ติดลบจะกลายเป็นการเพิ่มเครดิตตอน UPDATE ... - $1
+        const cost = Math.max(0, (nonCachedInputTokens / 1000) * useInput
                    + ((cachedTokens || 0) / 1000) * useCached
-                   + ((outputTokens || 0) / 1000) * useOutput;
+                   + ((outputTokens || 0) / 1000) * useOutput);
         // log บอก model/effort/จำนวน call — ไม่งั้น turn ช้าแยกไม่ออกจาก turn เร็ว
         const callInfo = apiCalls
             ? ` | ${apiCalls} calls(${toolTurns} tool, ${continuations} cont)`
@@ -474,7 +486,34 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
                          RETURNING project_credits AS balance_after`,
                         [cost || 0, projectId]);
                     if (dedRes.rowCount === 0 && (cost || 0) > 0) {
-                        console.warn(`[chat] ⚠ project pool insufficient — project:${projectId} cost:${cost}`);
+                        // pool ไม่พอ (request ขนาน/ยอดเหลือน้อยกว่าค่าจริง) — หักเท่าที่เหลือแล้วบันทึกส่วนขาด
+                        // ไม่งั้น tbl_daily_usage เดินหน้าไปแต่ ledger ไม่ขยับ แล้วสองฝั่งไม่ตรงกันแบบเงียบ ๆ
+                        const cur = await client.query(
+                            'SELECT COALESCE(project_credits,0) AS bal FROM tbl_balance WHERE project_id=$1 FOR UPDATE',
+                            [projectId]);
+                        const balBefore = parseFloat(cur.rows[0]?.bal || 0);
+                        const drained   = Math.max(0, Math.min(balBefore, Number(cost)));
+                        const shortfall = Number(cost) - drained;
+                        if (drained > 0) {
+                            await client.query(
+                                'UPDATE tbl_balance SET project_credits = project_credits - $1 WHERE project_id=$2',
+                                [drained, projectId]);
+                        }
+                        console.warn(`[chat] ⚠ project pool insufficient — project:${projectId} cost:${cost} drained:${drained} shortfall:${shortfall}`);
+                        await client.query('SAVEPOINT credit_short');
+                        try {
+                            await client.query(`
+                                INSERT INTO tbl_user_credit_transaction
+                                    (user_id, project_id, transaction_type, amount,
+                                     balance_before, balance_after, ref_type, ref_id, note, created_by)
+                                VALUES ($1, $2, 'usage', $3, $4, $5, 'chat_shortfall', $6, $7, NULL)`,
+                                [userId, projectId, -drained, balBefore, balBefore - drained, chatSessionId,
+                                 `cost ${Number(cost).toFixed(4)} but pool had ${balBefore.toFixed(4)} — shortfall ${shortfall.toFixed(4)}`]);
+                            await client.query('RELEASE SAVEPOINT credit_short');
+                        } catch (shortErr) {
+                            await client.query('ROLLBACK TO SAVEPOINT credit_short').catch(() => {});
+                            console.warn('[chat] shortfall log INSERT failed:', shortErr.message);
+                        }
                     } else if (dedRes.rowCount === 1 && (cost || 0) > 0) {
                         // journal เฉพาะเมื่อหักสำเร็จและ cost > 0; ref_id ชี้กลับ session ให้ admin ตามรอยได้
                         const balAfter  = parseFloat(dedRes.rows[0].balance_after);
@@ -621,7 +660,11 @@ router.post('/api/chat', requireAuth, chatRateLimiter, async (req, res) => {
         console.error('[chat] Error:', err.message);
         if (err.status === 401 || err.status === 429) {
             sendEvent({ type: 'use_mock', reason: err.status === 429 ? 'quota_exceeded' : 'invalid_key' });
-        } else { sendEvent({ type: 'error', error: err.message }); }
+        } else {
+            // ข้อความจาก SDK/pg บอกชื่อตาราง/พาธ — ส่งแค่ ref เหมือน route อื่น
+            const safe = safeError(err, req);
+            sendEvent({ type: 'error', error: safe.error, ref: safe.ref });
+        }
         if (!res.writableEnded) res.end();
     }
 });

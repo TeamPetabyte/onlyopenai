@@ -918,11 +918,22 @@ export default {
     var special = '@#$!';
     var all = upper + lower + digits + special;
     var pw = '';
-    pw += upper[Math.floor(Math.random() * upper.length)];
-    pw += digits[Math.floor(Math.random() * digits.length)];
-    pw += special[Math.floor(Math.random() * special.length)];
-    for (var i = 3; i < 12; i++) pw += all[Math.floor(Math.random() * all.length)];
-    pw = pw.split('').sort(function () { return Math.random() - 0.5; }).join('');
+    // Math.random ทำนายได้ — รหัสชั่วคราวต้องมาจาก CSPRNG
+    var pick = function (set) {
+        var buf = new Uint32Array(1), limit = Math.floor(0x100000000 / set.length) * set.length;
+        do { crypto.getRandomValues(buf); } while (buf[0] >= limit);   // rejection sampling กันความลำเอียง
+        return set[buf[0] % set.length];
+    };
+    pw += pick(upper);
+    pw += pick(digits);
+    pw += pick(special);
+    for (var i = 3; i < 12; i++) pw += pick(all);
+    var chars = pw.split('');
+    for (var j = chars.length - 1; j > 0; j--) {          // Fisher-Yates
+        var k = Number(pick(Array.from({ length: j + 1 }, function (_, n) { return n; })));
+        var tmp = chars[j]; chars[j] = chars[k]; chars[k] = tmp;
+    }
+    pw = chars.join('');
     var pwEl = document.getElementById('au-password');
     var cfEl = document.getElementById('au-confirm');
     if (pwEl) { pwEl.value = pw; pwEl.type = 'text'; }

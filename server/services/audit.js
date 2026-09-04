@@ -58,7 +58,8 @@ async function logAdminAction(req, detail = {}) {
 // เหตุการณ์ auth (login fail/lockout/logout) ลง tbl_audit_log — user_id เป็น NULL ได้
 async function logAuthEvent(eventType, userId, req, detail = {}) {
     try {
-        const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || '').toString().slice(0, 45);
+        // req.clientIp มาจาก middleware ใน server.js (CF-Connecting-IP → req.ip) — ไม่อ่าน XFF ดิบ
+        const ip = (req?.clientIp || req?.ip || '').toString().slice(0, 45);
         await pool.query(
             `INSERT INTO tbl_audit_log
                 (user_id, log_in_date, log_in_time, event_type, detail, ip)

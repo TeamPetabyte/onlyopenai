@@ -20,6 +20,14 @@ const {
 // GET /api/projects
 router.get('/api/projects', requireAuth, async (req, res) => {
     try {
+        // user ธรรมดาเห็นเฉพาะโครงการตัวเอง และไม่เห็นยอดเงิน/ยอดสะสม/preview ของ key
+        const isAdmin = req.session.role === 'admin' || req.session.role === 'trainer';
+        const params = [];
+        let scope = '';
+        if (!isAdmin) {
+            params.push(req.session.userId);
+            scope = ` AND p.project_id = (SELECT project_id FROM tbl_user WHERE user_id = $${params.length})`;
+        }
         const r = await pool.query(`
             SELECT p.project_id AS id, p.project_name AS name, p.project_api_key,
                    p.description, p.input_rate, p.output_rate, p.credit_limit,
@@ -28,19 +36,25 @@ router.get('/api/projects', requireAuth, async (req, res) => {
                    COALESCE(b.project_credits_amount, 0) AS lifetime_amount
             FROM tbl_project p
             LEFT JOIN tbl_balance b ON p.project_id = b.project_id
-            WHERE p.is_deleted = FALSE
-            ORDER BY p.created_date ASC`);
+            WHERE p.is_deleted = FALSE${scope}
+            ORDER BY p.created_date ASC`, params);
         // ไม่ส่ง key เต็มให้ browser — decrypt ก่อนทำ preview "sk-…XXXX" (แถว legacy plaintext ผ่าน path เดียวกัน)
         const projects = r.rows.map(p => {
             const raw = cryptoStore.tryDecrypt(p.project_api_key);
             const looksReal = !!raw && /^sk-/i.test(raw);
+            const base = { ...p, project_api_key: undefined }; // strip the secret (even encrypted blob)
+            if (!isAdmin) {
+                // หน้า chat ใช้แค่ชื่อโครงการ — ยอดเงินอ่านจาก /api/quota-status
+                return { id: p.id, name: p.name, description: p.description,
+                         input_rate: p.input_rate, output_rate: p.output_rate,
+                         created_at: p.created_at, has_api_key: looksReal };
+            }
             return {
-                ...p,
+                ...base,
                 has_api_key: looksReal,
                 api_key_preview: looksReal
                     ? raw.slice(0, 8) + '…' + raw.slice(-4)
                     : null,
-                project_api_key: undefined, // strip the secret (even encrypted blob)
             };
         });
         res.json({ ok: true, projects });
@@ -71,9 +85,11 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
     }
 
     // ใช้ id ของ OpenAI เป็น PK เมื่อได้มา; fallback: id จาก admin → gen proj_<slug>_<ts>
+    // id ที่ derive จากชื่อต้องผ่านตัวกรองเดียวกับ projectId — ชื่อที่มี ' หรือ ) เคยหลุดไปอยู่ใน onclick ของหน้า admin
+    const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '').slice(0, 20) || 'project';
     const pid = openaiProjectId
         || projectId
-        || ('proj_' + name.toLowerCase().replace(/\s+/g,'_').slice(0,20) + '_' + Date.now().toString(36));
+        || ('proj_' + slug + '_' + Date.now().toString(36));
 
     // key ที่เขียน: ของที่ admin วาง หรือ NULL — เข้ารหัสก่อน INSERT เสมอ
     const rawKey = openaiKey || apiKey || null;
@@ -127,7 +143,13 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
 // PUT /api/projects/:id
 router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), async (req, res) => {
     const { name, apiKey, credits, description, inputRate, outputRate, creditLimit } = req.body;
-    const creditsNum = (credits === undefined) ? null : credits;
+    // ยอดเงินเปลี่ยนได้ทางเดียวคือ PUT /:id/topup ซึ่งล็อกแถว บวก lifetime และลงประวัติ
+    // เส้นทางเดิมเขียนทับยอดนอก transaction — การหักเงินที่ commit คั่นกลางจะหายไปเงียบ ๆ
+    if (credits !== undefined) {
+        return res.status(400).json({ ok: false, error: 'credits_not_editable',
+            message: 'ใช้ PUT /api/projects/:id/topup เพื่อเปลี่ยนยอดเครดิตของโครงการ' });
+    }
+    const creditsNum = null;
     // apiKey สามสถานะ: undefined=คงเดิม, null=ล้าง, sk-...=ทับ (เดิม `|| null` ทำให้ล้างไม่ได้)
     const apiKeyAction =
         apiKey === undefined ? 'keep'
@@ -169,12 +191,6 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
         // drop any cached per-project OpenAI client so the next
         // chat request reads the new key (set or clear) from the DB.
         if (apiKeyAction !== 'keep') invalidateProjectClient(req.params.id);
-        if (creditsNum !== null) {
-            await pool.query(`INSERT INTO tbl_balance (project_id, project_credits, top_up_date, top_up_time, user_id)
-                VALUES ($1, $2, CURRENT_DATE, NOW(), 1)
-                ON CONFLICT (project_id) DO UPDATE SET project_credits = EXCLUDED.project_credits,
-                    top_up_date = CURRENT_DATE, top_up_time = NOW()`, [req.params.id, creditsNum]);
-        }
 
         // Compute the changed-only subset (api_key is redacted to a boolean)
         const afterFull = {

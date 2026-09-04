@@ -4,6 +4,8 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const bcrypt = require('bcrypt');
+// hash ของค่าสุ่มที่ไม่มีใครรู้ ใช้เผาเวลาให้เท่ากันตอน username ไม่มีจริง (กัน user enumeration ด้วยเวลา)
+const DUMMY_HASH = bcrypt.hashSync(require('crypto').randomBytes(24).toString('hex'), 10);
 const {
     _extractToken,
     _markerCookieOpts,
@@ -15,6 +17,7 @@ const {
     LOCKOUT_MINUTES,
     LOCKOUT_THRESHOLD,
     logAuthEvent,
+    logger,
     loginRateLimiter,
     normalizeRole,
     pool,
@@ -40,6 +43,8 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
         // bad-cred / inactive responses use 401 so the
         // rate-limiter (skipSuccessfulRequests:true) actually counts them.
         if (r.rows.length === 0) {
+            // เทียบกับ hash หลอกให้เสียเวลาเท่ากัน — ตอบทันทีจะบอกได้จากเวลาว่า username ไหนมีจริง
+            await bcrypt.compare(password, DUMMY_HASH);
             // log unknown username — no user_id since it doesn't exist.
             logAuthEvent('login_fail', null, req, { reason: 'unknown_user', username });
             return res.status(401).json({ ok: false, error: 'Invalid credentials' });
@@ -65,10 +70,16 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
         if (!valid) {
             // increment failed_attempts, lock if over threshold.
             // Single UPDATE so it's atomic; CASE handles the threshold inside SQL.
+            // ตัวนับต้องเริ่มใหม่เมื่อ lock ก่อนหน้าหมดอายุ — ไม่งั้นผิดครั้งเดียวหลังปลดล็อกก็โดนล็อกอีก 15 นาที
             const upd = await pool.query(
                 `UPDATE tbl_user
-                    SET failed_attempts = failed_attempts + 1,
+                    SET failed_attempts = CASE
+                            WHEN locked_until IS NOT NULL AND locked_until <= NOW() THEN 1
+                            ELSE failed_attempts + 1
+                        END,
                         locked_until = CASE
+                            WHEN locked_until IS NOT NULL AND locked_until <= NOW()
+                                THEN (CASE WHEN 1 >= $2 THEN NOW() + ($3 || ' minutes')::INTERVAL ELSE NULL END)
                             WHEN failed_attempts + 1 >= $2 THEN NOW() + ($3 || ' minutes')::INTERVAL
                             ELSE locked_until
                         END
@@ -77,7 +88,8 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
                 [u.id, LOCKOUT_THRESHOLD, LOCKOUT_MINUTES]);
             const row = upd.rows[0];
             if (row.locked_until && new Date(row.locked_until) > new Date()) {
-                console.warn(`[lockout] user_id=${u.id} username=${u.username} locked for ${LOCKOUT_MINUTES}min after ${row.failed_attempts} failed attempts`);
+                logger.warn({ event: 'lockout', user_id: u.id, minutes: LOCKOUT_MINUTES,
+                              failed_attempts: row.failed_attempts }, 'account locked');
                 logAuthEvent('lockout', u.id, req, {
                     reason: 'threshold_exceeded',
                     failed_attempts: row.failed_attempts,
@@ -124,7 +136,7 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
             [u.id]);
 
         // log_out_* ต้องเป็น NULL จนกว่าจะ logout จริง — เคย pre-fill แล้วประวัติเพี้ยนทั้งหน้า
-        const ipAddr = (req.headers['x-forwarded-for'] || req.ip || '').toString().slice(0, 45);
+        const ipAddr = (req.clientIp || req.ip || '').toString().slice(0, 45);
         await pool.query(`INSERT INTO tbl_audit_log
                 (user_id, log_in_date, log_in_time, event_type, detail, ip)
             VALUES ($1, CURRENT_DATE, NOW(), 'login_ok', $2, $3)`,
@@ -157,7 +169,8 @@ router.post('/api/logout', async (req, res) => {
         try { sess = await getSession(token); }
         catch (e) { console.error('[logout] getSession failed (non-fatal):', e.message); }
     }
-    const userId = sess?.userId || req.body.userId;
+    // เชื่อเฉพาะ session จริง — เคยรับ req.body.userId ทำให้คนนอกปิดแถว login_ok ของใครก็ได้
+    const userId = sess?.userId || null;
     if (token) {
         try { await deleteSession(token); }
         catch (e) { console.error('[logout] deleteSession failed (non-fatal):', e.message); }

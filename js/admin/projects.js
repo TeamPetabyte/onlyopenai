@@ -1,5 +1,5 @@
 // projects.js — หน้า Projects + modal
-import { escapeHtml, flash, formatTHB, hideModal, showModal } from './helpers.js';
+import { escapeHtml, jsArg, flash, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
   // ── PROJECTS ──────────────────────────────────────────
@@ -63,7 +63,7 @@ export default {
         +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
         // Click-to-copy project_id pill (matches Overview redesign)
         +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
-        +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + escapeHtml(p.id) + '\').then(()=>flash(\'✓ Copied: ' + escapeHtml(p.id) + '\'))" '
+        +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
         +         'style="font-family:Geist Mono,monospace;font-size:.7rem;padding:3px 9px;'
         +         'background:var(--accent-soft-bg);color:var(--accent);'
         +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer">'
@@ -97,13 +97,13 @@ export default {
         // Icon-only Edit + Delete buttons
         +   '<div style="display:flex;gap:8px">'
         +     '<button class="btn-icon-action btn-icon-edit-large" title="' + escapeHtml(t('tt.editProject', 'แก้ไข Project')) + '" '
-        +       'onclick="admin.openEditProject(\'' + p.id + '\')">'
+        +       'onclick="admin.openEditProject(\'' + jsArg(p.id) + '\')">'
         +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
         +       '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
         +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.edit', 'แก้ไข')) + '</span>'
         +     '</button>'
         +     '<button class="btn-icon-action btn-icon-danger-large" title="' + escapeHtml(t('tt.deleteProject', 'ลบ Project')) + '" '
-        +       'onclick="admin.deleteProject(\'' + p.id + '\')">'
+        +       'onclick="admin.deleteProject(\'' + jsArg(p.id) + '\')">'
         +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
         +       '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
         +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.deletePlain', 'ลบ')) + '</span>'

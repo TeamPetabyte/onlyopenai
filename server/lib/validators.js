@@ -1,9 +1,22 @@
 // @ts-check
 // validators.js — กติกา input ที่ใช้ร่วมกันทุก route (pure, ไม่มี pool)
 
+// รหัสที่เดาก่อนเสมอ — ผ่านกฎความยาว/ตัวเลขได้ทุกตัว จึงต้องกันแยก
+const COMMON_PASSWORDS = new Set([
+    'password1', 'password123', 'passw0rd', 'p@ssw0rd', 'admin123', 'admin1234', 'administrator1',
+    'welcome1', 'welcome123', 'qwerty123', 'abc12345', 'iloveyou1', 'letmein1', 'monkey123',
+    'football1', 'sunshine1', 'princess1', 'dragon123', 'master123', 'trustno1', 'baseball1',
+    '12345678', '123456789', '1234567890', 'a1234567', 'test1234', 'user1234', 'changeme1',
+    'petabyte1', 'petabyte123', 'pipekai123', 'openai123',
+]);
+
 /** Phase 7: stricter password policy. Returns null if OK, error string if bad. */
-function validatePasswordStrength(pw) {
+function validatePasswordStrength(pw, username) {
     if (!pw || typeof pw !== 'string') return 'password is required';
+    const low = pw.toLowerCase();
+    if (COMMON_PASSWORDS.has(low)) return 'password is too common — pick something unpredictable';
+    if (username && typeof username === 'string' && username.length >= 3
+        && low.includes(username.toLowerCase())) return 'password must not contain the username';
     if (pw.length < 8)              return 'password must be at least 8 characters';
     if (pw.length > 128)            return 'password must be at most 128 characters';
     if (!/[A-Za-z]/.test(pw))       return 'password must contain at least one letter';

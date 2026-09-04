@@ -84,8 +84,12 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
     const dShift = (days) => new Date(today.getTime() + tzShift - days * 86400000)
                               .toISOString().slice(0, 10);
     const defaultFrom = groupBy === 'month' ? dShift(60) : dShift(6);
+    // ค่านี้ไปอยู่ในชื่อไฟล์ของ Content-Disposition ด้วย — รับเฉพาะรูปแบบวันที่
     const from = String(req.query.from || defaultFrom).slice(0, 10);
     const to   = String(req.query.to   || todayBkk).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        return res.status(400).json({ ok: false, error: 'invalid_date', message: 'from/to ต้องเป็นรูปแบบ YYYY-MM-DD' });
+    }
 
     // Optional project filter
     const projFilter = (req.query.projectId || '').trim();
@@ -189,8 +193,12 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
     const dShift   = (d) => new Date(today.getTime() + tzShift - d * 86400000)
                               .toISOString().slice(0, 10);
     const defaultFrom = groupBy === 'month' ? dShift(60) : dShift(6);
+    // ค่านี้ไปอยู่ในชื่อไฟล์ของ Content-Disposition ด้วย — รับเฉพาะรูปแบบวันที่
     const from = String(req.query.from || defaultFrom).slice(0, 10);
     const to   = String(req.query.to   || todayBkk).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        return res.status(400).json({ ok: false, error: 'invalid_date', message: 'from/to ต้องเป็นรูปแบบ YYYY-MM-DD' });
+    }
 
     const projFilter = (req.query.projectId || '').trim();
     const params = [from, to];
@@ -288,7 +296,9 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
             // BOM prefix so Excel opens UTF-8 (Thai names) correctly.
             const esc = (v) => {
                 if (v === null || v === undefined) return '';
-                const s = String(v);
+                let s = String(v);
+                // Excel รันค่าที่ขึ้นต้นด้วย = + - @ tab เป็นสูตร/DDE — นำหน้าด้วย ' ให้เป็นข้อความ
+                if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
                 return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
             };
             const lines = [columns.map(c => esc(c.header)).join(',')];

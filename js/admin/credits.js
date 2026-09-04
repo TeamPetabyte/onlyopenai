@@ -1,5 +1,5 @@
 // credits.js — หน้า Credit / daily cap
-import { escapeHtml, flash, hideModal, showModal } from './helpers.js';
+import { escapeHtml, jsArg, flash, hideModal, showModal } from './helpers.js';
 
 export default {
   // เรนเดอร์จาก cache ทันทีถ้ามี แล้ว fetch สดมาทับ — หน้าจอไม่ว่างเปล่า
@@ -58,7 +58,7 @@ export default {
         + '<td class="val" style="font-weight:700;color:var(--text-1)">' + self._formatBahtFmt(bal) + '</td>'
         + '<td style="text-align:right">'
             + '<button class="btn-action btn-primary-sm" style="padding:4px 12px;font-size:1rem;line-height:1" '
-            + 'title="Top up" onclick="admin.openTopup(\'' + p.id + '\')">+</button>'
+            + 'title="Top up" onclick="admin.openTopup(\'' + jsArg(p.id) + '\')">+</button>'
         + '</td>'
         + '</tr>';
     }).join('');

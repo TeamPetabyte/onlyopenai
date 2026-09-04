@@ -27,16 +27,21 @@ async function createSession(user) {
 /** Look up an active (unexpired) session by token. Touches last_seen_at. */
 async function getSession(token) {
     if (!token) return null;
+    // role/สถานะอ่านสดจาก tbl_user — เก็บ snapshot ไว้ใน tbl_session แล้วการลดสิทธิ์/ปิดบัญชีไม่มีผลจนหมดอายุ
     const r = await pool.query(
-        `SELECT s.token, s.user_id AS "userId", s.role, s.expires_at,
+        `SELECT s.token, s.user_id AS "userId", ro.role_des AS role, s.expires_at,
                 s.csrf_token AS "csrfToken",
                 u.username, u.must_change_password AS "mustChangePassword"
          FROM tbl_session s
          JOIN tbl_user u ON s.user_id = u.user_id
-         WHERE s.token = $1 AND s.expires_at > NOW() AND u.is_deleted = FALSE`,
+         JOIN tbl_user_role ro ON u.role_id = ro.role_id
+         WHERE s.token = $1 AND s.expires_at > NOW() AND u.is_deleted = FALSE
+           AND u.acc_status_id = 1
+           AND (u.locked_until IS NULL OR u.locked_until <= NOW())`,
         [token]
     );
     if (r.rows.length === 0) return null;
+    r.rows[0].role = normalizeRole(r.rows[0].role);
     // best-effort touch — not awaited
     pool.query('UPDATE tbl_session SET last_seen_at = NOW() WHERE token = $1', [token])
         .catch(() => {});

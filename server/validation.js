@@ -121,12 +121,18 @@ const dailyCapSchema = z.object({
         .nullable().optional(),
 });
 
-// Chat-style routes — keep loose because we don't dictate content
+// Chat-style routes — keep loose because we don't dictate content.
+// systemPrompt/inputRate/outputRate/cachedInputRate ตั้งใจไม่อยู่ในนี้: prompt มาจาก tbl_prompt
+// และราคามาจาก tbl_pricing เท่านั้น — .strip() จะทิ้งค่าที่ client ส่งมาทับ
 const chatSchema = z.object({
-    message:   z.string().max(20000).optional(),
-    prompt:    z.string().max(20000).optional(),
+    message:   z.string().max(100000).optional(),
+    prompt:    z.string().max(100000).optional(),
     threadId:  z.string().max(128).optional(),
     sessionId: z.coerce.number().int().positive().optional(),
+    skillId:   z.string().trim().max(64).optional(),
+    model:     z.string().trim().max(64).optional(),
+    effort:    z.string().trim().max(16).optional(),
+    useRouter: z.coerce.boolean().optional(),
     // Any other field is silently stripped
 });
 

@@ -24,6 +24,12 @@ export function escapeHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// ค่าที่วางเป็น argument ของ inline handler — escape ชั้น JS ก่อน แล้วค่อย escape ชั้น HTML attribute
+// (browser decode entity ก่อน JS parse ค่าจึงต้องผ่านสองชั้นตามลำดับนี้)
+export function jsArg(v) {
+  return escapeHtml(String(v === null || v === undefined ? '' : v)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
 export function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('th-TH', {

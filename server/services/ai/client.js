@@ -170,7 +170,7 @@ async function ensureAssistant(vectorStoreId = null) {
         }
         const assistant = await openai.beta.assistants.create(createParams);
         ASSISTANT_ID = assistant.id;
-        const envPath = path_mod.join(__dirname, '.env');
+        const envPath = path_mod.join(__dirname, '..', '..', '.env');   // server/.env — ไม่ใช่ services/ai/.env
         let envContent = fs_mod.readFileSync(envPath, 'utf8');
         if (!envContent.includes('OPENAI_ASSISTANT_ID')) {
             envContent += `\nOPENAI_ASSISTANT_ID=${ASSISTANT_ID}\n`;
@@ -199,7 +199,7 @@ async function ensureVectorStore() {
                 name: 'PetabyteAi SAP Knowledge Base',
             });
             VECTOR_STORE_ID = vs.id;
-            const envPath = path_mod.join(__dirname, '.env');
+            const envPath = path_mod.join(__dirname, '..', '..', '.env');   // server/.env — ไม่ใช่ services/ai/.env
             let envContent = fs_mod.readFileSync(envPath, 'utf8');
             if (!envContent.includes('OPENAI_VECTOR_STORE_ID')) {
                 envContent += `\nOPENAI_VECTOR_STORE_ID=${VECTOR_STORE_ID}\n`;

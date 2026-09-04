@@ -14,7 +14,9 @@ const {
 router.get('/api/history', requireAuth, async (req, res) => {
     // alias คอลัมน์ให้ frontend เดิม; cost คำนวณจาก token × tbl_pricing ไม่ใช่ rate เก่า
     try {
-        const { userId } = req.query;
+        // user ธรรมดาอ่านได้เฉพาะของตัวเอง — query userId เชื่อไม่ได้ และสาขา "ทุกแถว" เป็นของ admin
+        const isAdmin = req.session.role === 'admin' || req.session.role === 'trainer';
+        const userId = isAdmin ? req.query.userId : req.session.userId;
         let r;
         if (userId) {
             r = await pool.query(`

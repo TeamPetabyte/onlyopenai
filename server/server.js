@@ -26,6 +26,17 @@ const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// cloudflared ต่อเข้า localhost — ไม่ตั้งค่านี้ req.ip เป็น 127.0.0.1 ของทุกคน rate limit ต่อ IP จึงรวมถังเดียว
+// ใช้ TRUST_PROXY=0 ปิดได้เมื่อรันแบบเปิดพอร์ตตรง
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
+// IP จริงของผู้เรียก: Cloudflare ใส่ CF-Connecting-IP ให้ (client ปลอมไม่ได้เพราะ tunnel เขียนทับ)
+// ส่วน X-Forwarded-For ดิบ client เติมหัวแถวเองได้ จึงห้ามใช้ตรง ๆ
+app.use((req, res, next) => {
+    const cf = req.headers['cf-connecting-ip'];
+    req.clientIp = (typeof cf === 'string' && cf ? cf : req.ip || '').toString().slice(0, 45);
+    next();
+});
+
 // cookie-parser must run BEFORE any route that reads req.cookies.
 // Single line, no secret needed (we use HttpOnly+SameSite=Strict, not signed).
 app.use(cookieParser());
@@ -191,13 +202,19 @@ app.use(express.json({ limit: '2mb' }));
 // CSRF guard runs after CORS+json so 403 responses still get CORS
 // headers and we have access to req.body if any future logic needs it.
 app.use(csrfGuard);
-// HTML ห้าม cache (JS/CSS ใช้ ?v= เป็น cache buster); static เสิร์ฟ repo root
-// จึงต้องบล็อกทุกโฟลเดอร์ที่ไม่ใช่ frontend รวม _* และ .* — เคยหลุด db.json ที่มี hash รหัสผ่าน
-const BLOCKED_TOP_DIRS = /^\/(server|docs|backups|windows|node_modules|_[^/]+|\.[^/]+)(\/|$)/i;
-// บล็อกไฟล์ source/config ระดับ root ด้วย — browser ใช้แค่ HTML + js/css/assets
-const BLOCKED_ROOT_FILES = /^\/[^/]+\.(js|mjs|cjs|ts|sh|bat|ps1|md|py|sql|json|ya?ml|env|example|lock)$/i;
+// static เสิร์ฟ repo root ซึ่งมีทั้ง .git, server/, logs, backups — จึงใช้ allow-list ของสิ่งที่หน้าเว็บใช้จริง
+// (blocklist เดิมเทียบกับ req.path ดิบ แล้ว //server/x, /./server/x, /%2E/server/x หลุดไปถึงไฟล์)
+const STATIC_ALLOW = /^\/$|^\/(?:assets|css|js|static)\/|^\/[A-Za-z0-9_-]+(?:\.html)?$/;
+function canonicalPath(raw) {
+    let s;
+    try { s = decodeURIComponent(raw); } catch (_) { return null; }   // %-encoding พัง = ปฏิเสธ
+    if (s.includes('\0')) return null;
+    return path.posix.normalize(s.replace(/\\/g, '/')).replace(/\/{2,}/g, '/');
+}
 app.use((req, res, next) => {
-    if (BLOCKED_TOP_DIRS.test(req.path) || BLOCKED_ROOT_FILES.test(req.path)) {
+    if (req.path.startsWith('/api/')) return next();
+    const p = canonicalPath(req.path);
+    if (p === null || p.startsWith('..') || !STATIC_ALLOW.test(p)) {
         return res.status(404).send('Not found');
     }
     next();
@@ -270,7 +287,7 @@ function safeError(e, req) {
     console.error(`[error ${ref}] ${where}:`, e && e.stack ? e.stack : e);
     // A message we wrote ourselves is meant for the user and stays; anything
     // thrown by pg, fs or the OpenAI SDK does not.
-    if (e && e.userFacing) return { ...safeError(e, req), ref };
+    if (e && e.userFacing) return { error: String(e.message || 'Request failed'), ref };
     return { error: 'Something went wrong — quote reference ' + ref + ' when reporting it.', ref };
 }
 
@@ -309,7 +326,9 @@ const loginRateLimiter = rateLimit({
         return `${ipKeyGenerator(req.ip)}:${u}`;
     },
     handler: (req, res) => {
-        console.warn(`[login-rate-limit] blocked ip=${req.ip} user=${req.body?.username}`);
+        // ผ่าน pino: ค่าถูก JSON-encode จึงแทรกบรรทัดปลอมด้วย \n ไม่ได้ และอยู่ในสายที่ redact ได้
+        logger.warn({ event: 'login_rate_limit', ip: req.clientIp || req.ip, username: req.body?.username },
+            'login rate limit: blocked');
         res.status(429).json({ ok: false, error: 'Too many login attempts. Try again in 15 minutes.' });
     },
 });

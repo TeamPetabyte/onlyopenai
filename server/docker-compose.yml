@@ -50,8 +50,9 @@ services:
       DB_PASS:           ${DB_PASS:?DB_PASS must be set in .env}
       OPENAI_API_KEY:    ${OPENAI_API_KEY:?OPENAI_API_KEY must be set in .env}
       OPENAI_MODEL:      ${OPENAI_MODEL:-gpt-4o-mini}
-      SESSION_SECRET:    ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
-      CORS_ORIGINS:      ${CORS_ORIGINS:-http://localhost:8080}
+      # ชื่อต้องตรงกับที่ server.js อ่าน — เดิมส่ง CORS_ORIGINS ซึ่งไม่มีใครอ่าน แล้ว container ตายตอน boot
+      ALLOWED_ORIGINS:   ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set in .env (production refuses to boot without it)}
+      ENCRYPTION_KEY:    ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env (64 hex chars)}
       LOGIN_MAX_PER_15MIN: ${LOGIN_MAX_PER_15MIN:-10}
     ports:
       - "${API_PORT:-3001}:3001"

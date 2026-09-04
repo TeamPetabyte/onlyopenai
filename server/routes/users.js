@@ -4,7 +4,10 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const bcrypt = require('bcrypt');
+// 12 คือค่าที่แนะนำปัจจุบัน (เดิม 10); hash เก่ายังเทียบผ่านได้เพราะ cost ฝังอยู่ในตัว hash
+const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 const {
+    _extractToken,
     logAdminAction,
     normalizeRole,
     pool,
@@ -16,6 +19,19 @@ const {
     validate,
     validatePasswordStrength,
 } = ctx;
+
+// admin แก้ได้เฉพาะบัญชี role user กับของตัวเอง — ไม่งั้น admin ตั้งรหัสให้ trainer แล้วยึดสิทธิ์ superadmin ได้
+// คืน null = ผ่าน, คืน string = เหตุผลที่ปฏิเสธ
+async function blockedByTargetRole(req, targetId) {
+    if (req.session.role === 'trainer') return null;
+    if (req.session.userId === targetId) return null;
+    const r = await pool.query(
+        'SELECT role_id FROM tbl_user WHERE user_id = $1 AND is_deleted = FALSE', [targetId]);
+    if (!r.rowCount) return null;              // ไม่มีแถว — ให้ handler เดิมตอบ not found
+    if (r.rows[0].role_id !== 2) return 'Only a trainer can modify an admin or trainer account';
+    return null;
+}
+
 // GET /api/users — admin only (user list is sensitive). Phase 7: hide soft-deleted.
 router.get('/api/users', requireAdmin, async (req, res) => {
     try {
@@ -48,6 +64,12 @@ router.get('/api/users', requireAdmin, async (req, res) => {
 
 // GET /api/users/:id  — single user with balance. Phase 7: hide soft-deleted.
 router.get('/api/users/:id', requireAuth, async (req, res) => {
+    // โปรไฟล์ของคนอื่นเป็นของ admin เท่านั้น — id เป็นเลขเรียงจึงไล่อ่านได้ถ้าไม่กัน
+    const targetId = parseInt(req.params.id, 10);
+    const isAdmin  = req.session.role === 'admin' || req.session.role === 'trainer';
+    if (!isAdmin && req.session.userId !== targetId) {
+        return res.status(403).json({ ok: false, error: 'Can only read your own profile' });
+    }
     try {
         const r = await pool.query(`
             SELECT u.user_id AS id, u.username, u.name, u.surname,
@@ -72,7 +94,7 @@ router.get('/api/users/:id', requireAuth, async (req, res) => {
 router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, res) => {
     const { username, password, displayName, role, balance, projectId } = req.body;
     // Strength check is still separate — schema only enforces length range
-    const pwErr = validatePasswordStrength(password);
+    const pwErr = validatePasswordStrength(password, username);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
     const balanceNum = (balance === undefined) ? 0 : balance;
     // Concept B: per-user daily spending limit. null/'' = no cap (unlimited,
@@ -95,7 +117,7 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
     const projId     = isStaff ? null : (projectId || 'proj_sap_dev');
     const effDailyCap = isStaff ? null : dailyCap;
     try {
-        const hash = await bcrypt.hash(password, 10);
+        const hash = await bcrypt.hash(password, BCRYPT_COST);
         // รหัสที่ admin ตั้งให้ user = ชั่วคราว บังคับเปลี่ยนตอน login แรก; staff ยกเว้น
         const mustChangePw = roleId === 2;
         const r = await pool.query(`
@@ -153,6 +175,8 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
     if (roleId !== undefined && roleId !== 2 && req.session.role !== 'trainer') {
         return res.status(403).json({ ok: false, error: 'Only a trainer can assign the admin role' });
     }
+    const roleBlock = await blockedByTargetRole(req, parseInt(req.params.id, 10));
+    if (roleBlock) return res.status(403).json({ ok: false, error: roleBlock });
     // projectId: null = unassign, string = assign, undefined = no change
     const projValue = has('projectId')
         ? (b.projectId === null ? null : b.projectId)
@@ -188,7 +212,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
             }
         }
         if (b.password) {
-            const hash = await bcrypt.hash(b.password, 10);
+            const hash = await bcrypt.hash(b.password, BCRYPT_COST);
             addSet('password', hash);
             // force the target user to pick their own pw next login,
             // unless admin is editing their own row (avoids self-lockout).
@@ -201,6 +225,14 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
             await pool.query(
                 `UPDATE tbl_user SET ${sets.join(', ')}
                  WHERE user_id = $${params.length} AND is_deleted = FALSE`, params);
+        }
+
+        // สิทธิ์/สถานะ/รหัสเปลี่ยน = session เดิมต้องตาย ไม่งั้นของเก่ายังใช้ได้อีก 24 ชม.
+        if (roleId !== undefined || accStatusId !== undefined || b.password) {
+            const tid = parseInt(req.params.id, 10);
+            if (tid !== req.session.userId) {
+                await pool.query('DELETE FROM tbl_session WHERE user_id = $1', [tid]);
+            }
         }
 
         if (balanceNum !== undefined && balanceNum !== null) {
@@ -254,8 +286,10 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
     // stronger password policy applied here too
     const pwErr = validatePasswordStrength(password);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
+    const roleBlock = await blockedByTargetRole(req, targetId);
+    if (roleBlock) return res.status(403).json({ ok: false, error: roleBlock });
     try {
-        const hash = await bcrypt.hash(password, 10);
+        const hash = await bcrypt.hash(password, BCRYPT_COST);
         // เปลี่ยนรหัสตัวเอง = ล้าง must_change_password; admin reset ให้คนอื่น = คงไว้
         const isSelf = req.session.userId === targetId;
         const r = await pool.query(
@@ -265,6 +299,13 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
               WHERE user_id = $2 AND is_deleted = FALSE`,
             [hash, targetId, isSelf]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'User not found' });
+        // เปลี่ยนรหัสแล้ว session อื่นต้องหลุด (เปลี่ยนเอง = เก็บ session ปัจจุบันไว้)
+        const curToken = _extractToken(req);
+        if (isSelf && curToken) {
+            await pool.query('DELETE FROM tbl_session WHERE user_id = $1 AND token <> $2', [targetId, curToken]);
+        } else {
+            await pool.query('DELETE FROM tbl_session WHERE user_id = $1', [targetId]);
+        }
         // บันทึกทุกการเปลี่ยนรหัส — ห้ามมี hash/plaintext ใน log
         logAdminAction(req, {
             action: isSelf ? 'change_own_password' : 'admin_reset_password',
@@ -495,6 +536,8 @@ router.delete('/api/users/:id', requireAdmin, async (req, res) => {
     if (req.session.userId === targetId) {
         return res.json({ ok: false, error: 'Cannot delete your own account' });
     }
+    const roleBlock = await blockedByTargetRole(req, targetId);
+    if (roleBlock) return res.status(403).json({ ok: false, error: roleBlock });
     try {
         // Snapshot who's being deleted for audit
         const before = await pool.query(
