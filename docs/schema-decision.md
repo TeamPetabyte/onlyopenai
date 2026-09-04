@@ -3,7 +3,7 @@
 ## Background
 
 Designer provided `schema-drawsql-2.sql` (drawn in drawSQL). After comparing to
-the live PostgreSQL DB (`192.168.69.125/OpenAI_DB`) we have two candidate
+the live PostgreSQL DB (`<DB_HOST>/OpenAI_DB`) we have two candidate
 "source of truth" documents:
 
 | | Designer file | Live DB |

@@ -396,12 +396,13 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     const RESP_MAX_OUT = { none: 12000, low: 12000, medium: 16000, high: 24000, xhigh: 24000, max: 32000 };
     const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
-    let previousResponseId = null;
-    // มี history = ส่ง item array; ไม่มี = string เดี่ยวแบบเดิม
-    let input = (history && history.length)
-        ? [...history.map(m => ({ role: m.role, content: m.content })),
-           { role: 'user', content: userPrompt }]
-        : userPrompt;
+    // store:false — OpenAI ไม่เก็บบทสนทนาไว้ฝั่งตน (โค้ดลูกค้าอยู่ในนั้น) แลกกับที่เราต้องพก context เองทุก call
+    // input จึงเป็น array เสมอ และผลลัพธ์ของแต่ละ turn ถูกต่อกลับเข้าไปแทน previous_response_id
+    const STORE_ARGS = { store: false, include: ['reasoning.encrypted_content'] };
+    let input = [
+        ...((history && history.length) ? history.map(m => ({ role: m.role, content: m.content })) : []),
+        { role: 'user', content: userPrompt },
+    ];
     let toolTurn = 0;
     let lengthContinuations = 0;
 
@@ -422,7 +423,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         }
         setStream(stream);
         const fcalls = {};   // item_id → { call_id, name, args }
-        let respId = null, usage = null, incomplete = null;
+        let usage = null, incomplete = null, outputItems = [];
         try {
             for await (const ev of stream) {
                 if (isAborted()) break;
@@ -443,9 +444,10 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
                     // continuation ไม่ทำงาน (ไฟล์โดนตัดเงียบ) และ chain ของ response.id ขาด; สอง event รูปเดียวกันเลยแชร์ case
                     case 'response.completed':
                     case 'response.incomplete':
-                        respId = ev.response?.id;
                         usage = ev.response?.usage;
                         incomplete = ev.response?.incomplete_details;
+                        // item ที่โมเดลผลิต (reasoning + message + function_call) — ต้องส่งกลับเป็น context เอง
+                        outputItems = ev.response?.output || [];
                         break;
                     case 'response.failed':
                     case 'error':
@@ -453,7 +455,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
                 }
             }
         } catch (streamErr) {
-            if (isAborted()) return { calls: [], incomplete: null, respId };
+            if (isAborted()) return { calls: [], incomplete: null, outputItems: [] };
             throw streamErr;
         } finally {
             setStream(null);
@@ -468,23 +470,22 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             console.warn('[chat/responses] a call ended with no usage — tokens for it are NOT billed'
                 + ` (text so far ${acc.fullText.length} chars). Unhandled terminal event?`);
         }
-        return { calls: Object.values(fcalls), incomplete, respId };
+        return { calls: Object.values(fcalls), incomplete, outputItems };
     }
 
     while (toolTurn < MAX_TOOL_TURNS) {
         if (isAborted()) break;
         const args = {
             model, stream: true, max_output_tokens: maxOutputTokens,
-            tools: rTools, reasoning: { effort }, store: true,
+            tools: rTools, reasoning: { effort }, ...STORE_ARGS,
+            instructions,      // ส่งใหม่ทุก call — ไม่มี state ฝั่ง OpenAI ให้สืบทอด
             input,
         };
-        // previous_response_id ไม่พก instructions — ต้องส่งใหม่ทุก call ไม่งั้น system prompt หายหลัง tool turn แรก
-        args.instructions = instructions;
-        if (previousResponseId) args.previous_response_id = previousResponseId;
 
-        const { calls, incomplete, respId } = await once(args);
-        if (respId) previousResponseId = respId;
+        const { calls, incomplete, outputItems } = await once(args);
         if (isAborted()) return;
+        // ผลของ turn นี้กลายเป็น context ของ turn ถัดไป (เดิม previous_response_id ทำให้แทน)
+        if (outputItems.length) input = input.concat(outputItems);
 
         // Truncated by the output cap (no tool call pending) → ask to continue.
         if (calls.length === 0 && incomplete?.reason === 'max_output_tokens'
@@ -492,7 +493,8 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             lengthContinuations++;
             acc.continuations = (acc.continuations || 0) + 1;
             console.warn(`[chat/responses] truncated — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
-            input = 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.';
+            input = input.concat([{ role: 'user',
+                content: 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.' }]);
             continue;
         }
 
@@ -510,22 +512,21 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             if (c.name === 'search_knowledge') sendEvent(ragResultEvent(result));
             outputs.push({ type: 'function_call_output', call_id: c.call_id, output: JSON.stringify(result) });
         }
-        input = outputs;   // previous_response_id carries the function_call items
+        input = input.concat(outputs);   // function_call items ถูกต่อไว้แล้วด้านบน
         toolTurn++;
         acc.toolTurns = (acc.toolTurns || 0) + 1;
     }
 
     // ชน tool-turn cap โดยไม่มีคำตอบ → ยิงปิดท้าย พร้อมส่ง tool output ที่ค้าง — ทิ้งไปจะโดน 400 No tool output
-    if (!isAborted() && acc.fullText.length === 0 && previousResponseId) {
+    if (!isAborted() && acc.fullText.length === 0 && toolTurn > 0) {
         console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`
-            + ` (${Array.isArray(input) ? input.length : 0} pending tool output(s) carried over)`);
+            + ` (${input.length} context item(s) carried over)`);
         const nudge = { role: 'user', content: 'Based on the tool results above, give the final answer now.' };
         await once({
             model, stream: true, max_output_tokens: maxOutputTokens,
-            reasoning: { effort }, store: true, tool_choice: 'none',
-            instructions,   // not inherited via previous_response_id
-            previous_response_id: previousResponseId,
-            input: Array.isArray(input) ? [...input, nudge] : [nudge],
+            reasoning: { effort }, ...STORE_ARGS, tool_choice: 'none',
+            instructions,
+            input: input.concat([nudge]),
         });
     }
 }

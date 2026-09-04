@@ -13,7 +13,7 @@
    │  https://app.xxx.com   │ ──อินเทอร์เน็ต──▶│  cloudflared (service)        │
    │  ไม่ต้องต่อ VPN          │   (HTTPS)       │     └▶ node server.js :3001    │
    └───────────────────────┘                │           └▶ PostgreSQL DB     │
-                                            │              192.168.69.125    │
+                                            │              <DB_HOST>         │
                                             └──────────────────────────────┘
                                               ▲ เฉพาะเครื่องนี้ที่ต้องถึง DB
                                               (LAN เดียวกัน = ไม่ต้อง VPN,
@@ -28,7 +28,7 @@
 
 | ของ | รายละเอียด |
 |-----|-----------|
-| เครื่อง Windows | เปิดทิ้งไว้ได้ 24/7, เข้าถึง DB `192.168.69.125` ได้ (LAN หรือ VPN) |
+| เครื่อง Windows | เปิดทิ้งไว้ได้ 24/7, เข้าถึง DB `<DB_HOST>` ได้ (LAN หรือ VPN) |
 | Node.js LTS | ดาวน์โหลด: https://nodejs.org (เลือก LTS, ตัว .msi) |
 | โค้ดโปรเจค | git clone หรือ copy โฟลเดอร์ `onlyopenai` ไปวางบนเครื่อง เช่น `C:\petabyte\onlyopenai` |
 | บัญชี Cloudflare | ฟรี — https://dash.cloudflare.com/sign-up |
@@ -140,7 +140,7 @@ nssm restart PetabyteAi          # migrate รันอัตโนมัติ�
 |------|------|
 | login แล้วเด้ง "session หมดอายุ" | `ALLOWED_ORIGINS` ไม่ตรง URL ที่เข้า → แก้ .env ให้ตรงเป๊ะ + `nssm restart PetabyteAi` |
 | เปิด URL ไม่ขึ้นเลย | tunnel service ไม่รัน / config.yml ผิด → `Get-Service cloudflared`, ดู log |
-| `ECONNREFUSED 5432` | เครื่องถึง DB ไม่ได้ → เช็ค VPN/LAN ไปยัง 192.168.69.125 |
+| `ECONNREFUSED 5432` | เครื่องถึง DB ไม่ได้ → เช็ค VPN/LAN ไปยัง <DB_HOST> |
 | cookie ไม่ติด (เด้งทั้งที่ origin ตรง) | ต้องเข้าผ่าน **https** (tunnel) เท่านั้น เพราะ production ใช้ secure cookie |
 | แก้ .env แล้วไม่มีผล | ไฟล์เป็น CRLF — แก้ด้วย Notepad/VS Code ปกติได้ แต่ห้ามมีอักขระแปลกกลางบรรทัด แล้ว restart service |
 

@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════
 -- PetabyteAi DB — re-runnable schema export
 -- Generated: 2026-05-11T10:35:38.549Z
--- Source: OpenAI_DB@192.168.69.125:5432
+-- Source: OpenAI_DB@<DB_HOST>:5432
 --
 -- Re-import recipe:
 --   psql -h <host> -U <user> -d <new-db> -f schema.sql

@@ -18,7 +18,7 @@ The app is plain Node.js + PostgreSQL + static files — fully cross-platform.
 brew install node git        # Node ≥ 20 (CI runs 20 and 24; dev machine is v24)
 node --version && git --version
 ```
-PostgreSQL is NOT needed locally — the DB lives on `192.168.69.125`.
+PostgreSQL is NOT needed locally — the DB lives on `<DB_HOST>`.
 (Install it only if you want app + DB on the new machine itself; see
 `docs/deployment.md` for the local-PG variant.)
 
@@ -60,8 +60,8 @@ If the hook is not firing, run `git config core.hooksPath .githooks` once.
 `npm run smoke` exercises the chat money path and needs a reachable DB.
 
 ## 6. Reachability note
-If the DB at `192.168.69.125` is on a different network/VPN than the new machine,
-make sure it can reach it: `nc -vz 192.168.69.125 5432`.
+If the DB at `<DB_HOST>` is on a different network/VPN than the new machine,
+make sure it can reach it: `nc -vz <DB_HOST> 5432`.
 
 ## Windows-only files you can ignore on Mac
 - `start-server.bat`, `server/install.bat`  → use `start-server.sh` / `server/install.sh`

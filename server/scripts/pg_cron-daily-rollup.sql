@@ -17,7 +17,7 @@
 -- PREREQUISITES (one-time, requires OS access + a PostgreSQL restart)
 -- ───────────────────────────────────────────────────────────────────────────
 --   1. Install the pg_cron binary for PostgreSQL 18 on the DB host
---      (192.168.69.125). e.g. on Debian/Ubuntu:
+--      (<DB_HOST>). e.g. on Debian/Ubuntu:
 --          apt-get install postgresql-18-cron
 --
 --   2. Edit postgresql.conf:

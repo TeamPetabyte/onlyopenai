@@ -16,7 +16,7 @@
 | **A: เครื่องเดียว** (app + Postgres ใน server เดียว) | Demo, tester, ทีมเล็ก |
 | **B: แยก 2 เครื่อง** (app เครื่องหนึ่ง, DB เครื่องหนึ่ง) | Production, ใช้ DB ที่มีอยู่แล้ว |
 
-> ตอนนี้พี่มี DB ที่ `192.168.69.125` แล้ว → ถ้า deploy app ไปที่อื่นและ connect กลับมา = แบบ B
+> ตอนนี้พี่มี DB ที่ `<DB_HOST>` แล้ว → ถ้า deploy app ไปที่อื่นและ connect กลับมา = แบบ B
 
 ### 2. ผู้ใช้เข้าจากไหน?
 
@@ -120,7 +120,7 @@ npm install --omit=dev    # ติดตั้ง production deps อย่า�
 
 ```bash
 # Database
-DB_HOST=192.168.69.125              # ← IP ของ DB server
+DB_HOST=<DB_HOST>              # ← IP ของ DB server
 DB_PORT=5432
 DB_NAME=OpenAI_DB
 DB_USER=petabyte_app                # ← ✅ สร้าง user แยกสำหรับ app
@@ -178,7 +178,7 @@ GRANT ALL ON SCHEMA public TO petabyte_app;
 
 #### 🔵 ถ้าใช้ DB server ที่มีอยู่ (Option B — เคสของพี่)
 
-บน **เครื่อง DB** (`192.168.69.125`):
+บน **เครื่อง DB** (`<DB_HOST>`):
 
 1. **อนุญาตให้ app server connect** — แก้ `pg_hba.conf`:
    ```
@@ -225,7 +225,7 @@ node server.js
 
 ควรเห็น:
 ```
-✅ PostgreSQL connected: OpenAI_DB @ 192.168.69.125:5432
+✅ PostgreSQL connected: OpenAI_DB @ <DB_HOST>:5432
 [migrate] 0 applied, 23 up-to-date (23 total)
 ✅ System ready
 ```
@@ -342,7 +342,7 @@ TS=$(date +%Y%m%d-%H%M)
 DEST=/var/backups/petabyte
 mkdir -p "$DEST"
 PGPASSWORD='<DB_PASS>' pg_dump \
-    -h 192.168.69.125 -U petabyte_app \
+    -h <DB_HOST> -U petabyte_app \
     -F c -f "$DEST/OpenAI_DB_$TS.dump" OpenAI_DB
 # Keep last 30 days
 find "$DEST" -name "*.dump" -mtime +30 -delete

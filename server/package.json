@@ -1,6 +1,6 @@
 {
     "name": "petabyte-ai-server",
-    "version": "1.0.0",
+    "version": "1.12.0",
     "description": "PetabyteAi Backend — OpenAI Proxy Server",
     "main": "server.js",
     "scripts": {
