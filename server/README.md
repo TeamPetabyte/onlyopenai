@@ -15,8 +15,9 @@ docker compose logs -f api
 ```
 
 The `api` container runs migrations on boot, so a brand-new `db-data`
-volume comes up with the baseline schema + an `admin` / `admin123` user
-(flagged `must_change_password=TRUE`, so first login forces a reset).
+volume comes up with the baseline schema. Migration phase57-001 locks the
+historical bootstrap `admin` account until a real password is set — run
+`node reset-admin.js` once after the first boot (prints a random password).
 
 ### Option B — Bare metal
 
@@ -119,15 +120,13 @@ monitor.
 
 ## Resetting the admin password
 
-If nobody knows the admin password, connect to the DB and run:
+If nobody knows the admin password, run the CLI on the server host:
 
-```sql
-UPDATE tbl_user
-   SET password = '$2b$10$K9KYIqxL58W0sX6wf5Rq/eQROdFg5mfxnuWD2surPnDXEgaDjpWGS',
-       must_change_password = TRUE,
-       failed_attempts = 0,
-       locked_until = NULL
- WHERE username = 'admin';
+```bash
+cd server && node reset-admin.js            # prints a new random password once
+cd server && node reset-admin.js --password 'ChooseOne!1'
 ```
 
-That resets to `admin123` and forces a reset on next login.
+It forces a change on next login. The old documented default (`admin123`)
+is retired — see migration phase57-001: any account still carrying that
+hash is locked out until a real password is set.

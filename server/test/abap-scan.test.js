@@ -410,3 +410,24 @@ test('checkAbapSyntax: AND RETURN advice names the right replacement', () => {
     assert.ok(msg.includes('AND RETURN'), 'AND RETURN was not reported');
     assert.ok(!msg.includes('CALL METHOD'), 'still recommends CALL METHOD, which is unrelated');
 });
+
+// ── PTB-FND-026: the MOVE ... TO rule must stay linear ─────
+// The old pattern /\bMOVE\s+.+\s+TO\s+/ took 43 s on "MOVE " + 6000 spaces.
+test('checkAbapSyntax: MOVE...TO rule still fires on the obsolete form', () => {
+    const r = scan.checkAbapSyntax('MOVE lv_a TO lv_b.');
+    assert.ok(r.issues.some(i => /MOVE\.\.\.TO/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: MOVE...TO rule does not fire on assignments or MOVE-CORRESPONDING', () => {
+    const r = scan.checkAbapSyntax('lv_b = lv_a.\nDATA lv_move TYPE i.\nMOVE-CORRESPONDING ls_a TO ls_b.');
+    assert.ok(!r.issues.some(i => /MOVE\.\.\.TO/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: a pathological MOVE line finishes in well under a second', () => {
+    const line = 'MOVE ' + ' '.repeat(6000) + 'x';
+    const t0 = Date.now();
+    scan.checkAbapSyntax(line);
+    const ms = Date.now() - t0;
+    assert.ok(ms < 500, `took ${ms}ms`);
+});
+test('checkAbapSyntax: a 33 000-character CLEAR operand does not throw', () => {
+    assert.doesNotThrow(() => scan.checkAbapSyntax('CLEAR ' + 'a'.repeat(33000) + '.\nREFRESH x.'));
+});

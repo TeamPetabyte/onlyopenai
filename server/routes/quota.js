@@ -27,12 +27,13 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
             message: 'requestedExtra must be > 0 and ≤ 10000' });
     }
     try {
-        // Prevent piling up pending requests for the same user today.
+        // PTB-FND-023: one pending request per user, full stop — the same rule the
+        // partial unique index in phase57-001 enforces underneath (the old same-day
+        // rule was a check-then-act race and disagreed with any index).
         const dup = await pool.query(`
             SELECT request_id FROM tbl_quota_request
              WHERE user_id = $1
-               AND status   = 'pending'
-               AND (created_at AT TIME ZONE 'Asia/Bangkok')::date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date`,
+               AND status   = 'pending'`,
             [uid]);
         if (dup.rowCount) {
             return res.status(409).json({
@@ -54,6 +55,13 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
             [uid, projectId, requestedExtra, reason || null]);
         res.json({ ok: true, request: r.rows[0] });
     } catch (e) {
+        // two requests racing past the check above: the unique index catches the
+        // second one — report it as the duplicate it is, not as a 500
+        if (e.code === '23505') {
+            return res.status(409).json({ ok: false, error: 'pending_request_exists',
+                message: 'You already have a pending request — wait for an admin to respond first' });
+        }
+    
         console.error('[quota-request:create]', e.message);
         res.status(500).json({ ok: false, ...safeError(e, req) });
     }
@@ -63,7 +71,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
 router.get('/api/quota-requests', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
     const role = req.session?.role;
-    const isAdmin = role === 'admin' || role === 'superadmin';
+    const isAdmin = role === 'admin' || role === 'trainer';   // PTB-FND-011: normalizeRole never yields 'superadmin'; trainer is the superadmin
     const status = ['pending','approved','denied','cancelled'].includes(req.query.status)
         ? req.query.status : null;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);

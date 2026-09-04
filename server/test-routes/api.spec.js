@@ -34,6 +34,12 @@ test('health answers without a session', async () => {
     const r = await srv.req('GET', '/api/health');
     assert.equal(r.status, 200);
     assert.equal(r.json.ok, true);
+    // PTB-FND-043: unauthenticated — no model name, no OpenAI object ids
+    assert.equal(r.json.assistantId, undefined);
+    assert.equal(r.json.vectorStoreId, undefined);
+    assert.equal(r.json.model, undefined);
+    // PTB-FND-045: every /api response is marked no-store
+    assert.match(String(r.headers.get('cache-control')), /no-store/);
 });
 
 test.describe('login', () => {
@@ -67,7 +73,14 @@ test.describe('login', () => {
         assert.equal(gated.status, 423);
         assert.equal(gated.json.mustChangePassword, true);
 
-        const change = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth, body: { password: USER.changed } });
+        // PTB-FND-004: a self-change must prove the current password
+        const noCur = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth, body: { password: USER.changed } });
+        assert.equal(noCur.status, 400, noCur.text);
+        const wrongCur = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth,
+            body: { password: USER.changed, currentPassword: 'NotTheOne#9' } });
+        assert.equal(wrongCur.status, 401, wrongCur.text);
+        const change = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth,
+            body: { password: USER.changed, currentPassword: USER.password } });
         assert.equal(change.status, 200, change.text);
         assert.equal(change.json.ok, true);
         USER.password = USER.changed;

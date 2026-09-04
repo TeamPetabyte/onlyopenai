@@ -93,7 +93,8 @@
             'ul','ol','li',
             'blockquote',
             'table','thead','tbody','tr','th','td',
-            'img',
+            // PTB-FND-031: no <img> — a model answer could embed <img src> pointing anywhere,
+            // which leaks the reader's IP and the fact the answer was opened
         ],
         ALLOWED_ATTR: ['href','title','alt','src','class','name','id','start','type'],
         FORBID_ATTR: ['style','onerror','onload','onclick','onmouseover'],

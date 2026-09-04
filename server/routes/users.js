@@ -165,6 +165,11 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
 
     // Enforce password policy when admin sets a new password
     if (b.password) {
+        // PTB-FND-004: this route has no current-password check, so it must not be
+        // a back door for changing one's own password.
+        if (req.session.userId === parseInt(req.params.id, 10)) {
+            return res.status(400).json({ ok: false, error: 'Change your own password via the password page (current password required)' });
+        }
         const pwErr = validatePasswordStrength(b.password);
         if (pwErr) return res.json({ ok: false, error: pwErr });
     }
@@ -279,19 +284,36 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
 // lets non-admin users change their own password without admin rights.
 router.put('/api/users/:id/password', requireAuth, validate(schemas.changePassword), async (req, res) => {
     const targetId = parseInt(req.params.id);
-    if (req.session.userId !== targetId && req.session.role !== 'admin') {
+    const isStaff = req.session.role === 'admin' || req.session.role === 'trainer';   // trainer = superadmin
+    if (req.session.userId !== targetId && !isStaff) {
         return res.status(403).json({ ok: false, error: 'Can only change own password' });
     }
-    const { password } = req.body;
+    const { password, currentPassword } = req.body;
     // stronger password policy applied here too
     const pwErr = validatePasswordStrength(password);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
     const roleBlock = await blockedByTargetRole(req, targetId);
     if (roleBlock) return res.status(403).json({ ok: false, error: roleBlock });
     try {
-        const hash = await bcrypt.hash(password, BCRYPT_COST);
         // เปลี่ยนรหัสตัวเอง = ล้าง must_change_password; admin reset ให้คนอื่น = คงไว้
         const isSelf = req.session.userId === targetId;
+        // PTB-FND-004: changing your own password proves you still hold the old one —
+        // otherwise a borrowed browser is a permanent takeover.
+        if (isSelf) {
+            if (typeof currentPassword !== 'string' || !currentPassword) {
+                return res.status(400).json({ ok: false, error: 'Current password is required' });
+            }
+            const cur = await pool.query(
+                'SELECT password AS pw FROM tbl_user WHERE user_id = $1 AND is_deleted = FALSE', [targetId]);
+            if (!cur.rowCount) return res.json({ ok: false, error: 'User not found' });
+            const okCur = await bcrypt.compare(currentPassword, cur.rows[0].pw);
+            if (!okCur) {
+                logAdminAction(req, { action: 'change_own_password_rejected', targetType: 'user', targetId,
+                    extra: { reason: 'wrong_current_password' } });
+                return res.status(401).json({ ok: false, error: 'Current password is incorrect' });
+            }
+        }
+        const hash = await bcrypt.hash(password, BCRYPT_COST);
         const r = await pool.query(
             `UPDATE tbl_user
                 SET password = $1,
@@ -512,7 +534,8 @@ router.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap),
 router.get('/api/users/:id/daily-cap-status', requireAuth, async (req, res) => {
     const uid = parseInt(req.params.id, 10);
     if (!Number.isFinite(uid)) return res.status(400).json({ ok: false, error: 'bad id' });
-    if (req.session.role !== 'admin' && req.session.userId !== uid) {
+    const isStaff = req.session.role === 'admin' || req.session.role === 'trainer';   // trainer = superadmin
+    if (!isStaff && req.session.userId !== uid) {
         return res.status(403).json({ ok: false, error: 'forbidden' });
     }
     try {

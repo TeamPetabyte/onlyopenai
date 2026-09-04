@@ -360,7 +360,12 @@ function ragResultEvent(result) {
 }
 
 async function executeTool(name, args) {
-    console.log(`[🔧 tool] ${name}(${JSON.stringify(args).slice(0, 120)})`);
+    // PTB-FND-035: args carry the user's code (check_abap_syntax) — log which
+    // arguments arrived and how big, never their content
+    const shape = (args && typeof args === 'object' && !Array.isArray(args))
+        ? Object.entries(args).map(([k, v]) => `${k}:${typeof v === 'string' ? v.length + 'ch' : typeof v}`).join(',')
+        : typeof args;
+    console.log(`[🔧 tool] ${name}(${shape})`);
     switch (name) {
         case 'find_bapi':            return findBapi(args.task, args.module);
         case 'check_abap_syntax':    return checkAbapSyntax(args.code || '');

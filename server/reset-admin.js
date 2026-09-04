@@ -3,13 +3,13 @@
 // ╚═══════════════════════════════════════════════════════════╝
 // Emergency tool. Resets the 'admin' account when nobody knows the
 // password any more:
-//   - bcrypts a new password (default: admin123)
+//   - bcrypts a new password (random unless --password is given)
 //   - clears failed_attempts + locked_until
 //   - sets must_change_password=TRUE so the next login forces a reset
 //   - drops every active session for admin (Phase 7 table)
 //
 // Usage:
-//   node reset-admin.js                       # → admin / admin123
+//   node reset-admin.js                       # → admin / <random, printed once>
 //   node reset-admin.js --password "MyNew!1"  # → admin / MyNew!1
 //   node reset-admin.js --user alice          # reset a different username
 //   node reset-admin.js --list                # just list admins, do nothing
@@ -31,7 +31,9 @@ function arg(name, fallback) {
 function flag(name) { return process.argv.includes(name); }
 
 const USER_TO_RESET = arg('--user', 'admin');
-const NEW_PASSWORD  = arg('--password', 'admin123');
+// PTB-FND-001: no fixed default. Without --password a random password is generated
+// and printed once; the account still has to change it on first login.
+const NEW_PASSWORD  = arg('--password', null) || require('crypto').randomBytes(12).toString('base64url');
 const LIST_ONLY     = flag('--list');
 const HELP          = flag('--help') || flag('-h');
 
@@ -39,7 +41,7 @@ if (HELP) {
     console.log(`Usage: node reset-admin.js [options]
 
   --user <name>       account to reset (default: admin)
-  --password <pw>     new password in clear text (default: admin123)
+  --password <pw>     new password in clear text (default: random, printed once)
   --list              list admin accounts and exit, change nothing
   --show              print the new password to stdout (off by default — service logs keep stdout)
   --help, -h          this text
@@ -68,10 +70,10 @@ const pool = new Pool({
                 FROM tbl_user u
                 JOIN tbl_user_role r   ON r.role_id = u.role_id
                 JOIN tbl_acc_status s  ON s.acc_status_id = u.acc_status_id
-                WHERE r.role_des = 'admin' AND u.is_deleted = FALSE
+                WHERE r.role_des IN ('admin', 'trainer') AND u.is_deleted = FALSE   -- trainer = superadmin (phase30)
                 ORDER BY u.user_id
             `);
-            console.log(`Admin accounts (${r.rows.length}):`);
+            console.log(`Admin / trainer accounts (${r.rows.length}):`);
             for (const a of r.rows) {
                 console.log(`  #${a.user_id}  ${a.username.padEnd(20)}` +
                     `  status=${a.acc_status}` +

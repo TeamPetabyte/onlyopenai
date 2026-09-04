@@ -45,8 +45,9 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     const { prompt, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
-    // เกตเดียวเช็คทั้ง pool และ daily cap — error code แยกให้ UI; fail-OPEN บน DB สะดุด
-    // (ปลอดภัยเพราะการหักเงินท้าย turn เป็น atomic และไม่ยอมติดลบอยู่แล้ว)
+    // เกตเดียวเช็คทั้ง pool และ daily cap — error code แยกให้ UI
+    // PTB-FND-013: fail-CLOSED — ถ้าเช็คงบไม่ได้ ห้ามเรียกโมเดล (การหักท้าย turn กันพูลติดลบ
+    // แต่กัน daily cap ไม่ได้ และ OpenAI คิดเงินเราไปแล้ว)
     try {
         const uid = req.session?.userId;
         if (uid) {
@@ -57,7 +58,9 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             }
         }
     } catch (e) {
-        console.warn('[chat] budget gate failed (fail-open):', e.message);
+        console.error('[chat] budget gate failed — refusing the turn (fail-closed):', e.message);
+        return res.status(503).json({ ok: false, error: 'budget_check_unavailable',
+            message: '⚠️ ตรวจสอบเครดิตไม่ได้ชั่วคราว กรุณาลองใหม่ในอีกสักครู่' });
     }
 
     // มี sessionId = เช็คความเป็นเจ้าของก่อนเริ่ม stream (กัน 401 กลาง SSE); ไม่มี = สร้างใหม่ ผูก userId
@@ -120,7 +123,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
 
     res.setHeader('Content-Type', 'text/event-stream');
     // no-transform + X-Accel-Buffering:no — กัน proxy/tunnel อั้น stream แล้วเทตูมเดียว
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Cache-Control', 'no-store, no-transform');   // PTB-FND-045: the answer stream is the most personal payload
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();

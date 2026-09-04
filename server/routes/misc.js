@@ -4,7 +4,7 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const {
-    getAssistantId,
+
     getVectorStoreId,
     HAS_API_KEY,
     migrationStatus,
@@ -17,10 +17,9 @@ const {
 router.get('/api/health', (req, res) => {
     res.json({
         ok: true,
+        // PTB-FND-043: unauthenticated — booleans only. Model and OpenAI object ids
+        // are on /api/version (admin) where they belong.
         mode:          HAS_API_KEY ? 'openai' : 'mock',
-        model:         HAS_API_KEY ? MODEL : null,
-        assistantId:   getAssistantId(),
-        vectorStoreId: getVectorStoreId(),
         rag:           !!getVectorStoreId(),
     });
 });

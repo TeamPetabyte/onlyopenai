@@ -223,9 +223,11 @@ const Auth = {
 
     // ── Default users ─────────────────────────────────────────
     DEFAULT_USERS: [
-        { username: 'user', password: 'user123', displayName: 'สมชาย ABAP Developer', projectId: 'proj_sap_dev', balance: 100.00 },
-        { username: 'user2', password: 'user456', displayName: 'วิชัย SAP Consultant', projectId: 'proj_sap_cons', balance: 250.00 },
-        { username: 'user3', password: 'user789', displayName: 'นิภา QA Engineer', projectId: 'proj_sap_qa', balance: 500.00 },
+        // PTB-FND-002: display-only demo rows — no passwords. Login is server-side only;
+        // these exist for the legacy localStorage mirrors.
+        { username: 'user', displayName: 'สมชาย ABAP Developer', projectId: 'proj_sap_dev', balance: 100.00 },
+        { username: 'user2', displayName: 'วิชัย SAP Consultant', projectId: 'proj_sap_cons', balance: 250.00 },
+        { username: 'user3', displayName: 'นิภา QA Engineer', projectId: 'proj_sap_qa', balance: 500.00 },
     ],
 
     // ── Init default data ─────────────────────────────────────
@@ -236,7 +238,6 @@ const Auth = {
         if (!localStorage.getItem(this.USERS_KEY)) {
             const users = this.DEFAULT_USERS.map(u => ({
                 username: u.username,
-                password: u.password,
                 displayName: u.displayName,
                 role: 'user',
                 projectId: u.projectId,
@@ -370,7 +371,7 @@ const Auth = {
 
     /** Phase 8: change own password. On success, clears the
      *  mustChangePassword flag locally so the user can proceed. */
-    changePassword: function (newPassword) {
+    changePassword: function (newPassword, currentPassword) {
         var session = this.getSession();
         if (!session || !session.userId) {
             return Promise.resolve({ ok: false, error: 'Not logged in' });
@@ -379,7 +380,8 @@ const Auth = {
             method: 'PUT',
             headers: this.authHeaders(),                   // Phase 9: includes X-CSRF-Token
             credentials: 'include',
-            body: JSON.stringify({ password: newPassword }),
+            // PTB-FND-004: the server verifies currentPassword for a self-change
+            body: JSON.stringify({ password: newPassword, currentPassword: currentPassword || '' }),
         })
             .then(function (r) { return r.json().then(function (d) { return { status: r.status, body: d }; }); })
             .then(function (resp) {

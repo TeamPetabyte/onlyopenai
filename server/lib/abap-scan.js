@@ -334,7 +334,11 @@ function checkAbapSyntax(code) {
     // Per-line rules. Every one of these is answerable from a single line.
     const LINE_RULES = [
         { pattern: TABLES_DECL_RE,           severity: 'error',   msg: 'Obsolete: TABLES statement — ใช้ DATA declaration แทน' },
-        { pattern: /\bMOVE\s+.+\s+TO\s+/i,  severity: 'warning', msg: 'Obsolete: MOVE...TO — ใช้ = assignment แทน' },
+        // PTB-FND-026: the old /\bMOVE\s+.+\s+TO\s+/ had two overlapping quantifiers
+        // (`.` covers `\s`), so "MOVE " + n spaces cost O(n²) — 43 s at n = 6000 on one
+        // line of a chat prompt. One greedy run is linear. (?!-) keeps MOVE-CORRESPONDING
+        // (a valid statement) out of it.
+        { pattern: /\bMOVE\b(?!-)[^\n]*\bTO\b/i,  severity: 'warning', msg: 'Obsolete: MOVE...TO — ใช้ = assignment แทน' },
         { pattern: /\bSELECT\s+\*/i,         severity: 'warning', msg: 'SELECT * ควร select เฉพาะ fields ที่ใช้จริงเพื่อ performance' },
         { pattern: /\bWRITE\s*:/i,            severity: 'info',    msg: 'WRITE: ใช้ได้สำหรับ classic report แต่ไม่รองรับ Fiori/ALV' },
         // AND RETURN is an addition to CALL TRANSACTION / LEAVE TO TRANSACTION.
@@ -377,6 +381,9 @@ function _findClearRefresh(live) {
     live.forEach((l, i) => {
         const m = /^\s*CLEAR\s+(\w+)\s*\.\s*$/i.exec(l);
         if (!m) return;
+        // an ABAP name is at most 30 characters; a longer capture is not an
+        // identifier and would make `new RegExp` throw on size (PTB-FND-026 family)
+        if (m[1].length > 30) return;
         const next = live[i + 1] || '';
         if (new RegExp('^\\s*REFRESH\\s+' + m[1] + '\\s*\\.\\s*$', 'i').test(next)) out.push(i);
     });

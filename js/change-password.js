@@ -39,15 +39,17 @@
         async function handleChange(e) {
             e.preventDefault();
             hideError();
+            const cur = document.getElementById('cur-pw').value;
             const pw  = document.getElementById('new-pw').value;
             const pw2 = document.getElementById('new-pw2').value;
             if (pw !== pw2) { showError('Passwords do not match'); return; }
+            if (cur === pw) { showError('New password must differ from the current one'); return; }
 
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
             btn.textContent = 'Saving...';
 
-            const result = await Auth.changePassword(pw);
+            const result = await Auth.changePassword(pw, cur);   // PTB-FND-004
             if (!result.ok) {
                 showError(result.error || 'Password change failed');
                 btn.disabled = false;

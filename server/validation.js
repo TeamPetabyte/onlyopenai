@@ -74,6 +74,8 @@ const updateUserSchema = z.object({
 
 const changePasswordSchema = z.object({
     password: password,
+    // PTB-FND-004: required by the route for a self-change; optional here because an admin reset does not send it
+    currentPassword: z.string().max(200).optional(),
 });
 
 const setBalanceSchema = z.object({

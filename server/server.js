@@ -26,6 +26,11 @@ const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// PTB-FND-038: "the browser reaches us over https" is its own switch. The tunnel
+// deploy runs with NODE_ENV unset and the origin on http://:3001, so keying the
+// Secure flag, HSTS and upgrade-insecure-requests on NODE_ENV alone left them off.
+const SECURE_TRANSPORT = process.env.NODE_ENV === 'production' || process.env.FORCE_HTTPS === 'true';
+
 // cloudflared ต่อเข้า localhost — ไม่ตั้งค่านี้ req.ip เป็น 127.0.0.1 ของทุกคน rate limit ต่อ IP จึงรวมถังเดียว
 // ใช้ TRUST_PROXY=0 ปิดได้เมื่อรันแบบเปิดพอร์ตตรง
 app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
@@ -55,13 +60,13 @@ app.use(helmet({
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
             fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
-            imgSrc:      ["'self'", 'data:', 'https:'],
+            imgSrc:      ["'self'", 'data:'],   // PTB-FND-031: a model answer must not load remote images
             connectSrc:  ["'self'"],
             objectSrc:   ["'none'"],
             baseUri:     ["'self'"],
             frameAncestors: ["'none'"],
             formAction:  ["'self'"],
-            ...(process.env.NODE_ENV === 'production'
+            ...(SECURE_TRANSPORT
                 ? { upgradeInsecureRequests: [] }
                 : {}),
         },
@@ -69,7 +74,7 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,    // would block external font/CSS CDNs
     // hsts is only applied when NODE_ENV=production AND the request was https.
     // In dev (http://localhost) helmet skips it automatically — no breakage.
-    hsts: (process.env.NODE_ENV === 'production') ? {
+    hsts: SECURE_TRANSPORT ? {
         maxAge: 60 * 60 * 24 * 365,      // 1 year
         includeSubDomains: true,
         preload: true,
@@ -79,22 +84,28 @@ app.use(helmet({
 // ── Tier 1 Security Config ────────────────────────────────
 const NODE_ENV = (process.env.NODE_ENV || 'development').toLowerCase();
 const IS_PROD  = NODE_ENV === 'production';
+// Anything reachable over https is deployed: the CORS allow-list is mandatory there
+// (a FORCE_HTTPS deploy with NODE_ENV unset used to boot in dev-open mode).
+const IS_DEPLOYED = IS_PROD || SECURE_TRANSPORT;
+if (!SECURE_TRANSPORT) {
+    console.warn('[security] NODE_ENV is not production and FORCE_HTTPS is not set — session cookie has no Secure flag and HSTS is off. Right for http://localhost, wrong behind a tunnel.');
+}
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
     .split(',').map(s => s.trim()).filter(Boolean);
 const CHAT_RATE_LIMIT_PER_MIN = parseInt(process.env.CHAT_RATE_LIMIT_PER_MIN) || 30;
 const MAX_BALANCE = parseFloat(process.env.MAX_BALANCE) || 1000000;
 
 // Hard-fail if production without an allow-list — prevents a public deploy from accepting any origin.
-if (IS_PROD && ALLOWED_ORIGINS.length === 0) {
+if (IS_DEPLOYED && ALLOWED_ORIGINS.length === 0) {
     console.error('');
     console.error('╔════════════════════════════════════════════════════════════════╗');
-    console.error('║  FATAL: NODE_ENV=production but ALLOWED_ORIGINS is empty.     ║');
-    console.error('║  Set ALLOWED_ORIGINS=https://your.domain in .env and restart. ║');
+    console.error('║  FATAL: deployed (NODE_ENV=production or FORCE_HTTPS=true)    ║');
+    console.error('║  but ALLOWED_ORIGINS is empty. Set it in .env and restart.    ║');
     console.error('╚════════════════════════════════════════════════════════════════╝');
-    logger.fatal('NODE_ENV=production but ALLOWED_ORIGINS is empty — refusing to boot');
+    logger.fatal('deployed but ALLOWED_ORIGINS is empty — refusing to boot');
     process.exit(1);
 }
-if (!IS_PROD && ALLOWED_ORIGINS.length === 0) {
+if (!IS_DEPLOYED && ALLOWED_ORIGINS.length === 0) {
     console.warn('[cors] ⚠  dev mode: ALLOWED_ORIGINS empty → all origins permitted. Set ALLOWED_ORIGINS for production.');
 } else {
     console.log(`[cors] whitelist: ${ALLOWED_ORIGINS.join(', ')}`);
@@ -166,7 +177,8 @@ connectWithRetry();
 // โครงสร้างพื้นฐานย้ายไปเป็นโมดูล — ชื่อเดิมทั้งหมด destructure กลับมา
 // validateAmount ไม่ import — zod แทนที่ไปนานแล้ว (ใน validation.js)
 const { validatePasswordStrength, normalizeRole } = require('./lib/validators');
-const sessionStore = require('./services/session-store')({ pool, isProd: IS_PROD });
+// cookie Secure flag follows the transport switch, not NODE_ENV (PTB-FND-038)
+const sessionStore = require('./services/session-store')({ pool, isProd: SECURE_TRANSPORT });
 const { SESSION_COOKIE, ACTIVE_COOKIE,
         createSession, getSession, deleteSession,
         _sessionCookieOpts, _markerCookieOpts, _extractToken } = sessionStore;
@@ -188,7 +200,7 @@ aiClient.startKnowledgeInit();
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin)                         return callback(null, true); // curl / server-to-server
-        if (!IS_PROD && ALLOWED_ORIGINS.length === 0) return callback(null, true); // dev open mode
+        if (!IS_DEPLOYED && ALLOWED_ORIGINS.length === 0) return callback(null, true); // dev open mode — never when deployed
         if (ALLOWED_ORIGINS.includes(origin))return callback(null, true);
         console.warn(`[cors] rejected origin: ${origin}`);
         return callback(new Error('CORS policy: origin not allowed'));
@@ -199,6 +211,8 @@ app.use(cors({
     credentials:    true,
 }));
 app.use(express.json({ limit: '2mb' }));
+// PTB-FND-045: every /api response is per-user — no shared cache may keep it
+app.use('/api', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 // CSRF guard runs after CORS+json so 403 responses still get CORS
 // headers and we have access to req.body if any future logic needs it.
 app.use(csrfGuard);
@@ -267,13 +281,15 @@ const chatRateLimiter = rateLimit({
     keyGenerator: (req, res) => {
         // v8: ipKeyGenerator(ip) ไม่ใช่ (req,res) — เรียกผิดแล้ว key เป็น [object Object] รวมทุกคนถังเดียว
         // key ตาม token ก่อน (ไม่ต้องแตะ DB) ไม่มีค่อยใช้ IP
+        // PTB-FND-022: key by user once requireAuth has run — a fresh login used to
+        // mean a fresh bucket. Token prefix is only the fallback for unauthenticated paths.
+        if (req.session?.userId) return `u:${req.session.userId}`;
         const tok = _extractToken(req);
         if (tok) return `t:${tok.slice(0, 16)}`;
         return `ip:${ipKeyGenerator(req.ip)}`;
     },
     handler: (req, res) => {
-        const tok = _extractToken(req);
-        console.warn(`[rate-limit] blocked — token=${tok.slice(0, 8)} ip=${req.ip}`);
+        console.warn(`[rate-limit] blocked — user=${req.session?.userId || '-'} ip=${req.ip}`);
         res.status(429).json({ ok: false, error: `Rate limit exceeded. Max ${CHAT_RATE_LIMIT_PER_MIN} requests/min.` });
     },
 });
@@ -303,8 +319,9 @@ const expensiveRateLimiter = rateLimit({
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
         // key รวม path ด้วย — instance เดียวถังเดียว ไม่งั้นห้า route แชร์ 30/min ก้อนเดียว
-        const who = _extractToken(req) ? `t:${_extractToken(req).slice(0, 16)}`
-                                       : `ip:${ipKeyGenerator(req.ip)}`;
+        const who = req.session?.userId ? `u:${req.session.userId}`               // PTB-FND-022
+                  : _extractToken(req)   ? `t:${_extractToken(req).slice(0, 16)}`
+                                         : `ip:${ipKeyGenerator(req.ip)}`;
         return `${who}|${req.path}`;
     },
     handler: (req, res) => {

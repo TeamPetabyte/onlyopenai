@@ -55,6 +55,9 @@ if (!FILE_DISABLE) {
 // pino's redact lets us blank out fields by dotted path. We target
 // common request/response body keys plus headers. `remove: true`
 // removes the key entirely so it never hits the log sink.
+// PTB-FND-035: strip everything after '?' before a URL reaches a log line
+const pathOnly = (u) => String(u || '').split('?')[0];
+
 const redactPaths = [
     'req.headers.authorization',
     'req.headers.cookie',
@@ -131,15 +134,16 @@ const httpLogger = pinoHttp({
         if (res.statusCode >= 400) return 'warn';
         return 'info';
     },
+    // PTB-FND-035: the query string carries chat-search terms and other user text — log the path only
     customSuccessMessage: (req, res) =>
-        `${req.method} ${req.url} → ${res.statusCode}`,
+        `${req.method} ${pathOnly(req.url)} → ${res.statusCode}`,
     customErrorMessage: (req, res, err) =>
-        `${req.method} ${req.url} failed: ${err.message}`,
+        `${req.method} ${pathOnly(req.url)} failed: ${err.message}`,
     // Only a few req/res fields survive into the JSON
     serializers: {
         req: (req) => ({
             method: req.method,
-            url:    req.url,
+            url:    pathOnly(req.url),
             remote: req.remoteAddress,
         }),
         res: (res) => ({ statusCode: res.statusCode }),

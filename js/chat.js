@@ -1315,8 +1315,10 @@
         }
 
         async function changePassword() {
+            const curPwd = document.getElementById('current-password').value;
             const newPwd = document.getElementById('new-password').value;
             const confirmPwd = document.getElementById('confirm-password').value;
+            if (!curPwd) { showToast(t('u.pw.enterCurrent'), 'error'); return; }
             if (!newPwd) { showToast(t('u.pw.enterNew'), 'error'); return; }
             if (newPwd !== confirmPwd) { showToast(t('err.pwMismatch'), 'error'); return; }
             const session = Auth.getSession(); if (!session) return;
@@ -1325,12 +1327,14 @@
                 const r = await fetch(BASE + '/api/users/' + session.userId + '/password', {
                     method: 'PUT',
                     headers: Auth.authHeaders(),
-                    body: JSON.stringify({ password: newPwd })
+                    // PTB-FND-004: the server verifies the current password for a self-change
+                    body: JSON.stringify({ password: newPwd, currentPassword: curPwd })
                 });
                 const d = await r.json();
                 if (!d.ok) { showToast(t('u.pw.changeFailedPrefix') + (d.error || ''), 'error'); return; }
             } catch (e) { showToast(t('u.err.somethingWrong'), 'error'); return; }
             closeOverlay('password-modal');
+            document.getElementById('current-password').value = '';
             document.getElementById('new-password').value = '';
             document.getElementById('confirm-password').value = '';
             showToast(t('u.pw.changed'), 'success');
