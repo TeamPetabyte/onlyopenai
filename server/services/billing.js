@@ -1,7 +1,7 @@
 // billing.js — เงินจริงอยู่ที่ project pool; daily cap เป็นเพดาน ไม่ใช่กระเป๋า
 
 module.exports = function createBilling({ pool }) {
-// spend วันนี้อ่านจาก tbl_daily_usage ที่ rollup ใน tx ของแชทแล้ว — ตรงกับที่หักจริงเสมอ
+// spend วันนี้อ่านจาก tbl_daily_usage (rollup ใน tx ของแชท) — ตรงกับที่หักจริงเสมอ
 async function spentToday(userId) {
     const r = await pool.query(`
         SELECT COALESCE(SUM(total_price), 0)::numeric(12,4) AS spent
@@ -12,11 +12,10 @@ async function spentToday(userId) {
     return parseFloat(r.rows[0].spent) || 0;
 }
 
-// Concept B: เงินจริงมีที่เดียวคือ project pool; daily_cap เป็นเพดานไม่ใช่กระเป๋า
 // checkChatBudget คือเกตเดียว — แยก error pool หมด vs ชน cap ให้ UX คนละข้อความ
 
 async function getEffectiveDailyCap(userId) {
-    // bonus เป็นยอดคงค้าง (tbl_user.bonus_balance) — effective = daily_cap + bonus; ไม่มี cap = null
+    // effective = daily_cap + bonus_balance; ไม่มี cap = null
     const r = await pool.query(
         `SELECT daily_cap AS base, COALESCE(bonus_balance, 0) AS bonus
            FROM tbl_user

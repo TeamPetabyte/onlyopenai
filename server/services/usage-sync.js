@@ -2,18 +2,17 @@
 
 module.exports = function createUsageSync(ctx) {
 const { pool, openaiAdmin, logger } = ctx;
-// ดึง usage จาก OpenAI Admin API ลง tbl_daily_token — bucket แปลงเป็นวัน Asia/Bangkok
-// UPSERT บน (usage_date_th, project_id, model) รันซ้ำได้; แถวไม่มี project ที่ตรง = ข้าม
-// สถานะอยู่ใน tbl_sync_state (แถวเดียว id=1)
+// bucket แปลงเป็นวัน Asia/Bangkok; UPSERT บน (usage_date_th, project_id, model) รันซ้ำได้
+// แถวที่ project ไม่ตรง = ข้าม; สถานะอยู่ใน tbl_sync_state แถวเดียว id=1
 const BKK_OFFSET_SEC = 7 * 3600;
 
 function _bkkDate(utcUnix) {
-    // Convert UTC unix → Bangkok local "YYYY-MM-DD".
+    // UTC unix → Bangkok "YYYY-MM-DD": shift first, then read the ISO date part.
     const d = new Date((utcUnix + BKK_OFFSET_SEC) * 1000);
-    return d.toISOString().slice(0, 10);   // already in Bangkok-aligned components
+    return d.toISOString().slice(0, 10);
 }
 
-let _syncRunning = false;       // simple lock — only one run at a time
+let _syncRunning = false;       // one run at a time
 let _syncTimer   = null;
 
 async function runUsageSync(reason = 'scheduled') {
@@ -29,20 +28,18 @@ async function runUsageSync(reason = 'scheduled') {
     let status = 'ok';
     let errorMsg = null;
 
-    // Optimistic state update — show "running" in UI immediately.
+    // Mark "running" up front so the UI reflects it immediately.
     try {
         await pool.query(
             `UPDATE tbl_sync_state SET last_status='running', updated_at=NOW() WHERE id=1`);
     } catch (_) { /* not fatal */ }
 
     try {
-        // Re-read the trailing 3 days every run — late buckets from "today"
-        // can take 5-30 min to land. Idempotent UPSERT covers the overlap.
+        // Re-read the trailing 3 days: late buckets land 5-30 min after; the UPSERT makes overlap safe.
         const endTime   = Math.floor(Date.now() / 1000);
         const startTime = endTime - 3 * 86400;
         const buckets = await openaiAdmin.fetchUsageCompletions({ startTime, endTime });
 
-        // Pre-fetch active project ids so we can filter out orphaned data.
         const projRows = await pool.query(
             `SELECT project_id FROM tbl_project WHERE is_deleted = FALSE`);
         const activeProj = new Set(projRows.rows.map(r => r.project_id));
@@ -60,7 +57,6 @@ async function runUsageSync(reason = 'scheduled') {
                 if (!projectId) continue;                         // skip null project
                 if (!activeProj.has(projectId)) continue;         // skip orphans
 
-                // OpenAI uses snake_case fields; pull defensively (fields may be missing).
                 const num = k => Number(r[k] || 0);
                 await pool.query(`
                     INSERT INTO tbl_daily_token (
@@ -113,7 +109,6 @@ async function runUsageSync(reason = 'scheduled') {
                 ]);
                 rowsInserted++;
             }
-            // Stamp openai_synced_at per project that had data in this run
             for (const r of results) {
                 if (r.project_id && activeProj.has(r.project_id)) {
                     await pool.query(
@@ -145,7 +140,7 @@ async function runUsageSync(reason = 'scheduled') {
              WHERE id = 1`,
             [status, errorMsg, durationMs, rowsInserted]);
     } catch (e) {
-        // state update พังไม่ล้ม sync แต่ต้อง log — เคยเงียบจน state ค้าง 'running' ตลอด
+        // ห้ามเงียบ — ไม่งั้น state ค้างที่ 'running'
         console.error('[sync] failed to update tbl_sync_state:', e.message);
     }
 

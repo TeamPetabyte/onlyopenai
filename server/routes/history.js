@@ -12,9 +12,9 @@ const {
     safeError,
 } = ctx;
 router.get('/api/history', requireAuth, async (req, res) => {
-    // alias คอลัมน์ให้ frontend เดิม; cost คำนวณจาก token × tbl_pricing ไม่ใช่ rate เก่า
+    // alias คอลัมน์ให้ frontend; cost คำนวณจาก token × tbl_pricing
     try {
-        // user ธรรมดาอ่านได้เฉพาะของตัวเอง — query userId เชื่อไม่ได้ และสาขา "ทุกแถว" เป็นของ admin
+        // user ธรรมดาอ่านได้เฉพาะของตัวเอง — query userId เชื่อได้เฉพาะ admin
         const isAdmin = req.session.role === 'admin' || req.session.role === 'trainer';
         const userId = isAdmin ? req.query.userId : req.session.userId;
         let r;
@@ -62,7 +62,7 @@ router.delete('/api/history', requireAdmin, async (req, res) => {
 
 // POST /api/history  — บันทึกหลังรัน skill
 router.post('/api/history', requireAuth, async (req, res) => {
-    // DEPRECATED no-op — endpoint นี้เคยหักเงินซ้ำกับ /api/chat (pool ลด ~2×); เหลือไว้กัน 404
+    // DEPRECATED no-op — การหักเงินอยู่ที่ /api/chat; เหลือไว้กัน 404
     res.json({ ok: true, deducted: false, deprecated: true });
 });
 

@@ -1,15 +1,6 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  export-schema.js                                          ║
-// ║  Dumps the live PG schema to:                              ║
-// ║   - schema.dbml      → paste into dbdiagram.io             ║
-// ║   - schema.mmd       → Mermaid (renders natively on GitHub)║
-// ║   - schema.txt       → human-readable summary              ║
-// ║   - schema.sql       → re-runnable CREATE TABLE / FK / IDX ║
-// ╚═══════════════════════════════════════════════════════════╝
-//
-// Run with:  node scripts/export-schema.js
-//
-// Outputs are written next to this file under ../schema-exports/.
+// Dumps the live PG schema (tbl_* only) to ../schema-exports/: schema.dbml (dbdiagram.io),
+// schema.mmd (Mermaid), schema.txt (summary), schema.sql (re-runnable), schema-drawsql.sql.
+// Run: node scripts/export-schema.js
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { Pool } = require('pg');
@@ -25,7 +16,7 @@ const pool = new Pool({
     const outDir = path.join(__dirname, '..', 'schema-exports');
     fs.mkdirSync(outDir, { recursive: true });
 
-    // 1) Columns per table (only our `tbl_*` namespace)
+    // Columns per table (tbl_* only)
     const cols = await pool.query(`
         SELECT c.table_name, c.column_name, c.data_type, c.character_maximum_length,
                c.is_nullable, c.column_default, c.ordinal_position
@@ -35,7 +26,6 @@ const pool = new Pool({
            AND t.table_type='BASE TABLE'
          ORDER BY c.table_name, c.ordinal_position`);
 
-    // 2) PKs
     const pks = await pool.query(`
         SELECT tc.table_name, kcu.column_name
           FROM information_schema.table_constraints tc
@@ -45,7 +35,6 @@ const pool = new Pool({
            AND tc.table_name LIKE 'tbl_%'`);
     const pkSet = new Set(pks.rows.map(r => r.table_name + '.' + r.column_name));
 
-    // 3) FKs
     const fks = await pool.query(`
         SELECT tc.table_name      AS src_table,
                kcu.column_name    AS src_col,
@@ -62,7 +51,7 @@ const pool = new Pool({
          WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_schema='public'
            AND tc.table_name LIKE 'tbl_%'`);
 
-    // 4) Indexes (non-PK)
+    // Indexes (non-PK)
     const idx = await pool.query(`
         SELECT t.relname AS table_name, i.relname AS index_name,
                pg_get_indexdef(i.oid) AS def
@@ -74,14 +63,12 @@ const pool = new Pool({
            AND NOT ix.indisprimary
          ORDER BY t.relname, i.relname`);
 
-    // === Build per-table column groups ===
     const byTable = {};
     for (const c of cols.rows) {
         if (!byTable[c.table_name]) byTable[c.table_name] = [];
         byTable[c.table_name].push(c);
     }
 
-    // === Emit DBML (https://dbml.dbdiagram.io/home) ===
     let dbml = '// Auto-generated from live PostgreSQL schema\n';
     dbml += '// Paste this entire block at https://dbdiagram.io/d to render the diagram\n\n';
     for (const tbl of Object.keys(byTable).sort()) {
@@ -108,7 +95,6 @@ const pool = new Pool({
     }
     fs.writeFileSync(path.join(outDir, 'schema.dbml'), dbml);
 
-    // === Emit Mermaid erDiagram ===
     let mmd = 'erDiagram\n';
     for (const tbl of Object.keys(byTable).sort()) {
         mmd += `    ${tbl} {\n`;
@@ -128,7 +114,6 @@ const pool = new Pool({
     }
     fs.writeFileSync(path.join(outDir, 'schema.mmd'), mmd);
 
-    // === Emit human-readable summary ===
     let txt = '═════════════════════════════════════════\n';
     txt += 'PetabyteAi DB — schema snapshot ' + new Date().toISOString() + '\n';
     txt += '═════════════════════════════════════════\n\n';
@@ -150,17 +135,9 @@ const pool = new Pool({
     }
     fs.writeFileSync(path.join(outDir, 'schema.txt'), txt);
 
-    // === Emit re-runnable SQL (CREATE TABLE + PK/FK/UNIQUE/CHECK/INDEX + sequences) ===
-    // We assemble in the order:
-    //   1. CREATE SEQUENCE  (for any owned sequences — must exist before tables that reference them)
-    //   2. CREATE TABLE     (cols + inline NOT NULL/DEFAULT/PK)
-    //   3. ALTER TABLE add FK / UNIQUE / CHECK
-    //   4. CREATE INDEX     (non-PK)
-    //   5. INSERT seed data (lookup tables only — tbl_acc_status, tbl_user_role)
-    // Output is psql-compatible and order-of-operations safe: re-running on
-    // an empty DB will recreate everything in dependency order.
+    // Re-runnable SQL, emitted in dependency order: sequences, tables, FKs, indexes, lookup seed data.
 
-    // 1) sequences owned by any of our tables (one per SERIAL / BIGSERIAL column)
+    // Sequences owned by our tables (one per SERIAL / BIGSERIAL column)
     const seqs = await pool.query(`
         SELECT s.relname AS seq_name,
                c.relname AS owner_table,
@@ -176,7 +153,7 @@ const pool = new Pool({
          WHERE s.relkind = 'S' AND n.nspname = 'public' AND c.relname LIKE 'tbl_%'
          ORDER BY s.relname`);
 
-    // 2) all named constraints (PK/UNIQUE/CHECK) — FKs already in `fks`
+    // Named PK/UNIQUE/CHECK constraints; FKs are already in `fks`
     const constraints = await pool.query(`
         SELECT con.conname,
                cls.relname           AS table_name,
@@ -189,15 +166,13 @@ const pool = new Pool({
            AND con.contype IN ('p','u','c')
          ORDER BY cls.relname, con.conname`);
 
-    // Helper: format type with length / precision the way SQL expects
     const fmtType = c => {
         const dt = c.data_type;
         if (dt === 'character varying' && c.character_maximum_length)
             return `VARCHAR(${c.character_maximum_length})`;
         if (dt === 'character' && c.character_maximum_length)
             return `CHAR(${c.character_maximum_length})`;
-        // PG returns generic "numeric" without precision in information_schema.columns
-        // unless we hit pg_attribute. Good enough for re-import — NUMERIC = unlimited.
+        // information_schema gives "numeric" without precision; NUMERIC = unlimited is fine for re-import.
         return dt.toUpperCase();
     };
 
@@ -210,7 +185,6 @@ const pool = new Pool({
     sql += '--   psql -h <host> -U <user> -d <new-db> -f schema.sql\n';
     sql += '-- ════════════════════════════════════════════════════════════════════\n\n';
 
-    // 1) Sequences first
     if (seqs.rowCount > 0) {
         sql += '-- ── Sequences (owned by SERIAL/BIGSERIAL columns) ───────────────────\n';
         for (const s of seqs.rows) {
@@ -219,7 +193,6 @@ const pool = new Pool({
         sql += '\n';
     }
 
-    // 2) CREATE TABLE
     sql += '-- ── Tables ──────────────────────────────────────────────────────────\n';
     for (const tbl of Object.keys(byTable).sort()) {
         sql += `\nCREATE TABLE IF NOT EXISTS ${tbl} (\n`;
@@ -229,11 +202,9 @@ const pool = new Pool({
             if (c.is_nullable === 'NO') line += ' NOT NULL';
             return line;
         });
-        // append PRIMARY KEY inline (PG accepts both inline and out-of-line PK)
         const tblConstr = constraints.rows.filter(k => k.table_name === tbl);
         const pkRow = tblConstr.find(k => k.contype === 'p');
         if (pkRow) lines.push('    CONSTRAINT ' + pkRow.conname + ' ' + pkRow.def);
-        // append UNIQUE + CHECK inline too
         for (const k of tblConstr) {
             if (k.contype === 'u' || k.contype === 'c') {
                 lines.push('    CONSTRAINT ' + k.conname + ' ' + k.def);
@@ -243,12 +214,10 @@ const pool = new Pool({
     }
     sql += '\n';
 
-    // 3) FK constraints — out-of-line because they cross-reference tables
+    // FKs out-of-line: they cross-reference tables
     if (fks.rowCount > 0) {
         sql += '-- ── Foreign keys ────────────────────────────────────────────────────\n';
-        // Names taken from information_schema.referential_constraints (not directly
-        // queried above; we use a synthetic name derived from src table/col so
-        // the FK is recoverable. PG will accept any unique name.)
+        // Synthetic constraint names (<table>_<col>_fkey); PG accepts any unique name.
         for (const f of fks.rows) {
             const cname = `${f.src_table}_${f.src_col}_fkey`;
             sql += `ALTER TABLE ${f.src_table}\n`;
@@ -261,7 +230,6 @@ const pool = new Pool({
         sql += '\n';
     }
 
-    // 4) Non-PK indexes
     if (idx.rowCount > 0) {
         sql += '-- ── Indexes (non-PK) ────────────────────────────────────────────────\n';
         for (const i of idx.rows) {
@@ -271,7 +239,7 @@ const pool = new Pool({
         sql += '\n';
     }
 
-    // 5) Seed data for lookup tables (small, deterministic)
+    // Lookup-table seed data
     sql += '-- ── Lookup seed data ────────────────────────────────────────────────\n';
     for (const lookup of ['tbl_acc_status', 'tbl_user_role']) {
         try {
@@ -294,17 +262,8 @@ const pool = new Pool({
 
     fs.writeFileSync(path.join(outDir, 'schema.sql'), sql);
 
-    // === Emit a drawsql.app-friendly variant ============================
-    // drawsql.app's parser is strict. The full re-runnable schema.sql
-    // contains PG-specific bits that confuse it:
-    //   - nextval('seq'::regclass) default expressions
-    //   - CREATE SEQUENCE statements
-    //   - Partial-index `WHERE` clauses
-    //   - CHECK constraints with ::text[] casts
-    //   - CREATE TABLE IF NOT EXISTS  (their parser wants plain CREATE TABLE)
-    //   - Separate ALTER TABLE … ADD FOREIGN KEY (works but inline is cleaner)
-    // This variant strips all of the above and inlines FKs inside CREATE TABLE
-    // so the parser produces a clean ERD on first import.
+    // drawsql.app variant: its parser rejects nextval() defaults, CREATE SEQUENCE, partial-index
+    // WHERE, ::text[] CHECK casts and IF NOT EXISTS, so those are stripped and FKs inlined.
     let drawsql = '-- ════════════════════════════════════════════════════════════════════\n';
     drawsql += '-- PetabyteAi DB — drawsql.app import format\n';
     drawsql += '-- Generated: ' + new Date().toISOString() + '\n';
@@ -325,8 +284,7 @@ const pool = new Pool({
 
         const lines = byTable[tbl].map(c => {
             let line = '    ' + c.column_name + ' ' + fmtType(c);
-            // Skip nextval() defaults — drawsql can infer SERIAL from being PK + integer.
-            // Keep CURRENT_DATE / now() / static defaults since they parse cleanly.
+            // Skip nextval() defaults — drawsql infers SERIAL from PK + integer.
             if (c.column_default && !/nextval\(/.test(c.column_default)) {
                 line += ' DEFAULT ' + c.column_default;
             }
@@ -336,12 +294,11 @@ const pool = new Pool({
             return line;
         });
 
-        // Multi-column PK goes as a table-level constraint
         if (pkCols.length > 1) {
             lines.push(`    PRIMARY KEY (${pkCols.join(', ')})`);
         }
 
-        // Inline FKs (one per column) — much friendlier to drawsql than ALTER TABLE
+        // Inline FKs — friendlier to drawsql than ALTER TABLE
         const tblFks = fks.rows.filter(f => f.src_table === tbl);
         for (const f of tblFks) {
             let ref = `    FOREIGN KEY (${f.src_col}) REFERENCES ${f.dst_table}(${f.dst_col})`;
@@ -350,8 +307,7 @@ const pool = new Pool({
             lines.push(ref);
         }
 
-        // Skip CHECK constraints + UNIQUE — drawsql doesn't render them anyway
-        // and the ::text[] casts in our CHECK defs trip its parser.
+        // CHECK + UNIQUE skipped: drawsql doesn't render them and ::text[] casts trip its parser.
 
         drawsql += lines.join(',\n') + '\n);\n\n';
     }

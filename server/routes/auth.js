@@ -40,18 +40,16 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
             JOIN tbl_user_role ro ON u.role_id = ro.role_id
             LEFT JOIN tbl_credits cr ON u.user_id = cr.user_id
             WHERE u.username = $1 AND u.is_deleted = FALSE`, [username]);
-        // bad-cred / inactive responses use 401 so the
-        // rate-limiter (skipSuccessfulRequests:true) actually counts them.
+        // 401 for bad credentials so the rate-limiter (skipSuccessfulRequests) counts them.
         if (r.rows.length === 0) {
-            // เทียบกับ hash หลอกให้เสียเวลาเท่ากัน — ตอบทันทีจะบอกได้จากเวลาว่า username ไหนมีจริง
+            // เทียบกับ hash หลอกให้เสียเวลาเท่ากัน (กัน timing enumeration)
             await bcrypt.compare(password, DUMMY_HASH);
-            // log unknown username — no user_id since it doesn't exist.
             logAuthEvent('login_fail', null, req, { reason: 'unknown_user', username });
             return res.status(401).json({ ok: false, error: 'Invalid credentials' });
         }
         const u = r.rows[0];
 
-        // account lockout check (before bcrypt — saves CPU on locked accounts)
+        // lockout check before bcrypt — saves CPU on locked accounts
         if (u.locked_until && new Date(u.locked_until) > new Date()) {
             const minsLeft = Math.ceil((new Date(u.locked_until) - new Date()) / 60000);
             logAuthEvent('login_blocked', u.id, req, { reason: 'still_locked', mins_left: minsLeft });
@@ -68,9 +66,8 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
         const valid = await bcrypt.compare(password, u.pw);
 
         if (!valid) {
-            // increment failed_attempts, lock if over threshold.
-            // Single UPDATE so it's atomic; CASE handles the threshold inside SQL.
-            // ตัวนับต้องเริ่มใหม่เมื่อ lock ก่อนหน้าหมดอายุ — ไม่งั้นผิดครั้งเดียวหลังปลดล็อกก็โดนล็อกอีก 15 นาที
+            // Single atomic UPDATE. The counter restarts once a previous lock has expired,
+            // otherwise one wrong password after unlock re-locks for another 15 minutes.
             const upd = await pool.query(
                 `UPDATE tbl_user
                     SET failed_attempts = CASE
@@ -107,7 +104,6 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
             return res.status(401).json({ ok: false, error: 'Invalid credentials' });
         }
 
-        // Success — reset counters
         await pool.query(
             `UPDATE tbl_user SET failed_attempts = 0, locked_until = NULL WHERE user_id = $1`,
             [u.id]);
@@ -135,23 +131,22 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
               AND a.log_out_time IS NULL`,
             [u.id]);
 
-        // log_out_* ต้องเป็น NULL จนกว่าจะ logout จริง — เคย pre-fill แล้วประวัติเพี้ยนทั้งหน้า
+        // log_out_* ต้องเป็น NULL จนกว่าจะ logout จริง
         const ipAddr = (req.clientIp || req.ip || '').toString().slice(0, 45);
         await pool.query(`INSERT INTO tbl_audit_log
                 (user_id, log_in_date, log_in_time, event_type, detail, ip)
             VALUES ($1, CURRENT_DATE, NOW(), 'login_ok', $2, $3)`,
             [u.id, JSON.stringify({ must_change_password: !!u.must_change_password }), ipAddr]);
         const role = normalizeRole(u.role);
-        // createSession returns both session token + per-session CSRF token
         const { token, csrf } = await createSession({ id: u.id, username: u.username, role });
-        // cookie HttpOnly + session-scoped (ปิด browser = logout); tbl_session กันอีกชั้นที่ 24h
+        // HttpOnly session cookie (ปิด browser = logout); tbl_session กันอีกชั้นที่ 24h
         res.cookie(SESSION_COOKIE, token, _sessionCookieOpts());
         res.cookie(ACTIVE_COOKIE, '1', _markerCookieOpts());
         res.json({
             ok: true,
             // ไม่ส่ง token ใน body — session อยู่ใน HttpOnly cookie เท่านั้น
             csrfToken: csrf,            // client must echo this in X-CSRF-Token on POST/PUT/DELETE
-            mustChangePassword: !!u.must_change_password,    // client redirects to pw-change page
+            mustChangePassword: !!u.must_change_password,
             user: { id: u.id, username: u.username, displayName: `${u.name} ${u.surname}`.trim(),
                     role, plan: role === 'admin' ? 'enterprise' : 'pro',
                     balance: parseFloat(u.balance), projectId: u.project_id,
@@ -161,7 +156,7 @@ router.post('/api/auth/login', loginRateLimiter, validate(schemas.login), async 
 });
 
 
-// POST /api/logout — ทุก DB call เป็น best-effort: logout ห้ามทำ server ตาย (เคยเจอ unhandled rejection ปิด process)
+// POST /api/logout — every DB call is best-effort; logout must never take the server down.
 router.post('/api/logout', async (req, res) => {
     const token = _extractToken(req);
     let sess = null;
@@ -169,19 +164,18 @@ router.post('/api/logout', async (req, res) => {
         try { sess = await getSession(token); }
         catch (e) { console.error('[logout] getSession failed (non-fatal):', e.message); }
     }
-    // เชื่อเฉพาะ session จริง — เคยรับ req.body.userId ทำให้คนนอกปิดแถว login_ok ของใครก็ได้
+    // เชื่อเฉพาะ session จริง — ห้ามรับ userId จาก body
     const userId = sess?.userId || null;
     if (token) {
         try { await deleteSession(token); }
         catch (e) { console.error('[logout] deleteSession failed (non-fatal):', e.message); }
     }
-    // clear the HttpOnly cookie too — browsers won't auto-clear it.
-    // Options must match what was set (path/sameSite/secure) or some browsers ignore.
+    // clearCookie options must match what was set (path/sameSite/secure) or some browsers ignore it.
     res.clearCookie(SESSION_COOKIE, _sessionCookieOpts());
     res.clearCookie(ACTIVE_COOKIE, _markerCookieOpts());
     if (userId) {
         try {
-            // stamp เฉพาะแถว login_ok ล่าสุดที่ยังไม่ปิด ผ่าน PK — เคย match ด้วยวันที่แล้วโดนแถวผิด
+            // stamp เฉพาะแถว login_ok ล่าสุดที่ยังไม่ปิด ผ่าน PK
             await pool.query(`
                 UPDATE tbl_audit_log
                    SET log_out_date = CURRENT_DATE, log_out_time = NOW()
@@ -194,7 +188,6 @@ router.post('/api/logout', async (req, res) => {
                       LIMIT 1
                  )`, [userId]);
         } catch (e) { console.error('[logout] audit-log update failed (non-fatal):', e.message); }
-        // also record logout as its own event row for clean history.
         try { logAuthEvent('logout', userId, req, { via: token ? 'token' : 'body' }); }
         catch (e) { console.error('[logout] logAuthEvent failed (non-fatal):', e.message); }
     }

@@ -1,6 +1,6 @@
 // tool-defs.js — นิยาม tool + system instructions (pure data)
 
-// ── Phase 4: Tool Definitions (Joule-style Function Calling) ──
+// Tool definitions (function calling)
 const PHASE4_TOOLS = [
     { type: 'file_search' },
     {

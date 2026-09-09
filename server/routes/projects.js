@@ -38,7 +38,7 @@ router.get('/api/projects', requireAuth, async (req, res) => {
             LEFT JOIN tbl_balance b ON p.project_id = b.project_id
             WHERE p.is_deleted = FALSE${scope}
             ORDER BY p.created_date ASC`, params);
-        // ไม่ส่ง key เต็มให้ browser — decrypt ก่อนทำ preview "sk-…XXXX" (แถว legacy plaintext ผ่าน path เดียวกัน)
+        // ไม่ส่ง key เต็มให้ browser — decrypt ก่อนทำ preview "sk-…XXXX"
         const projects = r.rows.map(p => {
             const raw = cryptoStore.tryDecrypt(p.project_api_key);
             const looksReal = !!raw && /^sk-/i.test(raw);
@@ -68,7 +68,7 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
     const outRate = outputRate !== undefined ? outputRate : 1.50;
     const credLim = creditLimit !== undefined ? creditLimit : 0;
 
-    // สร้างเฉพาะ OpenAI project — ไม่ mint SA/key อัตโนมัติ (admin วาง key เองทีหลัง; โค้ดเดิมอยู่ใน git history)
+    // สร้างเฉพาะ OpenAI project — ไม่ mint SA/key อัตโนมัติ (admin วาง key เองทีหลัง)
     let openaiProjectId = null;
     let openaiServiceAccountId = null;
     let openaiKey = null;
@@ -84,8 +84,8 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
         }
     }
 
-    // ใช้ id ของ OpenAI เป็น PK เมื่อได้มา; fallback: id จาก admin → gen proj_<slug>_<ts>
-    // id ที่ derive จากชื่อต้องผ่านตัวกรองเดียวกับ projectId — ชื่อที่มี ' หรือ ) เคยหลุดไปอยู่ใน onclick ของหน้า admin
+    // PK = OpenAI id ถ้าได้มา; fallback: id จาก admin → proj_<slug>_<ts>
+    // slug ต้องผ่านตัวกรองเดียวกับ projectId (ห้ามมี ' หรือ ))
     const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '').slice(0, 20) || 'project';
     const pid = openaiProjectId
         || projectId
@@ -96,7 +96,6 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
     const keyToStore = rawKey ? cryptoStore.encrypt(rawKey) : null;
 
     try {
-        // openai_synced_at = NOW() if we got an id back, else NULL
         const syncedAtSql = openaiProjectId ? 'NOW()' : 'NULL';
         await pool.query(`INSERT INTO tbl_project
             (project_id, project_name, project_api_key, admin_api_key, created_date,
@@ -143,14 +142,13 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
 // PUT /api/projects/:id
 router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), async (req, res) => {
     const { name, apiKey, credits, description, inputRate, outputRate, creditLimit } = req.body;
-    // ยอดเงินเปลี่ยนได้ทางเดียวคือ PUT /:id/topup ซึ่งล็อกแถว บวก lifetime และลงประวัติ
-    // เส้นทางเดิมเขียนทับยอดนอก transaction — การหักเงินที่ commit คั่นกลางจะหายไปเงียบ ๆ
+    // ยอดเงินเปลี่ยนได้ทางเดียวคือ PUT /:id/topup (ล็อกแถว บวก lifetime ลงประวัติ)
     if (credits !== undefined) {
         return res.status(400).json({ ok: false, error: 'credits_not_editable',
             message: 'ใช้ PUT /api/projects/:id/topup เพื่อเปลี่ยนยอดเครดิตของโครงการ' });
     }
     const creditsNum = null;
-    // apiKey สามสถานะ: undefined=คงเดิม, null=ล้าง, sk-...=ทับ (เดิม `|| null` ทำให้ล้างไม่ได้)
+    // apiKey สามสถานะ: undefined=คงเดิม, null=ล้าง, sk-...=ทับ
     const apiKeyAction =
         apiKey === undefined ? 'keep'
       : apiKey === null      ? 'clear'
@@ -188,8 +186,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
              (creditLimit !== undefined ? parseFloat(creditLimit) : null),
              req.params.id]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'Project not found' });
-        // drop any cached per-project OpenAI client so the next
-        // chat request reads the new key (set or clear) from the DB.
+        // drop the cached per-project client so the next chat reads the new key
         if (apiKeyAction !== 'keep') invalidateProjectClient(req.params.id);
 
         // Compute the changed-only subset (api_key is redacted to a boolean)
@@ -229,14 +226,12 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        // Project must exist and not already be soft-deleted
         const exists = await client.query(
             'SELECT 1 FROM tbl_project WHERE project_id=$1 AND is_deleted = FALSE', [pid]);
         if (exists.rowCount === 0) {
             await client.query('ROLLBACK');
             return res.json({ ok: false, error: 'Project not found' });
         }
-        // Reject if responses (history) reference this project
         const respCheck = await client.query(
             'SELECT COUNT(*)::int AS n FROM tbl_response WHERE project_id=$1', [pid]);
         if (respCheck.rows[0].n > 0) {
@@ -251,12 +246,10 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
         await client.query('DELETE FROM tbl_credits WHERE project_id=$1', [pid]);
         // Drop balance row (otherwise credits are still "allocated" to a dead project)
         await client.query('DELETE FROM tbl_balance WHERE project_id=$1', [pid]);
-        // Snapshot before soft-delete (also grab the OpenAI link so we can
-        // archive on the OpenAI side after COMMIT).
+        // Snapshot before soft-delete; the OpenAI link is archived after COMMIT.
         const beforeProj = await client.query(
             `SELECT project_name, description, openai_project_id
                FROM tbl_project WHERE project_id = $1`, [pid]);
-        // Soft-delete the project row
         await client.query(
             `UPDATE tbl_project SET is_deleted = TRUE, deleted_at = NOW() WHERE project_id = $1`,
             [pid]);
@@ -291,7 +284,7 @@ router.delete('/api/projects/:id', requireAdmin, async (req, res) => {
     }
 });
 
-// topup เขียน tbl_balance + tbl_topup_project ใน tx เดียว ล็อกแถวกันแข่ง (เดิม UPSERT+revert เปราะ)
+// topup เขียน tbl_balance + tbl_topup_project ใน tx เดียว ล็อกแถวกันแข่ง
 router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), async (req, res) => {
     const amountNum = req.body.amount;
     const note      = (req.body.note || '').toString().trim().slice(0, 500) || null;
@@ -301,7 +294,6 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
     try {
         await client.query('BEGIN');
 
-        // 1) Project must exist (and not be soft-deleted)
         const proj = await client.query(
             `SELECT 1 FROM tbl_project WHERE project_id=$1 AND is_deleted = FALSE`, [pid]);
         if (proj.rowCount === 0) {
@@ -318,8 +310,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
         const newBal       = prevBal      + parseFloat(amountNum);
         const newLifetime  = prevLifetime + parseFloat(amountNum);
 
-        // 3) Cap check BEFORE write — cleaner than write-then-revert.
-        //    Lifetime amount has NO upper cap (it's a historical accumulator).
+        // Cap check before write; lifetime amount has no cap.
         if (newBal > MAX_BALANCE) {
             await client.query('ROLLBACK');
             return res.json({ ok: false, error: `Balance cap exceeded (max ${MAX_BALANCE})` });
@@ -350,8 +341,7 @@ router.put('/api/projects/:id/topup', requireAdmin, validate(schemas.topup), asy
 
         await client.query('COMMIT');
 
-        // Admin audit log (separate concern — written outside the txn so a
-        // logger failure doesn't roll back the financial write)
+        // Audit log outside the txn so a logger failure cannot roll back the financial write.
         logAdminAction(req, {
             action: 'topup_project',
             targetType: 'project',

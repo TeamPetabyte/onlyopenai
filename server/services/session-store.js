@@ -4,7 +4,7 @@ const { normalizeRole } = require('../lib/validators');
 
 module.exports = function createSessionStore({ pool, isProd }) {
 const IS_PROD = isProd;
-// session อยู่ใน Postgres — รอด restart, scale หลาย instance ได้, admin เห็นว่าใครล็อกอินอยู่
+// session อยู่ใน Postgres — รอด restart, scale หลาย instance, admin เห็นว่าใครล็อกอินอยู่
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const SESSION_COOKIE = 'petabyte_session';
 // marker cookie อ่านได้จาก JS ไม่มี maxAge — ปิด browser = หาย = frontend รู้ว่า logout
@@ -13,7 +13,7 @@ const CSRF_HEADER    = 'x-csrf-token';
 
 async function createSession(user) {
     const token = crypto.randomBytes(32).toString('hex');
-    const csrf  = crypto.randomBytes(32).toString('hex');    // Phase 9
+    const csrf  = crypto.randomBytes(32).toString('hex');
     const role  = normalizeRole(user.role);
     const expires = new Date(Date.now() + SESSION_TTL_MS);
     await pool.query(
@@ -27,7 +27,7 @@ async function createSession(user) {
 /** Look up an active (unexpired) session by token. Touches last_seen_at. */
 async function getSession(token) {
     if (!token) return null;
-    // role/สถานะอ่านสดจาก tbl_user — เก็บ snapshot ไว้ใน tbl_session แล้วการลดสิทธิ์/ปิดบัญชีไม่มีผลจนหมดอายุ
+    // role/สถานะอ่านสดจาก tbl_user — snapshot ใน tbl_session จะทำให้ลดสิทธิ์/ปิดบัญชีไม่มีผลจนหมดอายุ
     const r = await pool.query(
         `SELECT s.token, s.user_id AS "userId", ro.role_des AS role, s.expires_at,
                 s.csrf_token AS "csrfToken",
@@ -59,8 +59,7 @@ function _sessionCookieOpts(maxAge) {
     };
 }
 
-// options for the readable marker cookie — NOT HttpOnly (JS must read
-// it) and NO maxAge (session-scoped: the browser drops it when it closes).
+// marker cookie: not HttpOnly (JS reads it), no maxAge (dropped when the browser closes)
 function _markerCookieOpts() {
     return { httpOnly: false, sameSite: 'strict', secure: IS_PROD, path: '/' };
 }
@@ -71,8 +70,7 @@ async function deleteSession(token) {
     catch (e) { console.warn('[session] delete failed:', e.message); }
 }
 
-// Janitor: prune expired sessions every 10 minutes
-// captured so graceful shutdown can clear it.
+// Janitor: prune expired sessions every 10 minutes; captured so shutdown can clear it.
 const _sessionJanitor = setInterval(() => {
     pool.query('DELETE FROM tbl_session WHERE expires_at <= NOW()')
         .then(r => { if (r.rowCount > 0) console.log(`[sessions] pruned ${r.rowCount} expired`); })

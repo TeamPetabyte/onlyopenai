@@ -10,12 +10,8 @@ const {
 } = ctx;
 
 // ทุก endpoint ยึด owner จาก req.session.userId เท่านั้น — ไม่เชื่อ userId จาก query/body (กัน IDOR)
-/**
- * Verify the caller owns this session. Returns the row or sends a
- * response and returns null.  Note: sessions that are soft-deleted
- * return 404 (not 403) — we treat deletion as "does not exist" from
- * the user's perspective to avoid probing.
- */
+/** Load the session if the caller owns it; otherwise respond (401/400/404) and return null.
+ *  Soft-deleted and foreign sessions both 404 so existence can't be probed. */
 async function loadOwnedSession(req, res, sessionId) {
     const uid = req.session && req.session.userId;
     if (!uid) { res.status(401).json({ ok: false, error: 'Not authenticated' }); return null; }
@@ -35,7 +31,6 @@ async function loadOwnedSession(req, res, sessionId) {
         return null;
     }
     if (row.user_id !== uid) {
-        // Same 404 shape on purpose — don't confirm "exists but forbidden"
         res.status(404).json({ ok: false, error: 'Session not found' });
         return null;
     }
@@ -45,8 +40,7 @@ async function loadOwnedSession(req, res, sessionId) {
 // list ของตัวเองเท่านั้น; ?q ILIKE ที่ escape % _ แล้ว
 router.get('/api/chat/sessions', requireAuth, async (req, res) => {
     const uid = req.session.userId;
-    // Clamp to 80 chars — anything longer is almost certainly not a real
-    // search, just a URL-inflation attempt.
+    // Clamp: anything longer is not a real search.
     const rawQ = String(req.query.q || '').trim().slice(0, 80);
     try {
         if (rawQ.length > 0) {
@@ -66,7 +60,6 @@ router.get('/api/chat/sessions', requireAuth, async (req, res) => {
                  ORDER BY s.is_favorite DESC, s.updated_at DESC
                  LIMIT 100`,
                 [uid, pat]);
-            // snake_case → camelCase for the frontend.
             const rows = r.rows.map(r => ({
                 id: r.id, title: r.title,
                 message_count: r.message_count, total_cost: r.total_cost,
@@ -161,7 +154,6 @@ router.patch('/api/chat/sessions/:id', requireAuth, async (req, res) => {
                  WHERE session_id=$2`,
                 [t.slice(0, 200), sess.session_id]);
         } else {
-            // favorite-only toggle — leave updated_at alone
             await pool.query(
                 `UPDATE tbl_chat_session SET is_favorite=$1
                  WHERE session_id=$2`,
@@ -202,7 +194,7 @@ router.get('/api/chat/sessions/:id/export', requireAuth, async (req, res) => {
                       : `_${row.role}_`;
             md += `### ${who}  \n*${new Date(row.created_at).toISOString()}*\n\n${row.content}\n\n`;
         }
-        // Safe filename: strip anything that isn't alnum/underscore/hyphen
+        // filename goes into Content-Disposition — alnum/_/- only
         const fname = (sess.title || 'chat').replace(/[^\w\-]+/g, '_').slice(0, 60) || 'chat';
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
         res.setHeader('Content-Disposition',

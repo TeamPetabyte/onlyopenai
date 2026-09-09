@@ -1,5 +1,4 @@
-// check-globals.mjs — สัญญา global ของหน้าเว็บ: ทุก handler ที่ HTML เรียก
-// (ทั้งใน .html และใน HTML ที่ JS สร้างเป็นสตริง) ต้องถูกวางบน window
+// check-globals.mjs — ทุก handler ที่ HTML เรียก (ทั้ง .html และ HTML ที่ JS สร้าง) ต้องถูกวางบน window
 // โดยไฟล์ใน chain ของหน้านั้น ไม่งั้นหลัง Vite แปลงเป็น module มันจะเงียบหาย
 import { readFileSync } from 'fs';
 

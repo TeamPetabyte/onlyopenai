@@ -1,10 +1,5 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ Sync knowledge/ docs (txt/md/pdf/docx) → OpenAI v.store   ║
-// ╚═══════════════════════════════════════════════════════════╝
-// One-shot script — uploads any local knowledge file that isn't
-// already in the vector store. Safe to re-run.
-//
-// Run:  node sync-knowledge.js
+// One-shot: upload local knowledge/ docs (txt/md/pdf/docx/html) missing from the OpenAI vector store.
+// Safe to re-run.
 
 'use strict';
 
@@ -27,9 +22,7 @@ const openai = new OpenAI({ apiKey: API_KEY });
     const local = fs.readdirSync(KB_DIR).filter(f => /\.(txt|md|pdf|docx?|html?)$/i.test(f)).sort();
     console.log(`[local]  ${local.length} files under knowledge/`);
 
-    // Resolve filenames currently in the vector store — for-await walks ALL
-    // pages (a bare list() returns one ~20-item page; the truncated diff was
-    // re-uploading old files as "missing" once the store grew past that).
+    // for-await walks every page; a bare list() returns only one ~20-item page.
     const existing = new Set();
     for await (const vf of openai.vectorStores.files.list(VS_ID, { limit: 100 })) {
         try {

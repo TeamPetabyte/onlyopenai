@@ -1,7 +1,7 @@
-// chat.js — หน้าแชททั้งหมด (ย้ายมาจาก index.html)
+// chat.js — หน้าแชททั้งหมด
 
 
-        // ── STATE ──
+        // --- State ---
         const State = {
             selectedSkill: 'auto',
             selectedModel: 'gpt-5.6-terra',   // model picker default
@@ -12,16 +12,15 @@
             sessions: [],           // sidebar session list
             currentSessionId: null, // active session
             currentMessages: [],    // messages in current chat
-            searchQuery: '',        // active session-search filter (Tier 1)
+            searchQuery: '',        // active session-search filter
             attachedFile: null,
 
             load() {
                 const s = Auth.getSession(); if (!s) return;
                 this.balance = parseFloat(localStorage.getItem('agenthub_balance_' + s.username) || '100');
                 try { this.usageHistory = JSON.parse(localStorage.getItem('agenthub_history_' + s.username) || '[]'); } catch { this.usageHistory = []; }
-                // restore the user's model + effort choice
                 this.selectedModel  = localStorage.getItem('agenthub_model_'  + s.username) || this.selectedModel;
-                // map ค่าเก่า max/xhigh/none เป็นตัวที่เหลือ — ไม่รีเซ็ตทิ้งตัวเลือกที่ user ตั้งใจไว้
+                // map ค่าเก่า max/xhigh/none เป็นตัวที่เหลือ — ไม่รีเซ็ตตัวเลือกของ user
                 const EFFORT_MAP = { none: 'low', xhigh: 'high', max: 'high' };
                 const savedEffort = localStorage.getItem('agenthub_effort_' + s.username);
                 if (savedEffort) {
@@ -44,11 +43,11 @@
                 this.usageHistory.unshift(entry);
                 if (this.usageHistory.length > 200) this.usageHistory = this.usageHistory.slice(0, 200);
                 this.balance = Math.max(0, this.balance - (entry.cost || 0)); this.save();
-                // เงินจริงคิดฝั่ง server ใน /api/chat ที่เดียว — ตรงนี้เป็นแค่ UI (POST /api/history เดิมหักซ้ำ เลยถูกถอด)
+                // เงินจริงคิดฝั่ง server ใน /api/chat ที่เดียว — ตรงนี้เป็นแค่ UI
             },
         };
 
-        // ── SESSION API HELPERS ──
+        // --- Session API helpers ---
         // BASE มาจาก js/config.js; fallback localhost เฉพาะตอน config.js โหลดไม่ขึ้น
         if (typeof BASE === 'undefined') { var BASE = (window.AppConfig && window.AppConfig.API_BASE) || 'http://localhost:3001'; }
 
@@ -66,7 +65,7 @@
                 const url = BASE + '/api/chat/sessions' + (effective ? ('?q=' + encodeURIComponent(effective)) : '');
                 const d = await fetch(url, { headers: Auth.authHeaders() }).then(r => r.json());
                 if (d.ok) {
-                    // BIGINT ผ่าน node-pg มาเป็น string — coerce เป็น Number ที่ขอบทางเข้า ไม่งั้น find(s.id === id) พลาดเงียบ
+                    // BIGINT มาเป็น string ผ่าน node-pg — coerce เป็น Number ที่ขอบทางเข้า
                     State.sessions = (d.sessions || []).map(s => ({
                         ...s,
                         id: typeof s.id === 'string' ? Number(s.id) : s.id,
@@ -101,7 +100,7 @@
                 .then(r => r.ok ? r.blob() : null);
         }
 
-        // ── INIT ──
+        // --- Init ---
         document.addEventListener('DOMContentLoaded', async () => {
             if (!Auth.check('user')) return;
             const session = Auth.getSession();
@@ -111,7 +110,7 @@
             document.getElementById('user-display-name').textContent = displayName;
             document.getElementById('user-avatar').textContent = displayName.charAt(0).toUpperCase();
 
-            // รวม error ตอน init ไว้เด้ง toast ครั้งเดียว — เดิม fail เงียบค้างที่ "฿—"
+            // รวม error ตอน init ไว้เด้ง toast ครั้งเดียว
             let initHadError = false;
 
             // เงินที่ใช้ได้คือ PROJECT POOL (wallet ต่อ user = 0 เสมอ) — อ่านจาก /api/quota-status
@@ -122,7 +121,6 @@
                     else { initHadError = true; }
                 } catch { initHadError = true; }
 
-                // Load usage history for stats
                 try {
                     const d = await fetch(BASE + '/api/history?userId=' + session.userId, { headers: Auth.authHeaders() }).then(r => r.json());
                     if (d.ok && d.history.length > 0) {
@@ -135,11 +133,9 @@
                     } else if (!d.ok) { initHadError = true; }
                 } catch { initHadError = true; }
 
-                // Load chat sessions for sidebar (owner is inferred server-side)
                 try { await apiLoadSessions(); } catch { initHadError = true; }
             }
 
-            // Load project name
             const projectId = session.projectId;
             if (projectId) {
                 let projName = null;
@@ -155,19 +151,18 @@
                 if (projName) {
                     document.getElementById('brand-project').textContent = projName;
                     document.getElementById('sidebar-project-label').textContent = projName;
-                    // อย่าเขียนทับ brand-avatar — เป็น <img> โลโก้แล้ว เคยโดนทับจนโลโก้แวบหาย
+                    // อย่าเขียนทับ brand-avatar — เป็น <img> โลโก้
                 }
             }
 
             if (PRICING.skills.length > 0) selectSkill(PRICING.skills[0].id);
             updateBalanceDisplay();
 
-            // บอก user ครั้งเดียวถ้า init ล้มเหลว
             if (initHadError) {
                 showToast(t('u.err.loadPartialFailed'), 'error');
             }
 
-            // กู้ session จาก URL hash (#s/42) ตอน refresh — id ที่ใช้ไม่ได้แค่ toast แล้วปล่อยผ่าน
+            // กู้ session จาก URL hash (#s/42) ตอน refresh
             const m = String(window.location.hash || '').match(/^#\/?s\/(\d+)$/);
             if (m && m[1]) {
                 const sid = Number(m[1]);
@@ -185,16 +180,14 @@
             if (sid && sid !== State.currentSessionId) {
                 loadSession(sid);
             } else if (!sid && State.currentSessionId) {
-                // Hash cleared (user hit "New Chat" elsewhere or navigated)
                 State.currentSessionId = null;
             }
         });
 
-        // ── NEW CHAT ──
+        // --- New chat ---
         function newChat() {
-            // close mobile drawer (no-op on desktop) after picking
             toggleSidebar(false);
-            // ล้าง hash ด้วย replaceState — refresh แล้วอยู่หน้า new chat และไม่ปั๊ม history
+            // ล้าง hash ด้วย replaceState — ไม่ปั๊ม history
             try {
                 if (window.location.hash && window.history && window.history.replaceState) {
                     window.history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -203,7 +196,6 @@
             State.currentSessionId = null;
             State.currentMessages = [];
             const area = document.getElementById('chat-area');
-            // welcoming empty state on new chat.
             area.innerHTML = `
         <div class="chat-empty" id="chat-empty">
             <img class="chat-empty-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
@@ -214,11 +206,10 @@
             document.getElementById('chat-input').focus();
         }
 
-        // ── LOAD SESSION ──
+        // --- Load session ---
         // Enter/Space บนแถว = เปิด session (เฉพาะโฟกัสที่ตัวแถว ไม่ใช่ปุ่มข้างใน)
         function handleSessionKey(e, sessionId) {
             if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
-            // Skip if user is pressing inside one of the action buttons
             if (e.target && e.target.closest && e.target.closest('.session-actions')) return;
             e.preventDefault();
             loadSession(sessionId);
@@ -226,14 +217,13 @@
 
         async function loadSession(sessionId) {
             if (State.isRunning) { showToast(t('u.err.pleaseWait'), 'error'); return; }
-            // close mobile drawer on session pick
             toggleSidebar(false);
             const res = await apiGetSession(sessionId);
             if (!res) { showToast(t('u.err.sessionNotFound'), 'error'); return; }
 
-            // server ส่ง BIGINT เป็น string — coerce ให้เทียบกับ Number จาก apiLoadSessions ได้
+            // BIGINT มาเป็น string — coerce ให้เทียบกับ Number จาก apiLoadSessions ได้
             State.currentSessionId = Number(res.session.id);
-            // pin ลง URL ด้วย replaceState — ไม่ให้คลิก session ปั๊ม back-history ทีละอัน
+            // pin ลง URL ด้วย replaceState — ไม่ปั๊ม back-history
             try {
                 const want = '#s/' + res.session.id;
                 if (window.location.hash !== want && window.history && window.history.replaceState) {
@@ -241,7 +231,6 @@
                 }
             } catch (_) { }
 
-            // แปลง snake_case จาก server เป็น shape ที่ renderer ใช้
             State.currentMessages = (res.messages || []).map(m => ({
                 role:         m.role,
                 content:      m.content,
@@ -249,14 +238,13 @@
                 cost:         m.cost != null ? Number(m.cost) : undefined,
                 inputTokens:  m.input_tokens || 0,
                 outputTokens: m.output_tokens || 0,
-                // แถวก่อน migration ไม่มี duration — ปล่อย undefined อย่าใส่ 0 ไม่งั้น badge อ้าง "0.0s"
+                // แถวเก่าไม่มี duration — ปล่อย undefined ไม่ใช่ 0 ไม่งั้น badge อ้าง "0.0s"
                 durationMs:   m.duration_ms != null ? Number(m.duration_ms) : undefined,
-                // skill_id = ตัวที่ตอบ, skills_used = ทุกตัวที่ความรู้ถึงโมเดล — อ่านแยกกัน อย่าเอาตัวแรกมาแทนตัวตอบ
+                // skill_id = ตัวที่ตอบ, skills_used = ทุกตัวที่ความรู้ถึงโมเดล — อ่านแยกกัน
                 skillId:      m.skill_id || null,
                 skillsUsed:   m.skills_used ? String(m.skills_used).split(',').filter(Boolean) : [],
             }));
 
-            // เลือก skill ตาม hint จากคำตอบล่าสุด ไม่มีก็คงของเดิม
             const lastSkillId = [...(res.messages || [])].reverse()
                 .find(m => m.skill_id)?.skill_id;
             if (lastSkillId) selectSkill(lastSkillId);
@@ -265,7 +253,7 @@
             renderSessionList();
         }
 
-        // ── RENDER MESSAGES ──
+        // --- Render messages ---
         function renderChatMessages(messages) {
             const area = document.getElementById('chat-area');
             area.innerHTML = '';
@@ -293,20 +281,18 @@
                     bubble.innerHTML = MD.render(msg.content || '');
                     MD.postProcess(bubble);
                     div.appendChild(bubble);
-                    // ⧉ Copy + ↻ Regenerate toolbar
                     const actions = MD.attachMessageCopy(bubble, msg.content || '');
-                    // เอาชื่อไฟล์จาก turn ที่ถามมา — reopen แล้วดาวน์โหลดได้ชื่อเดียวกับตอน live
+                    // ชื่อไฟล์จาก turn ที่ถาม — ดาวน์โหลดได้ชื่อเดียวกับตอน live
                     const askedWith = (messages[idx - 1] || {}).content || '';
                     const fileTag = /\[File:\s*([^\]\n]+)\]/.exec(askedWith);
                     if (actions) MD.attachMessageDownload(actions, msg.content || '',
                         fileTag ? fileTag[1].trim() : undefined);
                     if (actions && isLast) addRegenerateButton(actions);
-                    // reopen แล้วต้องเห็นแถบ 🎯 เหมือนตอน live
                     if (msg.skillId || (msg.skillsUsed && msg.skillsUsed.length)) {
                         const sb = document.createElement('div');
                         sb.className = 'skill-badge';
                         const others = (msg.skillsUsed || []).filter(x => x !== msg.skillId);
-                        // พิมพ์ label ไม่ใช่ raw id — id เป็น fallback เมื่อ catalog ไม่รู้จักแล้ว
+                        // label ไม่ใช่ raw id; id เป็น fallback เมื่อ catalog ไม่รู้จัก
                         const skillLabel = (id) =>
                             (PRICING.skills.find(x => x.id === id) || {}).name || id;
                         sb.textContent = msg.skillId
@@ -324,7 +310,6 @@
                         const tok = (msg.inputTokens || 0) + (msg.outputTokens || 0);
                         const badge = document.createElement('div');
                         badge.className = 'cost-badge';
-                        // ไม่มี duration จริงก็อย่าอ้าง "0.0s" — พิมพ์แค่ token
                         badge.textContent = tok.toLocaleString() + ' tokens'
                             + (msg.durationMs ? ' · ' + (msg.durationMs / 1000).toFixed(1) + 's' : '');
                         div.appendChild(badge);
@@ -335,7 +320,7 @@
             scrollToBottom(area, true);
         }
 
-        // ── RENDER SESSION LIST ── favorites ปักบนสุด แยกจากกลุ่มวันที่
+        // --- Session list ---
 
         // แถว session เป็น HTML string ที่เดียว — search/favorites/date ใช้ markup + a11y ชุดเดียวกัน
         function _renderSessionRow(s) {
@@ -363,7 +348,6 @@
             const list = document.getElementById('history-list');
             const searching = (State.searchQuery || '').length > 0;
             if (!State.sessions || State.sessions.length === 0) {
-                // ค้นแล้วว่าง vs ยังไม่เคยมีแชท — คนละข้อความ
                 if (searching) {
                     list.innerHTML =
                         '<div class="history-empty no-result">' +
@@ -391,11 +375,10 @@
                 return;
             }
 
-            // favorites อยู่ section เดียว ไม่โผล่ซ้ำใน bucket วันที่
             const favs   = State.sessions.filter(s => (s.isFavorite || s.is_favorite));
             const others = State.sessions.filter(s => !(s.isFavorite || s.is_favorite));
 
-            // จัดกลุ่มตามวัน (เทียบเที่ยงคืน local) — key เป็นภาษากลาง ป้ายค่อย lookup ตามภาษา
+            // จัดกลุ่มตามวัน (เทียบเที่ยงคืน local)
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             const yesterdayStart = todayStart - 86400000;
@@ -404,7 +387,6 @@
 
             const groups = { today: [], yesterday: [], week: [], month: [], older: [] };
             others.forEach(s => {
-                // รับทั้ง updatedAt และ updated_at
                 const when = s.updatedAt || s.updated_at;
                 const ts = new Date(when).getTime();
                 const d = new Date(when);
@@ -418,12 +400,10 @@
             const groupLabelKeys = { today: 'date.today', yesterday: 'date.yesterday', week: 'date.last7days', month: 'date.thisMonth', older: 'date.older' };
 
             let html = '';
-            // Favorites group at the top (only when there are any)
             if (favs.length > 0) {
                 html += '<div class="date-group-label fav-group">Favorites · ' + favs.length + '</div>';
                 favs.forEach(s => { html += _renderSessionRow(s); });
             }
-            // Date-bucketed history below
             for (const [key, items] of Object.entries(groups)) {
                 if (items.length === 0) continue;
                 html += '<div class="date-group-label">' + esc(t(groupLabelKeys[key])) + '</div>';
@@ -432,7 +412,7 @@
             list.innerHTML = html;
         }
 
-        // ── SESSION ACTIONS: rename / export / delete ──
+        // --- Session actions: rename / export / delete ---
         // dblclick หรือ ✎ สลับ span เป็น <input>; Enter/blur = save, Esc = cancel
         function enterRenameMode(e, sessionId) {
             e.stopPropagation();
@@ -484,7 +464,6 @@
                     if (sess) sess.title = finalTitle;
                     showToast(t('u.sess.renameSuccess'));
                 } else {
-                    // Roll back title text on failure
                     if (sess) sess.title = current;
                     renderSessionList();
                     showToast(t('u.sess.renameFailed'), 'error');
@@ -497,7 +476,6 @@
                     input.blur(); // triggers commit via blur handler
                 } else if (ev.key === 'Escape') {
                     ev.preventDefault();
-                    // Cancel — restore previous label without API call
                     input.removeEventListener('blur', onBlur);
                     cleanup(current);
                 }
@@ -507,7 +485,6 @@
 
             row.classList.add('is-editing');
             titleEl.replaceWith(input);
-            // focus + select-all ให้พิมพ์ทับได้ทันที
             input.focus();
             input.select();
         }
@@ -525,14 +502,13 @@
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
-        // ── FAVORITE ── optimistic: flip local ก่อนแล้ว PATCH; ล้มเหลวค่อย roll back + toast
+        // --- Favorite (optimistic; roll back on failure) ---
         async function toggleFavorite(e, sessionId) {
             if (e && e.stopPropagation) e.stopPropagation();
             const sess = (State.sessions || []).find(s => s.id === sessionId);
             if (!sess) return;
             const wasFav = !!(sess.isFavorite || sess.is_favorite);
             const nowFav = !wasFav;
-            // Optimistic flip
             sess.isFavorite = nowFav;
             sess.is_favorite = nowFav;
             renderSessionList();
@@ -545,7 +521,6 @@
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 showToast(nowFav ? t('u.sess.pinned') : t('u.sess.unpinned'), 'success');
             } catch (err) {
-                // Roll back optimistic change
                 sess.isFavorite = wasFav;
                 sess.is_favorite = wasFav;
                 renderSessionList();
@@ -553,7 +528,7 @@
             }
         }
 
-        // ลบแชทผ่าน modal ใน-แอป — จำ id ให้ปุ่ม Confirm และ re-fetch หลังลบกันแถวเด้งกลับ
+        // ลบแชทผ่าน modal ใน-แอป — จำ id ให้ปุ่ม Confirm
         let _pendingDeleteSessionId = null;
 
         function deleteSession(e, sessionId) {
@@ -561,7 +536,6 @@
             _pendingDeleteSessionId = sessionId;
             const sess = (State.sessions || []).find(s => s.id === sessionId);
             const titleEl = document.getElementById('confirm-delete-target');
-            // ไม่มีชื่อแชท → ซ่อน chip ไปเลย — ประโยค "จะถูกลบถาวร" อ่านรู้เรื่องอยู่แล้ว
             const title = (sess && sess.title) ? String(sess.title).trim() : '';
             if (titleEl) {
                 if (title) {
@@ -573,7 +547,6 @@
                 }
             }
             const btn = document.getElementById('confirm-delete-btn');
-            // รีเซ็ตปุ่มทุกครั้งที่เปิด
             if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
             const overlay = document.getElementById('confirm-delete-chat');
             overlay.classList.add('open');
@@ -599,7 +572,6 @@
             const btn = document.getElementById('confirm-delete-btn');
             if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
             try {
-                // Properly await + check response so silent failures surface.
                 const r = await fetch(BASE + '/api/chat/sessions/' + id, {
                     method: 'DELETE',
                     headers: Auth.authHeaders(),
@@ -615,21 +587,17 @@
                 if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
                 return;
             }
-            // 1) Drop from local state immediately for instant UX feedback
             State.sessions = (State.sessions || []).filter(s => s.id !== id);
             const wasCurrent = State.currentSessionId === id;
-            // 2) If we deleted the active chat, reset the chat area to empty
             if (wasCurrent) newChat();
             else renderSessionList();
-            // resync จาก server — กันแถวที่ลบแล้วเด้งกลับจาก fetch อื่นที่ค้างอยู่
+            // resync จาก server — กันแถวที่ลบแล้วเด้งกลับจาก fetch ที่ค้างอยู่
             apiLoadSessions();
-            // 4) Close the modal + toast
             _pendingDeleteSessionId = null;
             document.getElementById('confirm-delete-chat').classList.remove('open');
             showToast(t('u.sess.deleted'));
         }
 
-        // Esc-to-close for the confirm modal
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 const overlay = document.getElementById('confirm-delete-chat');
@@ -637,54 +605,49 @@
             }
         });
 
-        // ── SKILL SELECTION ── (picker ถูกถอดแล้ว — router ฝั่ง server เป็นคนเลือก)
+        // --- Skill selection (router ฝั่ง server เป็นคนเลือก) ---
         function selectSkill(skillId) {
             State.selectedSkill = skillId;
-            // header คงคำว่า "PetabyteAi" เสมอ — skill ยังถูก track และส่งไป backend ตามปกติ
+            // header คงชื่อแอปเสมอ — skill ยังถูก track และส่งไป backend
             const el = document.getElementById('current-skill-name');
-            if (el) el.textContent = 'PipekAI';   // emoji replaced by the mascot <img> beside it
+            if (el) el.textContent = 'PipekAI';
         }
 
-        // ── SEND MESSAGE ──
+        // --- Send message ---
         async function sendMessage() {
             if (State.isRunning) return;
             const inputEl = document.getElementById('chat-input');
             let userText = inputEl.value.trim();
             if (!userText && !State.attachedFile) { showToast(t('u.err.enterMessage'), 'error'); return; }
-            // align with the in-sidebar warning copy + emoji
             if (State.balance <= 0) {
                 showToast(t('u.err.creditDepletedContactAdmin'), 'error');
                 return;
             }
-            // Default to 'auto' skill if nothing selected
             const selectedSkillId = State.selectedSkill || 'auto';
             const skill = PRICING.skills.find(s => s.id === selectedSkillId) || PRICING.skills[0];
             const displayText = userText || '[File: ' + (State.attachedFile ? State.attachedFile.name : '') + ']';
             let prompt = userText;
-            // เก็บชื่อไฟล์ก่อน removeFile() ล้าง — ไฟล์ที่แก้แล้วต้องกลับไปชื่อเดิม ไม่ใช่ pipekai-response.abap
+            // เก็บชื่อไฟล์ก่อน removeFile() ล้าง — ไฟล์ที่แก้แล้วต้องกลับไปชื่อเดิม
             const uploadedName = State.attachedFile ? State.attachedFile.name : null;
             if (State.attachedFile) { prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content; removeFile(); }
             inputEl.value = ''; inputEl.style.height = 'auto';
 
-            // Add user message to current messages
             const userMsg = { role: 'user', content: displayText, timestamp: new Date().toISOString() };
             State.currentMessages.push(userMsg);
 
-            // Render user bubble
             const area = document.getElementById('chat-area');
             const emptyEl = document.getElementById('chat-empty'); if (emptyEl) emptyEl.remove();
             const userDiv = document.createElement('div'); userDiv.className = 'chat-msg user';
             userDiv.innerHTML = '<div class="msg-bubble">' + esc(displayText) + '</div>';
             area.appendChild(userDiv); area.scrollTop = area.scrollHeight;
 
-            // ปุ่ม send กลายเป็นปุ่ม stop — คงกดได้เพื่อยกเลิก, isRunning กันส่งซ้ำ
+            // ปุ่ม send กลายเป็นปุ่ม stop; isRunning กันส่งซ้ำ
             State.isRunning = true;
             const sendBtn = document.getElementById('send-btn');
             sendBtn.classList.add('is-stop');
             sendBtn.setAttribute('aria-label', t('u.stop.ariaLabel'));
             sendBtn.title = t('u.stop.ariaLabel') + ' (Esc)';
 
-            // Typing indicator
             const typingDiv = document.createElement('div'); typingDiv.className = 'chat-msg assistant'; typingDiv.id = 'typing-el';
             typingDiv.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
             area.appendChild(typingDiv); area.scrollTop = area.scrollHeight;
@@ -713,7 +676,6 @@
                     ensureResponseShell();
                     if (!ragBadgeEl) {
                         ragBadgeEl = document.createElement('div');
-                        // below the skill badge when both are present.
                         responseMsgEl.insertBefore(ragBadgeEl,
                             skillBadgeEl ? skillBadgeEl.nextSibling : responseMsgEl.firstChild);
                     }
@@ -744,7 +706,7 @@
                 }
             };
 
-            // SSE routed = router จับ skill ไหน/เลือกยังไง — เดิม client ทิ้ง event จน skill ดูไม่ทำงาน
+            // SSE routed = router จับ skill ไหน/เลือกยังไง
             const onRouted = (ev) => {
                 ensureResponseShell();
                 if (!skillBadgeEl) {
@@ -765,7 +727,7 @@
                         src.textContent = ' · ' + t(srcKey, '');
                         skillBadgeEl.appendChild(src);
                     }
-                    // โชว์ชื่อ check ที่ร่วมตอบ ไม่ใช่ "+3" — tester อยากรู้ว่าตัวไหนรัน
+                    // โชว์ชื่อ check ที่ร่วมตอบ ไม่ใช่ "+3"
                     if (Array.isArray(ev.supporting) && ev.supporting.length) {
                         const extra = document.createElement('span');
                         extra.className = 'skill-badge-src';
@@ -779,7 +741,7 @@
                 scrollToBottom(area);
             };
 
-            // เผยข้อความแบบจำกัดความเร็ว — กันคำตอบโผล่พรวดจนกด Stop ไม่ทัน และลด DOM repaint
+            // เผยข้อความแบบจำกัดความเร็ว — กด Stop ทัน และลด DOM repaint
             let displayedLen = 0;
             let revealTimer = null;
             const REVEAL_TICK_MS = 20;
@@ -793,7 +755,7 @@
                 revealTimer = setInterval(() => {
                     if (displayedLen >= accumulated.length) return;
                     displayedLen = Math.min(accumulated.length, displayedLen + REVEAL_CHARS_PER_TICK);
-                    // ระหว่าง stream ใช้ textContent (เร็ว/ปลอดภัย) — markdown render ทีเดียวตอนจบ
+                    // ระหว่าง stream ใช้ textContent — markdown render ทีเดียวตอนจบ
                     if (streamBubble) streamBubble.textContent = accumulated.slice(0, displayedLen);
                     scrollToBottom(area);
                 }, REVEAL_TICK_MS);
@@ -810,7 +772,6 @@
                 chunk => {
                     accumulated += chunk;
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
-                    // shell อาจมีแล้ว (RAG badge สร้างก่อน) — ตรงนี้สร้างเฉพาะ text bubble
                     ensureResponseShell();
                     if (!streamBubble) {
                         streamBubble = document.createElement('div');
@@ -822,9 +783,8 @@
                 async result => {
                     stopReveal();
                     const typingEl = document.getElementById('typing-el'); if (typingEl) typingEl.remove();
-                    // จบแบบไม่มี text เลย (เช่น reasoning กินโควตาหมด) — ต้องมี bubble ไม่ปล่อยว่าง
+                    // จบแบบไม่มี text (เช่น reasoning กินโควตาหมด) — ต้องมี bubble
                     if (!streamBubble && accumulated === '' && !result.stopped && !result.blocked) {
-                        // shell may already exist (RAG badge) — reuse it.
                         ensureResponseShell();
                         streamBubble = document.createElement('div');
                         streamBubble.className = 'msg-bubble';
@@ -832,10 +792,9 @@
                             '⚠️ โมเดลคิดนานจนหมดโควต้าคำตอบ — ลองส่งใหม่อีกครั้ง หรือลดระดับ effort ลงหนึ่งขั้น');
                         responseMsgEl.appendChild(streamBubble);
                     }
-                    // ใช้ cost จาก server — เลิกคำนวณเองจาก rate เก่าที่อาจไม่ตรงกับที่หักจริง
+                    // cost มาจาก server เท่านั้น
                     const cost = result.cost != null ? result.cost : 0;
 
-                    // Finalize bubble: render markdown, highlight code, attach copy/regenerate
                     if (responseMsgEl && streamBubble) {
                         streamBubble.classList.add('md-rendered');
                         streamBubble.innerHTML = MD.render(accumulated);
@@ -849,7 +808,6 @@
                         responseMsgEl.appendChild(badge);
                     }
 
-                    // Add assistant message to State.currentMessages
                     const assistantMsg = {
                         role: 'assistant', content: accumulated,
                         inputTokens: result.inputTokens, outputTokens: result.outputTokens,
@@ -857,7 +815,7 @@
                     };
                     State.currentMessages.push(assistantMsg);
 
-                    // backend บันทึกทั้งสอง turn แล้ว echo sessionId — pin ไว้แล้ว refresh sidebar
+                    // backend echo sessionId — pin ไว้แล้ว refresh sidebar
                     if (result.sessionId) {
                         const wasFresh = !State.currentSessionId;
                         // coerce — see apiLoadSessions note.
@@ -873,7 +831,6 @@
                         if (wasFresh) renderSessionList();
                     }
 
-                    // Usage history
                     State.addUsageEntry({
                         skillId: skill.id, skillName: skill.name, skillEmoji: skill.emoji,
                         prompt: displayText.substring(0, 100), response: accumulated.substring(0, 200),
@@ -897,7 +854,7 @@
                 rates,
                 State.currentSessionId,   // thread into an existing chat
                 onChatBlocked,             // 402/429 → block UI
-                { model: State.selectedModel, effort: State.selectedEffort, onTool, onRouted }  // Phase 34 + 35.2 + 39
+                { model: State.selectedModel, effort: State.selectedEffort, onTool, onRouted }
             );
         }
 
@@ -937,7 +894,7 @@
             if (sb) { sb.classList.remove('is-stop'); sb.disabled = false; sb.setAttribute('aria-label', t('u.send.ariaLabel')); sb.title = ''; }
         }
 
-        // Phase 21.10 — Quota request modal (asks server to grant a today-only bonus)
+        // Quota request modal — asks the server for a today-only bonus
         function openQuotaRequestModal() {
             const amountStr = prompt(t('u.quota.promptAmount'), '50');
             if (amountStr === null) return;
@@ -966,9 +923,9 @@
         // Expose for the inline onclick in the block bubble.
         window.openQuotaRequestModal = openQuotaRequestModal;
 
-        // ── UI HELPERS ──
+        // --- UI helpers ---
         // การ์ด balance: <= 0 แดง + บล็อกส่ง, ต่ำกว่า threshold ส้มเตือน
-        const BALANCE_WARN_THRESHOLD = 10;        // baht — adjust if needed
+        const BALANCE_WARN_THRESHOLD = 10;        // baht
         function updateBalanceDisplay() {
             const card = document.getElementById('balance-card');
             const amt  = document.getElementById('sidebar-balance');
@@ -1021,7 +978,6 @@
                 if (!r.ok) return;
                 const d = await r.json();
                 if (!d.ok) return;
-                // ถูกเรียกหลังจบแต่ละ turn ด้วย — sidebar เห็นตัวเลขจริงไม่ต้องรอ poll
                 State.balance = parseFloat(d.projectPool) || 0;
                 State.save();
                 updateBalanceDisplay();
@@ -1055,7 +1011,7 @@
         function toggleUserMenu() { document.getElementById('user-dropdown').classList.toggle('open'); }
         document.addEventListener('click', e => { if (!document.getElementById('user-area').contains(e.target)) document.getElementById('user-dropdown').classList.remove('open'); });
 
-        // สลับภาษา → re-apply label คงที่ + re-render ส่วนที่ JS สร้าง (เหมือน admin.js)
+        // สลับภาษา → re-apply label + re-render ส่วนที่ JS สร้าง
         window.addEventListener('i18n:change', () => {
             if (typeof I18N !== 'undefined') I18N.apply();
             try { renderSessionList(); } catch (_) {}
@@ -1112,10 +1068,9 @@
                     : t('u.theme.switchToDark'));
             }
         }
-        // Sync icon/label once DOM is ready
         document.addEventListener('DOMContentLoaded', _refreshThemeUI);
 
-        // cap ไฟล์แนบ 1MB — กัน FileReader ค้าง/ทะลุ context/สตริงยักษ์ค้างใน State (express.json รับ 2MB)
+        // cap ไฟล์แนบ 1MB (express.json รับ 2MB)
         const MAX_ATTACHMENT_BYTES = 1024 * 1024;
 
         function handleFileSelect(e) {
@@ -1140,14 +1095,13 @@
 
         function removeFile() { State.attachedFile = null; document.getElementById('attached-file-display').innerHTML = ''; }
 
-        // ── MODEL + EFFORT PICKERS ── effort มีเฉพาะตระกูล gpt-5.6 — ซ่อนเพื่อไม่ส่ง param ผิด
+        // --- Model + effort pickers (effort มีเฉพาะตระกูล gpt-5.6) ---
         function onModelChange(v) {
             State.selectedModel = v; State.save();
             const eff = document.getElementById('effort-select');
             if (eff) eff.style.display = v.startsWith('gpt-5.6') ? '' : 'none';
         }
         function onEffortChange(v) { State.selectedEffort = v; State.save(); }
-        // Reflect restored State into the two <select>s on load.
         function syncComposerControls() {
             const m = document.getElementById('model-select');
             const e = document.getElementById('effort-select');
@@ -1181,7 +1135,7 @@
             }
         });
 
-        // ── SESSION SEARCH ── debounce 200ms; ล้าง input = กลับ list เต็ม
+        // --- Session search (debounce 200ms) ---
         let _searchTimer = null;
         function onSearchInput(val) {
             const q = String(val || '');
@@ -1206,7 +1160,7 @@
         }
         function handleInputKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
-        // escape เครื่องหมายคำพูดด้วย — esc() ถูกใช้ใน attribute, เคย XSS ได้ถ้า title มี "
+        // escape เครื่องหมายคำพูดด้วย — esc() ถูกใช้ใน attribute
         function esc(t) {
             return String(t)
                 .replace(/&/g, '&amp;')
@@ -1216,7 +1170,7 @@
                 .replace(/'/g, '&#39;');
         }
 
-        // ── SMART AUTO-SCROLL ── เลื่อนตามเฉพาะตอน user อยู่ใกล้ล่างสุด ไม่งั้นโชว์ปุ่ม ↓ แทน
+        // --- Smart auto-scroll (เลื่อนตามเฉพาะตอน user อยู่ใกล้ล่างสุด) ---
         const SCROLL_THRESHOLD = 80;    // px from bottom still counts as "at bottom"
         function isNearBottom(area) {
             return area.scrollHeight - area.scrollTop - area.clientHeight < SCROLL_THRESHOLD;
@@ -1250,14 +1204,13 @@
         function showNewMsgIndicator() { ensureNewMsgButton().classList.add('visible'); }
         function hideNewMsgIndicator() { const b = document.getElementById('new-msg-btn'); if (b) b.classList.remove('visible'); }
 
-        // Hide the indicator once the user scrolls to the bottom themselves.
         document.addEventListener('DOMContentLoaded', () => {
             const area = document.getElementById('chat-area');
             if (!area) return;
             area.addEventListener('scroll', () => { if (isNearBottom(area)) hideNewMsgIndicator(); });
         });
 
-        // ── REGENERATE ── ปุ่ม ↻ ท้ายคำตอบล่าสุด: ถอดคำตอบแล้วส่ง prompt เดิมซ้ำ
+        // --- Regenerate ---
         function addRegenerateButton(actionsEl) {
             if (!actionsEl || actionsEl.querySelector('.msg-action-regen')) return;
             const btn = document.createElement('button');
@@ -1271,7 +1224,6 @@
 
         async function regenerateLast() {
             if (State.isRunning) return;
-            // Find the last user message
             const msgs = State.currentMessages;
             let lastUserIdx = -1;
             for (let i = msgs.length - 1; i >= 0; i--) {
@@ -1280,15 +1232,13 @@
             if (lastUserIdx === -1) { showToast(t('u.regen.noPrevQuestion'), 'error'); return; }
             const lastUser = msgs[lastUserIdx];
 
-            // Drop the last assistant message (we'll re-generate it)
             if (msgs.length > lastUserIdx + 1 && msgs[msgs.length - 1].role === 'assistant') {
                 msgs.pop();
             }
-            // Re-render the whole list so the old answer disappears cleanly
             renderChatMessages(msgs);
 
-            // pop user message เดิมก่อน — sendMessage() จะ append กลับมาเองไม่ให้ซ้ำ
-            msgs.pop();   // remove the user we just re-rendered; sendMessage will re-append
+            // pop user message เดิมก่อน — sendMessage() จะ append กลับมาเอง
+            msgs.pop();
             renderChatMessages(msgs);
 
             const inputEl = document.getElementById('chat-input');
@@ -1296,7 +1246,7 @@
             await sendMessage();
         }
 
-        // ── USAGE MODAL ──
+        // --- Usage modal ---
         function openUsage() {
             document.getElementById('user-dropdown').classList.remove('open');
             document.getElementById('usage-balance').textContent = '฿ ' + State.balance.toFixed(2);
@@ -1308,7 +1258,7 @@
             document.getElementById('usage-modal').classList.add('open');
         }
 
-        // ── CHANGE PASSWORD ──
+        // --- Change password ---
         function openChangePassword() {
             document.getElementById('user-dropdown').classList.remove('open');
             document.getElementById('password-modal').classList.add('open');
@@ -1323,11 +1273,11 @@
             if (newPwd !== confirmPwd) { showToast(t('err.pwMismatch'), 'error'); return; }
             const session = Auth.getSession(); if (!session) return;
             try {
-                // dedicated self-only endpoint (no admin rights needed)
+                // self-only endpoint (no admin rights needed)
                 const r = await fetch(BASE + '/api/users/' + session.userId + '/password', {
                     method: 'PUT',
                     headers: Auth.authHeaders(),
-                    // PTB-FND-004: the server verifies the current password for a self-change
+                    // the server verifies currentPassword for a self-change
                     body: JSON.stringify({ password: newPwd, currentPassword: curPwd })
                 });
                 const d = await r.json();
@@ -1340,7 +1290,7 @@
             showToast(t('u.pw.changed'), 'success');
         }
 
-        // ── TOAST ──
+        // --- Toast ---
         function showToast(msg, type = 'info') {
             const c = document.getElementById('toast-container');
             const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg;
@@ -1348,7 +1298,7 @@
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2800);
         }
 
-// ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window
+// ES module — handler ที่ HTML เรียก ต้องอยู่บน window
 Object.assign(window, {
     loadSession,
     removeFile,

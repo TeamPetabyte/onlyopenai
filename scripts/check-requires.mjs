@@ -1,4 +1,4 @@
-// check-requires.mjs — ทุก require('./…') ใต้ server/ ต้อง resolve ได้ (unit test โหลดแค่ lib/ จึงไม่เห็น path ที่พังหลังย้ายไฟล์)
+// check-requires.mjs — ทุก require('./…') ใต้ server/ ต้อง resolve ได้ (unit test โหลดแค่ lib/ จึงไม่เห็น)
 import { readdirSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
 import { dirname, join, relative, resolve } from 'path';

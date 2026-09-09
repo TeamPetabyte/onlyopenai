@@ -1,29 +1,17 @@
-﻿# ╔═══════════════════════════════════════════════════════════╗
-# ║ PetabyteAi — ติดตั้ง backend เป็น Windows Service (NSSM)   ║
-# ╚═══════════════════════════════════════════════════════════╝
-# รันใน PowerShell แบบ "Run as Administrator"
-#   cd C:\petabyte\onlyopenai\windows
-#   .\install-services.ps1
-#
-# สิ่งที่สคริปต์นี้ทำ:
-#   - หา node.exe และโฟลเดอร์ server\ อัตโนมัติ
-#   - สร้าง/อัปเดต Windows Service ชื่อ "PetabyteAi" ให้รัน `node server.js`
-#   - ตั้งให้ auto-start ตอนบูต + เก็บ log ไว้ที่ server\logs\
-#   - start service แล้วโชว์สถานะ
-#
-# แก้ path ให้ตรงเครื่องคุณได้ที่ตัวแปรด้านล่าง
+﻿# PetabyteAi - ติดตั้ง backend เป็น Windows Service "PetabyteAi" ด้วย NSSM (auto-start, log ที่ server\logs\)
+# รันใน PowerShell แบบ Run as Administrator:  cd C:\petabyte\onlyopenai\windows; .\install-services.ps1
 
-# ── ปรับ path ตรงนี้ให้ตรงเครื่อง ─────────────────────────────
+# --- ปรับ path ให้ตรงเครื่อง ---
 $NssmPath   = "C:\petabyte\nssm.exe"                       # ที่วาง nssm.exe (จาก nssm.cc)
 $ServiceNm  = "PetabyteAi"
 
-# ── auto-detect (ปกติไม่ต้องแก้) ─────────────────────────────
+# --- auto-detect ---
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ServerDir  = Resolve-Path (Join-Path $ScriptDir "..\server")
 $NodeExe    = (Get-Command node -ErrorAction SilentlyContinue).Source
 $LogDir     = Join-Path $ServerDir "logs"
 
-# ── ตรวจสอบของที่ต้องมี ──────────────────────────────────────
+# --- ตรวจสอบของที่ต้องมี ---
 if (-not (Test-Path $NssmPath)) {
     Write-Host "✗ ไม่พบ nssm.exe ที่ $NssmPath" -ForegroundColor Red
     Write-Host "  ดาวน์โหลดจาก https://nssm.cc/download แล้ววางไฟล์ (โฟลเดอร์ win64) ตาม path ด้านบน" -ForegroundColor Yellow
@@ -48,7 +36,7 @@ Write-Host "server  : $ServerDir"
 Write-Host "service : $ServiceNm"
 Write-Host ""
 
-# ── ถ้ามี service เดิมอยู่แล้ว ลบก่อน (idempotent) ────────────
+# --- ลบ service เดิมก่อน (idempotent) ---
 $existing = & $NssmPath status $ServiceNm 2>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "พบ service เดิม — กำลังลบเพื่อสร้างใหม่..." -ForegroundColor Yellow
@@ -57,7 +45,7 @@ if ($LASTEXITCODE -eq 0) {
     Start-Sleep -Seconds 2
 }
 
-# ── สร้าง service ────────────────────────────────────────────
+# --- สร้าง service ---
 & $NssmPath install $ServiceNm $NodeExe "server.js"
 & $NssmPath set $ServiceNm AppDirectory   $ServerDir
 & $NssmPath set $ServiceNm AppStdout      (Join-Path $LogDir "service-out.log")
@@ -68,7 +56,7 @@ if ($LASTEXITCODE -eq 0) {
 & $NssmPath set $ServiceNm DisplayName    "PetabyteAi Backend"
 & $NssmPath set $ServiceNm Description    "PetabyteAi Express server (port 3001)"
 
-# ── start + โชว์สถานะ ────────────────────────────────────────
+# --- start + โชว์สถานะ ---
 & $NssmPath start $ServiceNm
 Start-Sleep -Seconds 4
 Write-Host ""

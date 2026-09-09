@@ -5,7 +5,6 @@ const cryptoStore = require('../../crypto');
 const { PHASE4_TOOLS, ASSISTANT_INSTRUCTIONS } = require('./tool-defs');
 
 module.exports = function createAiClient({ pool }) {
-// ── OpenAI ─────────────────────────────────────────────────
 const HAS_API_KEY = !!(
     process.env.OPENAI_API_KEY &&
     !process.env.OPENAI_API_KEY.startsWith('sk-xxx')
@@ -48,10 +47,10 @@ if (HAS_API_KEY) {
     console.log('⚠️  No OpenAI API Key — MOCK mode');
 }
 
-// client ต่อ project (key จาก DB, decrypt แล้ว cache) — แยกบิล/โควต้า/รอยเท้าใน dashboard ของ OpenAI
-// key ใช้ไม่ได้ทุกกรณี → ถอยไป client กลาง; เจอ 401 กลางแชทจะ mark ไว้จน admin วาง key ใหม่
+// client ต่อ project (key จาก DB, decrypt แล้ว cache) — แยกบิล/โควต้าฝั่ง OpenAI
+// key ใช้ไม่ได้ → ถอยไป client กลาง; เจอ 401 กลางแชทจะ mark ไว้จน admin วาง key ใหม่
 const _projectClientCache = new Map();      // projectId -> { client, decryptedKeyTail }
-const _invalidProjectKeys = new Set();       // project_ids whose stored key returned 401 — see chatWithFallback
+const _invalidProjectKeys = new Set();       // project_ids whose stored key returned 401
 
 async function getProjectOpenAI(userId) {
     if (!openai) return openai;                        // no key configured at all
@@ -67,11 +66,9 @@ async function getProjectOpenAI(userId) {
     // project ที่พิสูจน์แล้วว่า key เสีย → ข้ามไป client กลางจนกว่าจะ invalidate
     if (_invalidProjectKeys.has(projectId)) return openai;
 
-    // Check cache
     const cached = _projectClientCache.get(projectId);
     if (cached) return cached.client;
 
-    // Pull encrypted key from DB, decrypt, build a new client.
     const p = await pool.query(
         'SELECT project_api_key FROM tbl_project WHERE project_id = $1 AND is_deleted = FALSE',
         [projectId]);
@@ -88,17 +85,14 @@ async function getProjectOpenAI(userId) {
     return client;
 }
 
-/** Drop the cached client so the next request rebuilds with the latest key.
- *  Also clears the "known bad" flag so a freshly-saved key gets a clean retry. */
+/** Drop the cached client and the "known bad" flag so the next request retries with the latest key. */
 function invalidateProjectClient(projectId) {
     if (!projectId) return;
     _projectClientCache.delete(projectId);
     _invalidProjectKeys.delete(projectId);
 }
 
-/** Mark a project's stored key as invalid (401 detected mid-chat).
- *  Subsequent getProjectOpenAI() calls for this project will short-circuit
- *  to the global client until an admin saves a new key. */
+/** Mark a project's stored key invalid (401 mid-chat); use the global client until an admin saves a new key. */
 async function markProjectKeyInvalid(userId, reason) {
     if (!userId) return null;
     try {
@@ -110,7 +104,7 @@ async function markProjectKeyInvalid(userId, reason) {
         _invalidProjectKeys.add(projectId);
         _projectClientCache.delete(projectId);
         console.warn('[chat] flagged', projectId, 'as having an invalid project_api_key — falling back to global. reason:', reason);
-        // best-effort: record into action log so admin can see why
+        // best-effort audit row so admin can see why
         try {
             await pool.query(
                 `INSERT INTO tbl_action_admin (user_id, role_id, action_type, target_type, change_json)
@@ -124,9 +118,7 @@ async function markProjectKeyInvalid(userId, reason) {
     }
 }
 
-/** Call openai.chat.completions.create with auto-fallback to the global
- *  client on 401. Use this in EVERY chat path so a bad per-project key
- *  never breaks a user-visible request — we just log + degrade gracefully. */
+/** chat.completions.create with a one-time fallback to the global client on 401. Use in every chat path. */
 async function safeChatCompletion(oai, args, userId) {
     try { return await oai.chat.completions.create(args); }
     catch (e) {
@@ -140,7 +132,7 @@ async function safeChatCompletion(oai, args, userId) {
 }
 
 
-// ── Phase 2: OpenAI Assistant (auto-create/load) ───────────
+// Assistant: load from env or create once.
 let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
 
 async function ensureAssistant(vectorStoreId = null) {
@@ -184,7 +176,7 @@ async function ensureAssistant(vectorStoreId = null) {
     }
 }
 
-// ── Phase 3: Vector Store + File Search (RAG) ─────────────
+// Vector store + file search (RAG).
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
 // ชนิดไฟล์ที่ vector store อ่านออกเอง (.txt + เอกสาร + .html สำหรับ SAP offline library)
@@ -193,7 +185,6 @@ const KB_FILE_RE = /\.(txt|md|pdf|docx?|html?)$/i;
 async function ensureVectorStore() {
     if (!HAS_API_KEY) return null;
     try {
-        // สร้าง Vector Store ใหม่ถ้ายังไม่มี
         if (!VECTOR_STORE_ID) {
             const vs = await openai.vectorStores.create({
                 name: 'PetabyteAi SAP Knowledge Base',
@@ -207,7 +198,6 @@ async function ensureVectorStore() {
             }
             console.log(`✅ Vector Store created: ${VECTOR_STORE_ID}`);
 
-            // อัปโหลด knowledge files ทั้งหมด
             await seedKnowledgeFiles();
         } else {
             console.log(`✅ Vector Store loaded: ${VECTOR_STORE_ID}`);
@@ -246,18 +236,13 @@ async function seedKnowledgeFiles() {
     }
 }
 
-/**
- * Sync ONLY new knowledge files into the existing vector store.
- * Reads current filenames from the vector store, diffs against local
- * knowledge/*.txt, and uploads whatever is missing. Safe to call on every
- * boot — it's a no-op if there are no new files. Phase 14 extension.
- */
+/** Upload only the local knowledge files missing from the vector store. Safe to call on every boot. */
 async function syncNewKnowledgeFiles() {
     if (!HAS_API_KEY || !VECTOR_STORE_ID) return;
     if (!fs_mod.existsSync(KNOWLEDGE_DIR)) return;
     try {
         const localFiles = fs_mod.readdirSync(KNOWLEDGE_DIR).filter(f => KB_FILE_RE.test(f));
-        // เดินทุกหน้า — list() หน้าเดียว (20 ไฟล์) เคยทำให้ไฟล์เก่าถูกอัพซ้ำทุก boot
+        // เดินทุกหน้า — list() เปล่าคืนหน้าเดียว (20 ไฟล์)
         const existing   = new Set();
         for await (const vf of openai.vectorStores.files.list(VECTOR_STORE_ID, { limit: 100 })) {
             try {
@@ -303,7 +288,7 @@ if (HAS_API_KEY) {
     ensureVectorStore()
         .then(vsId => ensureAssistant(vsId))
         .then(id  => { if (id) console.log(`✅ System ready: assistant=${id} vs=${VECTOR_STORE_ID}`); })
-        .then(()  => syncNewKnowledgeFiles())  // pick up any new knowledge files
+        .then(()  => syncNewKnowledgeFiles())
         .catch(e  => console.error('[startup]', e.message));
 }
 }

@@ -2,10 +2,9 @@
 import { escapeHtml, flash, formatDateStd, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── USERS PAGE ── filter แบบ sticky: Set ของ project ids, "__none__" = ไม่มี project
+  // --- Users page --- sticky filter: Set ของ project ids, "__none__" = ไม่มี project
   _userProjectFilter: null,   // Set | null (null = uninitialised, treated as "all")
 
-  // ตารางเป็น row-cards ให้เข้าชุดกับหน้าอื่น — filter อยู่ header bar
   renderUsers: function () {
     var self = this;
     var tableEl = document.getElementById('user-table');
@@ -27,7 +26,7 @@ export default {
         });
       }
 
-      // —— Filter header bar (matches Credits / Usage Analytics pattern) ——
+      // filter header bar
       var hasActive = filter && filter.size > 0;
       var filterLabel = hasActive ? ('Filtered (' + filter.size + ')') : 'ทุก Project';
       var filterChevron = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -55,7 +54,7 @@ export default {
         return;
       }
 
-      // —— Column header strip (above the rows) ——
+      // column header strip
       var gridCols = 'auto 1.4fr 1.2fr .8fr auto auto';
       var headerStrip =
           '<div style="display:grid;grid-template-columns:' + gridCols + ';'
@@ -70,7 +69,7 @@ export default {
         +   '<div style="width:36px"></div>'                  // action column placeholder
         + '</div>';
 
-      // —— Member rows ——
+      // member rows
       var rows = users.map(function (u, idx) {
         var fullName = ((u.name || '') + ' ' + (u.surname || '')).trim() || '—';
         var projectName = self._projectNameById(u.projectId) || '—';
@@ -153,8 +152,7 @@ export default {
       + escapeHtml(label) + '</span>';
   },
 
-  // badge click → custom confirm modal (no more browser confirm()).
-  // Pending action stash so confirmStatusToggle() knows what to PUT.
+  // pending badge-click action for confirmStatusToggle()
   _pendingStatusToggle: null,    // { user, next:'active'|'inactive', nextId:1|2 }
 
   toggleUserStatus: function (username, ev) {
@@ -190,17 +188,14 @@ export default {
       flash('❌ unknown status: ' + current, 'error'); return;
     }
 
-    // Theme the target box border/bg to match the action mood
     var boxColors = {
       warning: { bg: 'rgba(240,160,64,0.06)',  bd: 'rgba(240,160,64,0.25)' },
       success: { bg: 'rgba(63,166,77,0.06)',   bd: 'rgba(63,166,77,0.25)' },
       info:    { bg: 'rgba(74,123,214,0.06)',  bd: 'rgba(74,123,214,0.25)' },
     }[theme];
 
-    // Stash pending action so confirm handler can find it
     this._pendingStatusToggle = { user: u, next: next, nextId: nextId };
 
-    // Populate modal
     document.getElementById('cts-title').textContent = title;
     document.getElementById('cts-username').textContent = '@' + u.username;
     document.getElementById('cts-displayname').textContent =
@@ -239,8 +234,7 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) { errEl.textContent = '❌ ' + (d.error || 'update failed'); btn.disabled = false; return; }
-        // Update the cached user so subsequent badge clicks see the new state
-        // without waiting for the re-fetch.
+        // update the cache so later badge clicks see the new state
         p.user.accStatus = p.next;
         p.user.accStatusId = p.nextId;
         hideModal('modal-confirm-status-toggle');
@@ -254,7 +248,7 @@ export default {
       });
   },
 
-  // ── Project filter dropdown (multi-select with search + Done) ──
+  // --- Project filter dropdown (multi-select) ---
   _renderProjectFilterHeader: function () {
     var filter = this._userProjectFilter;
     var hasActive = filter && filter.size > 0;
@@ -308,7 +302,6 @@ export default {
     document.body.appendChild(pop);
     trigger.classList.add('dd-open');
 
-    // Custom check icon shown only on selected rows (matches generic dd style).
     var checkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="flex-shrink:0;color:var(--accent)">'
                  + '<polyline points="20 6 9 17 4 12"/></svg>';
 
@@ -330,7 +323,7 @@ export default {
           + 'data-pid="' + escapeHtml(String(p.id)) + '" '
           + 'onclick="admin._toggleUserPfItem(this)" '
           + 'style="cursor:pointer">'
-          // Checkbox-style indicator (square outline filled when selected)
+          // checkbox-style indicator
           + '<span style="width:16px;height:16px;border-radius:4px;'
           +   'border:1.5px solid ' + (sel ? 'var(--accent)' : 'var(--border-strong)') + ';'
           +   'background:' + (sel ? 'var(--accent)' : 'transparent') + ';'
@@ -374,15 +367,12 @@ export default {
   },
 
   _toggleUserPfItem: function (el) {
-    // items are now <div> rows (not <input checkbox>) so we
-    // toggle the dd-selected class + re-render the chip to reflect state.
     var pop = document.getElementById('user-project-filter-popup');
     if (!pop || !pop._selected) return;
     var pid = el.getAttribute('data-pid');
     if (pop._selected.has(pid)) pop._selected.delete(pid);
     else                        pop._selected.add(pid);
-    // Visual feedback without rebuilding the entire list: toggle class +
-    // swap the inner checkbox-style indicator on this row only.
+    // toggle this row only, no full re-render
     var nowSelected = pop._selected.has(pid);
     el.classList.toggle('dd-selected', nowSelected);
     var box = el.querySelector('span');
@@ -413,12 +403,11 @@ export default {
     this.renderUsers();
   },
 
-  // ── EDIT USER MODAL ── รวมทุก action ต่อ user ที่เคยกระจายในตาราง
+  // --- Edit user modal ---
   openEditUser: function (username) {
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
     if (!u) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
 
-    // Identity card
     document.getElementById('eu-username').value = username;
     document.getElementById('eu-username-display').textContent = username;
     document.getElementById('eu-userid-display').textContent =
@@ -426,11 +415,9 @@ export default {
     var ava = document.getElementById('eu-avatar');
     if (ava) ava.textContent = (u.name || u.username || '?').charAt(0).toUpperCase();
 
-    // editable name + surname (was display-only "name-display")
     document.getElementById('eu-name').value    = u.name    || '';
     document.getElementById('eu-surname').value = u.surname || '';
 
-    // hidden input + dd-trigger label (custom dropdown).
     var projects = this._cachedDBProjects || [];
     var projectId = u.projectId ? String(u.projectId) : '';
     document.getElementById('eu-project').value = projectId;
@@ -443,14 +430,12 @@ export default {
     document.getElementById('eu-status-label').textContent =
       status.charAt(0).toUpperCase() + status.slice(1);
 
-    // daily cap is managed on the dedicated Cap Management page
-    // (Credits tab), NOT here — this modal is identity/profile only.
+    // daily cap is managed on the Cap Management page, not here
 
     document.getElementById('eu-error').textContent = '';
     showModal('modal-edit-user');
   },
 
-  // Project dropdown for Edit User modal
   openEditUserProjectDropdown: function (ev) {
     if (ev) ev.stopPropagation();
     var projects = (this._cachedDBProjects || []).slice()
@@ -469,7 +454,6 @@ export default {
     });
   },
 
-  // Status dropdown for Edit User modal
   openEditUserStatusDropdown: function (ev) {
     if (ev) ev.stopPropagation();
     this.openDropdown('eu-status-trigger', {
@@ -493,8 +477,7 @@ export default {
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
     if (!u) { document.getElementById('eu-error').textContent = '❌ ' + t('err.userNotFound', 'ไม่พบ user'); return; }
 
-    // identity-only updates (name, surname, project, status).
-    // Credit + dailyCap removed — they're handled in Credit Management.
+    // identity-only; credit and dailyCap live in Credit Management
     var name      = document.getElementById('eu-name').value.trim();
     var surname   = document.getElementById('eu-surname').value.trim();
     var projectId = document.getElementById('eu-project').value || null;
@@ -599,10 +582,7 @@ export default {
     }
   },
 
-  // editor ในแถวถูกแทนด้วย Edit User modal — โค้ดตายถูกลบไปแล้ว openEditUser คือทางเดียว
-
-  // ── RESET PASSWORD ── validate ฝั่ง client ตาม policy server (8+ ตัว มีอักษร+เลข) แล้ว AWAIT ก่อนแจ้งผล
-  // (ของเดิมใช้ prompt() min 4 ตัว fire-and-forget — โชว์สำเร็จทั้งที่ server ปฏิเสธ)
+  // --- Reset password --- validate ฝั่ง client ตาม policy server แล้ว AWAIT ก่อนแจ้งผล
   _pendingResetPw: null,
 
   resetPassword: function (username) {
@@ -644,11 +624,11 @@ export default {
     if (inp.type === 'password') {
       inp.type = 'text';
       tog.textContent = '🙈';
-      tog.setAttribute('aria-pressed', 'true');   // visible
+      tog.setAttribute('aria-pressed', 'true');
     } else {
       inp.type = 'password';
       tog.textContent = '👁';
-      tog.setAttribute('aria-pressed', 'false');  // hidden
+      tog.setAttribute('aria-pressed', 'false');
     }
   },
 
@@ -720,7 +700,7 @@ export default {
       });
   },
 
-  // ── DELETE USER ── modal → AWAIT DELETE → re-render; _pendingDelete จำข้อมูลไว้ให้ปุ่ม confirm
+  // --- Delete user ---
   _pendingDelete: null,
 
   deleteUser: function (username) {
@@ -736,7 +716,6 @@ export default {
       balance: u.balance,
     };
 
-    // Populate modal body
     var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
     set('cd-username',    '@' + u.username);
     set('cd-displayname', u.displayName || '—');
@@ -778,15 +757,13 @@ export default {
           if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
           return;
         }
-        // Mirror to legacy localStorage store so any non-DB code path stays in sync
+        // keep the legacy localStorage store in sync
         try { Auth.deleteUser(p.username); } catch (_) {}
         self._pendingDelete = null;
         hideModal('modal-confirm-delete-user');
         flash('✅ ' + tf('msg.userDeleted', { username: p.username }, 'ลบ @{username} แล้ว'));
-        // re-fetch จาก DB — แถว soft-deleted ถูกกรองฝั่ง server แล้ว
         self.renderUsers();
         self.refreshProjectSelects();
-        // Also refresh overview tile counts if we happen to be on overview
         if (self.currentView === 'overview') self.renderOverview();
       })
       .catch(function (e) {
@@ -795,14 +772,14 @@ export default {
       });
   },
 
-  // ── ADD USER (modal) ──────────────────────────────────
+  // --- Add user modal ---
   openAddUser: function () {
     ['au-username', 'au-password', 'au-confirm', 'au-firstname', 'au-lastname'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = '';
     });
     var cap = document.getElementById('au-dailycap');
-    if (cap) cap.value = '50';   // sensible default daily cap; clear for unlimited
+    if (cap) cap.value = '50';   // default daily cap; blank = unlimited
     var hint = document.getElementById('au-pw-hint');
     if (hint) { hint.style.color = '#555'; hint.textContent = t('hint.pwPolicy', 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)'); }
     // only a trainer sees the role picker (admins create users only)
@@ -813,10 +790,8 @@ export default {
       var sess30 = Auth.getSession();
       roleField.style.display = (sess30 && sess30.role === 'trainer') ? '' : 'none';
     }
-    // sync project/daily-cap visibility with the (reset) role
     this.onAddUserRoleChange('user');
     document.getElementById('au-error').textContent = '';
-    // reset hidden project input + label (custom dropdown)
     var pf = document.getElementById('au-project');
     if (pf) pf.value = '';
     var pl = document.getElementById('au-project-label');
@@ -862,8 +837,7 @@ export default {
     var dailyCap = capRaw === '' ? null : parseFloat(capRaw);   // blank = no cap (unlimited)
     var errEl = document.getElementById('au-error');
 
-    // role decides which fields apply. Staff accounts
-    // (admin/trainer) have no project binding and no daily cap.
+    // staff (admin/trainer) have no project binding and no daily cap
     var roleEl2   = document.getElementById('au-role');
     var roleField3 = document.getElementById('au-role-field');
     var pickedRole = (roleEl2 && roleField3 && roleField3.style.display !== 'none')
@@ -890,7 +864,7 @@ export default {
     if (isStaff) {
       payload.role = pickedRole;
     } else {
-      payload.dailyCap = dailyCap;   // Concept B: per-user daily limit (null = unlimited)
+      payload.dailyCap = dailyCap;   // null = unlimited
       if (projectId) payload.projectId = projectId;
     }
 
@@ -910,7 +884,7 @@ export default {
       .catch(function (e) { errEl.textContent = '❌ Server error: ' + e.message; });
   },
 
-  // ── Password Helpers ──────────────────────────────────
+  // --- Password helpers ---
   generatePassword: function () {
     var upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     var lower = 'abcdefghjkmnpqrstuvwxyz';
@@ -946,8 +920,7 @@ export default {
     var inp = document.getElementById(inputId);
     var eye = document.getElementById(eyeId);
     if (!inp) return;
-    // also flip aria-pressed on the button so screen readers
-    // know whether the password is currently visible.
+    // aria-pressed tells screen readers whether the password is visible
     var btn = eye && eye.closest ? eye.closest('button') : null;
     if (inp.type === 'password') {
       inp.type = 'text';

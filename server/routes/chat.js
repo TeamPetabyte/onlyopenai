@@ -41,13 +41,12 @@ const {
 router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), async (req, res) => {
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true, reason: 'no_api_key' }); return; }
 
-    // ไม่มี systemPrompt/rate จาก body — schema ทิ้งไปแล้ว; prompt มาจาก tbl_prompt, ราคามาจาก tbl_pricing
+    // prompt มาจาก tbl_prompt, ราคาจาก tbl_pricing — ไม่รับจาก body
     const { prompt, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
-    // เกตเดียวเช็คทั้ง pool และ daily cap — error code แยกให้ UI
-    // PTB-FND-013: fail-CLOSED — ถ้าเช็คงบไม่ได้ ห้ามเรียกโมเดล (การหักท้าย turn กันพูลติดลบ
-    // แต่กัน daily cap ไม่ได้ และ OpenAI คิดเงินเราไปแล้ว)
+    // เกตเดียวเช็ค pool + daily cap (error code แยกให้ UI); fail-closed —
+    // เช็คงบไม่ได้ต้องไม่เรียกโมเดล เพราะ OpenAI คิดเงินเราไปแล้ว
     try {
         const uid = req.session?.userId;
         if (uid) {
@@ -63,7 +62,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             message: '⚠️ ตรวจสอบเครดิตไม่ได้ชั่วคราว กรุณาลองใหม่ในอีกสักครู่' });
     }
 
-    // มี sessionId = เช็คความเป็นเจ้าของก่อนเริ่ม stream (กัน 401 กลาง SSE); ไม่มี = สร้างใหม่ ผูก userId
+    // มี sessionId = เช็คเจ้าของก่อน stream (กัน 401 กลาง SSE); ไม่มี = สร้างใหม่ผูก userId
     let chatSessionId = null;
     try {
         const uid = req.session && req.session.userId;
@@ -90,12 +89,11 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             }
         }
     } catch (sessErr) {
-        // Don't block the chat on a session-setup hiccup — just log and
-        // continue without persistence.
+        // A session-setup failure must not block the chat; log and continue unpersisted.
         console.warn('[chat] session setup skipped:', sessErr.message);
     }
 
-    // replay turn ก่อนหน้าเข้า context — หลังถอด Assistants stack ไม่มีใครป้อน history จนแชทจำอะไรไม่ได้
+    // replay turn ก่อนหน้าเข้า context ไม่งั้นแชทจำอะไรไม่ได้
     let chatHistory = [];
     if (chatSessionId && sessionId) {   // existing session only — a fresh one has no past
         try {
@@ -118,35 +116,29 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         }
     }
 
-    // (Phase 21.10) — duplicate cap check removed; the single
-    // checkChatBudget() gate above covers both pool + cap.
-
     res.setHeader('Content-Type', 'text/event-stream');
-    // no-transform + X-Accel-Buffering:no — กัน proxy/tunnel อั้น stream แล้วเทตูมเดียว
-    res.setHeader('Cache-Control', 'no-store, no-transform');   // PTB-FND-045: the answer stream is the most personal payload
+    // no-transform + X-Accel-Buffering:no — กัน proxy/tunnel บัฟเฟอร์ stream
+    res.setHeader('Cache-Control', 'no-store, no-transform');   // per-user payload; no shared cache
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
-    // heartbeat ': ping' ทุก 15s — โมเดลคิดเงียบเป็นนาที ทุก hop จะตัดสาย; parser ฝั่งเว็บไม่เห็นบรรทัดนี้
+    // heartbeat ทุก 15s กัน hop ระหว่างทางตัดสายตอนโมเดลคิดนาน; parser ฝั่งเว็บข้ามบรรทัด ':'
     const sseHeartbeat = setInterval(() => {
         try { res.write(': ping\n\n'); } catch (_) { /* connection gone */ }
     }, 15000);
     res.on('close', () => clearInterval(sseHeartbeat));
 
     const sendEvent = (data) => {
-        // If the client already hung up (e.g. pressed Stop), writing to
-        // the socket throws ERR_STREAM_WRITE_AFTER_END. Guard silently.
+        // Client may already be gone (Stop); writing then throws.
         if (res.writableEnded) return;
         try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch (_) {}
     };
     const startTime = Date.now();
-    // track cached + reasoning breakdowns alongside the totals.
     let inputTokens = 0, outputTokens = 0, cachedTokens = 0, reasoningTokens = 0, fullText = '';
-    // per-answer call breakdown, for measuring where a slow turn went.
-    // Populated by the Responses path only; stays 0 on the Chat Completions path.
+    // Responses path only; stays 0 on Chat Completions.
     let apiCalls = 0, toolTurns = 0, continuations = 0;
 
-    // user กด Stop = abort stream ฝั่ง OpenAI ทันที (หยุดเผา token) แต่ persist ของที่ได้มาแล้ว
+    // Stop = abort ฝั่ง OpenAI ทันที แต่ persist สิ่งที่ได้มาแล้ว
     let clientAborted = false;
     let currentOpenAIStream = null;
     // ฟังทั้ง res/req close — req อย่างเดียวพลาดได้บน keep-alive
@@ -164,10 +156,10 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     req.on('aborted', onClientGone);
 
     try {
-        // ── Step 1: Intent Detection (Phase 1 — Router) ──────────────
+        // --- Step 1: intent detection (router) ---
         let detectedSkill = null;
         let supportingSkillIds = [];
-        // skill ที่ client เลือกถูก resolve จาก catalog ฝั่ง server — เคยรับเนื้อ prompt จาก body ตรง ๆ
+        // skill ที่ client เลือกถูก resolve จาก catalog ฝั่ง server — ไม่รับเนื้อ prompt จาก body
         const pickedSkill = (skillId && skillId !== 'auto') ? skillPrompts.getSkill(skillId) : null;
         let finalSystemPrompt = pickedSkill?.content || 'คุณเป็น AI assistant ที่ช่วยงาน SAP ABAP';
         let finalUserPrompt   = prompt;
@@ -176,13 +168,13 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                               intent: 'manual', confidence: 1, reason: 'user picked', source: 'manual' };
         }
 
-        // resolve client ของ project ครั้งเดียว — router กับ main call ใช้ key เดียวกัน billing ตรง
+        // resolve client ของ project ครั้งเดียว — router กับ main call ใช้ key เดียวกัน
         const oai = await getProjectOpenAI(req.session.userId);
 
         // auto-mode = ไม่ได้ระบุ skill หรือระบุมาแล้วหาไม่เจอใน catalog
         const isAutoMode = !pickedSkill;
         if (useRouter && isAutoMode) {
-            // router เลือกจาก catalog (tbl_prompt) — ส่ง history ไปด้วย ไม่งั้น follow-up สั้น ๆ ได้ "none" ตลอด
+            // router เลือกจาก catalog — ส่ง history ด้วย ไม่งั้น follow-up สั้น ๆ ได้ "none"
             const catalogPick = await pickSkillFromCatalog(prompt, oai, chatHistory);
             if (catalogPick.skillId && catalogPick.content) {
                 detectedSkill = {
@@ -204,32 +196,31 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                     source:     catalogPick.source,
                 };
             }
-            // source = วิธีที่เลือก (llm/code-shape/catch-all) โชว์บน UI; skill รองส่งความรู้ร่วม ไม่ถูกทิ้ง
+            // source = วิธีที่เลือก (llm/code-shape/catch-all) โชว์บน UI; skill รองส่งความรู้ร่วม
             supportingSkillIds = skillsForCode(prompt)
                 .filter(id => id !== detectedSkill.skillId)
                 .slice(0, MAX_SUPPORTING_SKILLS);
             sendEvent({ type: 'routed', skillId: detectedSkill.skillId, skillLabel: detectedSkill.label, intent: detectedSkill.intent, confidence: detectedSkill.confidence, source: detectedSkill.source, supporting: supportingSkillIds });
         }
 
-        // ── Step 2: {code} placeholder (Phase 36: only when it IS code) ──
+        // --- Step 2: {code} placeholder (only when the message is code) ---
         const cp = applyCodePlaceholder(finalSystemPrompt, prompt);
         finalSystemPrompt = cp.systemPrompt;
         finalUserPrompt   = cp.userPrompt;
 
-        // appendix กลาง (กติกาภาษา ฯลฯ) — ใช้ชุดเดียวกับ Lab/eval
+        // appendix กลาง — ชุดเดียวกับ Lab/eval
         finalSystemPrompt += PROMPT_COMMON_APPENDIX;
-        // org standards แนบจาก cache — ตัด tool round trip ที่เคยยิงทุกคำตอบ
+        // org standards จาก cache — ไม่ยิง tool round trip ทุกคำตอบ
         finalSystemPrompt += orgStandardsBlock(await getOrgStandards());
-        // ความรู้ของ skill รอง ต่อท้าย org standards — เอกสารององค์กรยังชนะเสมอ
+        // ความรู้ skill รองต่อท้าย org standards — เอกสารองค์กรชนะเสมอ
         finalSystemPrompt += supportingKnowledgeBlock(supportingSkillIds);
-        // hand over the static scan and the documents that match what
-        // it found, so the model spends its budget on judgement, not on hunting.
+        // static scan + matching documents up front, so the model spends its budget on judgement.
         finalSystemPrompt += await buildPreAnalysis(prompt);
 
-        // ใช้เฉพาะ function tools — file_search ใช้กับ Chat Completions ไม่ได้ (RAG ผ่าน search_knowledge แทน)
+        // function tools เท่านั้น — file_search ใช้กับ Chat Completions ไม่ได้ (RAG ผ่าน search_knowledge)
         const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
 
-        // แยกทางตาม model: gpt-5.6 → Responses API, ที่เหลือ → Chat Completions เดิม
+        // gpt-5.6 → Responses API, ที่เหลือ → Chat Completions
         const { model: reqModel, path: modelPath } = resolveModel(bodyModel);
         const reqEffort = resolveEffort(bodyEffort);
         const acc = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0, fullText: '' };
@@ -256,10 +247,8 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             { role: 'user',   content: finalUserPrompt },
         ];
 
-        // (oai resolved above — shared between router + main chat call)
-
         const MAX_TOOL_TURNS = 3;
-        // โดนตัดด้วย token cap → ขอให้เขียนต่ออัตโนมัติ — cap แยกจาก tool-turn budget
+        // โดนตัดด้วย token cap → ให้เขียนต่ออัตโนมัติ — cap แยกจาก tool-turn budget
         const MAX_LENGTH_CONTINUATIONS = 4;
         let lastFinishReason = null;
         let lengthContinuations = 0;
@@ -268,7 +257,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             if (clientAborted) break;
             const streamArgs = {
                 model: reqModel, stream: true, max_completion_tokens: 3000,
-                // ไม่มีบรรทัดนี้ chunk.usage เป็น null ทุก chunk แล้วเงินถูกคิดจาก ตัวอักษร/3.5
+                // ไม่มีบรรทัดนี้ chunk.usage เป็น null แล้วเงินถูกคิดจาก ตัวอักษร/3.5
                 stream_options: { include_usage: true },
                 messages,
                 tools:        chatTools,
@@ -278,14 +267,13 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             if (OAI_TEMPERATURE !== null && !isTempUnsupported()) {
                 streamArgs.temperature = OAI_TEMPERATURE;
             }
-            // auto-fallback to global key on 401 from project key.
-            // Also auto-drop temperature if the model rejects it (gpt-5.5, o-series).
+            // 401 from project key → fall back to global key; drop temperature if the model rejects it.
             let stream;
             try {
                 stream = await oai.chat.completions.create(streamArgs);
             } catch (e) {
                 if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in streamArgs)) {
-                    markTempUnsupported();                   // remember → stop sending it next time
+                    markTempUnsupported();                   // stop sending it next time
                     delete streamArgs.temperature;
                     console.warn(`[chat] model ${reqModel} rejects custom temperature — retrying without it`);
                     stream = await oai.chat.completions.create(streamArgs);
@@ -301,7 +289,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
 
             let pendingToolCalls = [];
             let finishReason    = null;
-            let turnText        = '';   // only THIS API call's text (for continuation re-prompts)
+            let turnText        = '';   // this API call's text only (for continuation re-prompts)
 
             try {
                 for await (const chunk of stream) {
@@ -309,14 +297,12 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                     const delta = chunk.choices[0]?.delta;
                     finishReason = chunk.choices[0]?.finish_reason || finishReason;
 
-                    // text content
                     if (delta?.content) {
                         fullText += delta.content;
                         turnText += delta.content;
                         sendEvent({ type: 'chunk', text: delta.content });
                     }
 
-                    // accumulate tool call deltas
                     if (delta?.tool_calls) {
                         for (const tc of delta.tool_calls) {
                             const idx = tc.index ?? 0;
@@ -330,15 +316,12 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                     if (chunk.usage) {
                         inputTokens     += chunk.usage.prompt_tokens     || 0;
                         outputTokens    += chunk.usage.completion_tokens || 0;
-                        // capture cached + reasoning sub-totals.
-                        // Chat Completions API has exposed these since Oct 2024.
                         cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
                         reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
                     }
                 }
             } catch (streamErr) {
-                // OpenAI stream throws APIUserAbortError on controller.abort().
-                // That's a clean exit for user-initiated Stop — not a failure.
+                // APIUserAbortError on controller.abort() is a clean user Stop, not a failure.
                 if (clientAborted) break;
                 throw streamErr;
             } finally {
@@ -361,8 +344,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             // ถ้าไม่มี tool calls → จบ
             if (finishReason !== 'tool_calls' || pendingToolCalls.length === 0) break;
 
-            // มี tool calls → execute แล้ว loop ต่อ
-            // attach the document-search query so the UI badge can show it.
+            // tool calls → execute and loop; attach the search query for the UI badge
             const rQuery = pendingToolCalls.map(tc => ragQueryOf(tc.function.name, tc.function.arguments)).find(q => q != null);
             sendEvent({ type: 'tool_call', tools: pendingToolCalls.map(tc => tc.function.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
 
@@ -375,7 +357,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             });
 
             for (const tc of pendingToolCalls) {
-                // โมเดลส่ง arguments พังมาได้ — parse ล้มแล้ว throw จะทิ้งทั้ง turn โดยไม่คิดเงิน
+                // โมเดลส่ง arguments พังได้ — throw ตรงนี้จะทิ้งทั้ง turn โดยไม่คิดเงิน
                 let args = {};
                 try { args = JSON.parse(tc.function.arguments || '{}'); }
                 catch (_) { console.warn('[chat] bad tool arguments from model for', tc.function.name); }
@@ -432,7 +414,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                 currentOpenAIStream = null;
             }
         }
-        }   // ── end else: Chat Completions path (Phase 34 router split) ──
+        }   // end Chat Completions path
 
         if (inputTokens === 0) {
             inputTokens  = Math.ceil((prompt.length + finalSystemPrompt.length) / 3.5);
@@ -440,7 +422,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         }
 
         const durationMs = Date.now() - startTime;
-        // ราคาจาก tbl_pricing เท่านั้น; ไม่มีแถว = ค่า default ฝั่ง server (เคยรับ rate จาก body = ตั้งราคาเองได้)
+        // ราคาจาก tbl_pricing เท่านั้น; ไม่มีแถว = default ฝั่ง server (ห้ามรับ rate จาก body)
         const pricing = await getActivePricing(reqModel);
         const useInput  = pricing.inputPrice;
         const useOutput = pricing.outputPrice;
@@ -450,7 +432,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         const cost = Math.max(0, (nonCachedInputTokens / 1000) * useInput
                    + ((cachedTokens || 0) / 1000) * useCached
                    + ((outputTokens || 0) / 1000) * useOutput);
-        // log บอก model/effort/จำนวน call — ไม่งั้น turn ช้าแยกไม่ออกจาก turn เร็ว
+        // log model/effort/จำนวน call — แยก turn ช้าจาก turn เร็ว
         const callInfo = apiCalls
             ? ` | ${apiCalls} calls(${toolTurns} tool, ${continuations} cont)`
             : '';
@@ -459,10 +441,10 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         }
         console.log(`[chat] [${reqModel}/${reqEffort}] ${detectedSkill ? `[${detectedSkill.skillId || detectedSkill.intent}${supportingSkillIds.length ? '+' + supportingSkillIds.length : ''}] ` : ''}${inputTokens}in(${cachedTokens} cached)/${outputTokens}out(${reasoningTokens} reasoning) | ฿${cost.toFixed(4)} | rates ${pricing.fromDb?'from tbl_pricing':'fallback'}${callInfo} | ${durationMs}ms`);
 
-        // เขียนฝั่ง server จาก req.session.userId — เคยพึ่ง client POST ตามหลังซึ่งเลี่ยงได้ (แชทฟรี)
+        // เขียนจาก req.session.userId ฝั่ง server — ห้ามพึ่ง client POST ตามหลัง
         const userId = req.session && req.session.userId;
         if (userId) {
-            // ทุก write ที่แตะเงินอยู่ใน tx เดียว: deduction + rollup + message + bonus — ล้มก็ล้มด้วยกัน
+            // ทุก write ที่แตะเงินอยู่ใน tx เดียว — ล้มก็ล้มด้วยกัน
             let client;
             try {
                 client = await pool.connect();
@@ -489,8 +471,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                          RETURNING project_credits AS balance_after`,
                         [cost || 0, projectId]);
                     if (dedRes.rowCount === 0 && (cost || 0) > 0) {
-                        // pool ไม่พอ (request ขนาน/ยอดเหลือน้อยกว่าค่าจริง) — หักเท่าที่เหลือแล้วบันทึกส่วนขาด
-                        // ไม่งั้น tbl_daily_usage เดินหน้าไปแต่ ledger ไม่ขยับ แล้วสองฝั่งไม่ตรงกันแบบเงียบ ๆ
+                        // pool ไม่พอ (request ขนาน) — หักเท่าที่เหลือแล้วบันทึกส่วนขาด ให้ ledger กับ daily_usage ตรงกัน
                         const cur = await client.query(
                             'SELECT COALESCE(project_credits,0) AS bal FROM tbl_balance WHERE project_id=$1 FOR UPDATE',
                             [projectId]);
@@ -557,8 +538,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                              VALUES ($1, 'assistant', $2, $3,   $4,   $5,   $6,  $7,  $8,  $9)`,
                             [chatSessionId, fullText || '',
                              inputTokens || null, outputTokens || null,
-                             // persist the wall-clock time. Without it the
-                             // badge fell back to "0.0s" on every reload.
+                             // durationMs persisted, else the badge shows 0.0s on reload
                              cost || null, reqModel, skillId, durationMs || null, skillsUsed]);
                         await client.query(
                             `UPDATE tbl_chat_session

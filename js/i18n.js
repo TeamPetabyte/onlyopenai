@@ -1,31 +1,10 @@
-/**
- * i18n.js — PetabyteAi bilingual (TH / EN) toggle.  Phase 3.
- *
- * How it works
- * ------------
- *  - Static HTML marks translatable nodes with attributes:
- *        data-i18n="key"        → sets element.textContent
- *        data-i18n-html="key"   → sets element.innerHTML (use sparingly)
- *        data-i18n-ph="key"     → sets the `placeholder` attribute
- *        data-i18n-title="key"  → sets the `title` attribute
- *        data-i18n-aria="key"   → sets the `aria-label` attribute
- *  - JS code can translate on the fly with  I18N.t('key')  (falls back to the
- *    key text or a provided default if missing).
- *  - The chosen language is persisted in localStorage ('agenthub_lang') and
- *    re-applied before paint via I18N.apply().
- *  - Switching fires a window 'i18n:change' event so render code can refresh
- *    any strings it produced imperatively.
- *
- * Fallback (when nothing is saved yet) is 'th' unless the page sets
- * window.I18N_DEFAULT_LANG = 'en' before this script loads — as of Phase 29
- * both index.html and admin.html do, so EN is effectively the app default;
- * 'th' only kicks in for a page that opts out of setting the override.
- */
+// i18n.js — TH/EN toggle. HTML marks nodes with data-i18n / -html / -ph / -title / -aria; JS uses I18N.t(key).
+// Language persists in localStorage ('agenthub_lang'); switching fires a window 'i18n:change' event.
+// Fallback when nothing is saved: window.I18N_DEFAULT_LANG if set before this script loads, else 'th'.
 (function (global) {
   var STORAGE_KEY = 'agenthub_lang';
 
-  // ── Dictionary ────────────────────────────────────────────
-  // Keys are dot-namespaced by area. th = original wording, en = translation.
+  // Dictionary: keys dot-namespaced by area; th = original wording, en = translation.
   var DICT = {
     th: {
       // sidebar / chrome
@@ -309,7 +288,7 @@
       'm.syncNow.body': 'เรียก OpenAI Usage API เพื่อ sync ข้อมูลการใช้งานล่าสุดเข้า DB<br>ใช้เวลาประมาณ 5-15 วินาที — กรุณาอย่าปิดหน้านี้ระหว่างทำงาน',
       'm.syncNow.btn': 'เริ่ม sync',
 
-      // Phase 26: i18n audit — dynamic JS-rendered strings (admin.js)
+      // dynamic JS-rendered strings (admin.js)
       'err.invalidAmount': 'กรุณาใส่จำนวนเงินที่ถูกต้อง',
       'err.dbRejected': 'DB ปฏิเสธ: ',
       'msg.topupSuccess': 'เติมเงิน {amt} เข้า project แล้ว (DB total {total})',
@@ -490,7 +469,7 @@
       'lbl.showingUsersFiltered': '· แสดง {shown} จาก {total} users',
       'lbl.showingUsersTotal': '· แสดง {shown}/{total} users',
 
-      // Phase 27: user chat page (index.html) i18n
+      // user chat page (index.html)
       'u.search.ph': 'ค้นหา (Ctrl+K)',
       'u.search.clear': 'ล้าง',
       'u.history.emptyTitle': 'ยังไม่มีประวัติแชท',
@@ -847,7 +826,7 @@
       'm.syncNow.body': 'Calls the OpenAI Usage API to sync the latest usage into the DB.<br>Takes about 5-15 seconds — please don’t close this page meanwhile.',
       'm.syncNow.btn': 'Start sync',
 
-      // Phase 26: i18n audit — dynamic JS-rendered strings (admin.js)
+      // dynamic JS-rendered strings (admin.js)
       'err.invalidAmount': 'Please enter a valid amount',
       'err.dbRejected': 'DB rejected: ',
       'msg.topupSuccess': 'Topped up {amt} into the project (DB total {total})',
@@ -1028,7 +1007,7 @@
       'lbl.showingUsersFiltered': '· Showing {shown} of {total} users',
       'lbl.showingUsersTotal': '· Showing {shown}/{total} users',
 
-      // Phase 27: user chat page (index.html) i18n
+      // user chat page (index.html)
       'u.search.ph': 'Search (Ctrl+K)',
       'u.search.clear': 'Clear',
       'u.history.emptyTitle': 'No chat history yet',
@@ -1136,9 +1115,7 @@
     init: function () {
       var saved = null;
       try { saved = localStorage.getItem(STORAGE_KEY); } catch (_) {}
-      // Phase 27: pages can request a different fallback (when nothing is
-      // saved yet) by setting window.I18N_DEFAULT_LANG before this script
-      // loads. index.html sets 'en'; admin.html leaves it unset → 'th'.
+      // Pages pick the fallback by setting window.I18N_DEFAULT_LANG before this script loads.
       var fallback = (global.I18N_DEFAULT_LANG === 'en' || global.I18N_DEFAULT_LANG === 'th')
           ? global.I18N_DEFAULT_LANG : 'th';
       this.lang = (saved === 'en' || saved === 'th') ? saved : fallback;
@@ -1153,10 +1130,7 @@
       return (fallback !== undefined) ? fallback : key;
     },
 
-    // Template variant: t() result may contain {placeholder} tokens; `params`
-    // is a flat { placeholder: value } map substituted in after translation.
-    // Lets one dictionary entry serve messages with dynamic data (amounts,
-    // usernames, counts) instead of needing a key per concrete value.
+    // Template variant: substitutes {placeholder} tokens from a flat params map after translation.
     f: function (key, params, fallback) {
       var s = this.t(key, fallback);
       params = params || {};
@@ -1181,8 +1155,7 @@
       scope.querySelectorAll('[data-i18n-title]').forEach(function (el) {
         el.setAttribute('title', self.t(el.getAttribute('data-i18n-title')));
       });
-      // Phase 27: data-i18n-aria — sets aria-label (buttons/icons with no
-      // visible text still need a translated accessible name).
+      // aria-label: icon buttons still need a translated accessible name.
       scope.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
         el.setAttribute('aria-label', self.t(el.getAttribute('data-i18n-aria')));
       });

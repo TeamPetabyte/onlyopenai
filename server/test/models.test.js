@@ -1,8 +1,4 @@
-// models.test.js — resolving the client's model and effort request.
-//
-// Both values arrive straight from req.body. resolveEffort used to read them
-// off an object without an own-property check, so "constructor" came back as a
-// function and went on to the Responses API as reasoning.effort.
+// models.test.js — resolving the client's model and effort request (both straight from req.body).
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -41,8 +37,7 @@ test('resolveEffort: the three valid values pass through', () => {
 });
 
 test('resolveEffort: retired values map to the nearest survivor', () => {
-    // Browsers still hold `max`/`xhigh`/`none` in localStorage from before the
-    // effort list was trimmed to three; mapping beats silently resetting.
+    // browsers still hold max/xhigh/none in localStorage; mapping beats silently resetting
     assert.equal(models.resolveEffort('max'), 'high');
     assert.equal(models.resolveEffort('xhigh'), 'high');
     assert.equal(models.resolveEffort('none'), 'low');
@@ -55,8 +50,7 @@ test('resolveEffort: anything unrecognised becomes the default', () => {
 });
 
 test('resolveEffort: always returns one of the valid efforts, never a function', () => {
-    // The bug: EFFORT_ALIASES['constructor'] returned Object, which
-    // JSON.stringify then dropped from the request body without a word.
+    // EFFORT_ALIASES['constructor'] once returned Object, which JSON.stringify silently dropped
     for (const key of ['constructor', 'toString', '__proto__', 'valueOf', 'hasOwnProperty']) {
         const got = models.resolveEffort(key);
         assert.equal(typeof got, 'string', `${key} produced a ${typeof got}`);

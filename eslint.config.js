@@ -1,16 +1,13 @@
 const js = require('@eslint/js');
 const globals = require('globals');
 
-// Globals the HTML pages and the js/ files share across <script> tags.
-// no-undef only earns its keep if this list is right — see js/config.js,
-// js/auth.js, js/admin.js, js/i18n.js.
+// Globals shared across js/ files via window; no-undef depends on this list being right.
 const SHARED_BROWSER_GLOBALS = {
     AppConfig: 'readonly',
     BASE: 'readonly',
     Auth: 'readonly',
     I18N: 'readonly',
-    // js/i18n.js assigns these onto window from inside an IIFE, so no static
-    // analysis can find them.
+    // Assigned onto window inside an IIFE in js/i18n.js, invisible to static analysis.
     t: 'readonly',
     tf: 'readonly',
     AIClient: 'readonly',
@@ -51,8 +48,7 @@ module.exports = [
         },
     },
 
-    // Frontend: ES modules since Phase 50 (Vite) — cross-file names still ride
-    // on window, so the shared globals list stays.
+    // Frontend: ES modules, but cross-file names still ride on window.
     {
         files: ['js/**/*.js'],
         languageOptions: {
@@ -76,16 +72,14 @@ module.exports = [
             // Empty catch is the repo's idiom for optional browser APIs.
             'no-empty': ['error', { allowEmptyCatch: true }],
 
-            // Pre-existing debt: warn so it stays visible, but let CI gate on
-            // errors only. Phase 47 does not rewrite running code.
+            // Pre-existing debt: warn so it stays visible; CI gates on errors only.
             'no-unused-vars': [
                 'warn',
                 { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
             ],
             'no-useless-escape': 'warn',
             'no-useless-assignment': 'warn',
-            // builtinGlobals:false — the file that DEFINES a shared global is
-            // not redeclaring it. Real in-file redeclares still warn.
+            // The file that defines a shared global is not redeclaring it.
             'no-redeclare': ['warn', { builtinGlobals: false }],
         },
     },

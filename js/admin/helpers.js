@@ -1,7 +1,6 @@
 // helpers.js — ยูทิลที่ทุกแท็บของ admin ใช้ร่วมกัน
 
-// formatTHB kept for back-compat; new code should call
-// formatMoney() for consistent thousand-separators.
+// formatTHB kept for back-compat; prefer formatMoney().
 export function formatTHB(n) { return '฿' + parseFloat(n || 0).toFixed(2); }
 // "฿2,050.00" มี comma — ใช้ตัวนี้เว้นแต่ต้องการแบบแน่น
 export function formatMoney(n) {
@@ -24,8 +23,7 @@ export function escapeHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-// ค่าที่วางเป็น argument ของ inline handler — escape ชั้น JS ก่อน แล้วค่อย escape ชั้น HTML attribute
-// (browser decode entity ก่อน JS parse ค่าจึงต้องผ่านสองชั้นตามลำดับนี้)
+// argument ของ inline handler — escape ชั้น JS ก่อน แล้วค่อยชั้น HTML attribute (browser decode entity ก่อน JS parse)
 export function jsArg(v) {
   return escapeHtml(String(v === null || v === undefined ? '' : v)
     .replace(/\\/g, '\\\\').replace(/'/g, "\\'"));

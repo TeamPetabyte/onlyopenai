@@ -1,34 +1,18 @@
-/**
- * auth.js — Shared Authentication & Data Module for AgentHub SAP
- * Supports projects (replaces plans), user creation, and session management
- */
+// auth.js — shared auth/session module plus the localStorage mirrors of users and projects.
 
-// ── Phase 8 + 9: Global fetch patch ───────────────────────────
-// Two jobs:
-//  (Phase 8) Intercept 423 (must_change_password) anywhere in the app and
-//            redirect to change-password.html — we don't want to touch every
-//            direct fetch() call site.
-//  (Phase 9) Auto-attach `credentials: 'include'` so the HttpOnly session
-//            cookie rides along, and auto-attach the `X-CSRF-Token` header
-//            on POST/PUT/DELETE/PATCH. The server's csrfGuard rejects
-//            state-changing calls without a matching header (double-submit
-//            pattern).
-//  (Phase 39) Bearer token retired: the cookie is the ONLY auth path. We no
-//            longer store a session token in localStorage (XSS could read
-//            it) and the server no longer accepts Authorization: Bearer.
+// Global fetch patch: attach credentials:'include' and X-CSRF-Token (double-submit) on same-site
+// calls, and redirect on 423 (must change password) or 401 / csrf-403 (session gone).
+// The HttpOnly cookie is the only auth path — no Bearer token in localStorage.
 (function () {
     if (window.__petabyteFetchPatched) return;
     window.__petabyteFetchPatched = true;
-    // Phase 39: one-time purge of the legacy Bearer token so upgraded
-    // clients don't keep a stealable copy lying around in localStorage.
+    // purge any legacy Bearer token left in localStorage
     try { localStorage.removeItem('agenthub_token'); } catch (_) {}
     const _origFetch = window.fetch.bind(window);
     const CSRF_KEY = 'agenthub_csrf';
     const STATE_CHANGING = { POST: 1, PUT: 1, DELETE: 1, PATCH: 1 };
 
-    // Our "trusted" origins = the page itself + the API (window.BASE from config.js).
-    // API is typically on a different port so it is cross-origin to the browser but
-    // same-site — so we still want to attach cookies/CSRF.
+    // Trusted origins: the page itself + the API (window.BASE) — usually another port, still same-site.
     var API_ORIGIN = '';
     try { if (window.BASE) API_ORIGIN = new URL(window.BASE).origin; } catch (_) {}
     function isSameOrigin(url) {
@@ -43,7 +27,7 @@
 
     window.fetch = function (input, init) {
         init = init || {};
-        // Always include cookie on same-origin requests (HttpOnly session cookie)
+        // HttpOnly session cookie rides on same-origin requests
         var urlStr = (typeof input === 'string') ? input : (input && input.url) || '';
         if (isSameOrigin(urlStr) && init.credentials === undefined) {
             init.credentials = 'include';
@@ -81,22 +65,8 @@
                     } catch (_) {}
                     setTimeout(function () { window.location.href = '/change-password'; }, 0);
                 }
-                // Phase 19.5: global 401 handler. The auth headers were
-                // sent but the server rejected them → token is expired or
-                // the session row was wiped (e.g. server restart cleared
-                // sessions, or admin force-logged everyone out). Without
-                // this, the page just shows empty data forever and the
-                // user has no idea why ("ทำไมโปรเจคหายไปหมด").
-                //
-                // Guards:
-                //  - Skip when we're already on login.html / change-password.html
-                //    (otherwise the login form's own 401-on-bad-creds would
-                //    redirect away from itself).
-                //  - Skip when the request was to /api/auth/login — that
-                //    endpoint legitimately returns 401 for wrong creds.
-                //  - Skip when we already redirected once this page-load
-                //    (latch — prevents N concurrent failing fetches from
-                //    each kicking off their own redirect).
+                // 401 = session expired or wiped server-side: redirect to login once per page-load.
+                // Skip on the login/change-password pages and for /api/auth/login (a 401 there is a wrong password).
                 if (res.status === 401 && !onPwPage && !onLoginPage && !window.__petabyteAuthExpired) {
                     var reqUrl = (typeof input === 'string')
                         ? input
@@ -104,8 +74,7 @@
                     var isLoginCall = /\/api\/auth\/login\b/.test(String(reqUrl));
                     if (!isLoginCall) {
                         window.__petabyteAuthExpired = true;
-                        // Wipe local session bits — login.html will treat
-                        // us as fully logged out.
+                        // wipe local session bits so login.html treats us as logged out
                         try {
                             localStorage.removeItem('agenthub_session');
                             localStorage.removeItem('agenthub_token');
@@ -117,12 +86,8 @@
                     }
                 }
 
-                // Phase 19.7.3: detect stale-CSRF 403 (server restart rotated
-                // session row → DB has new csrf but localStorage still has the
-                // old one → every PATCH/POST/DELETE 403s with no recovery
-                // path). Differentiate from "role forbidden" 403s by peeking
-                // at the body for the exact error string. Clone the response
-                // first so the original caller's .json() still works.
+                // A 403 whose body mentions csrf is a stale token after a server-side session
+                // rotation — treat as expired. Clone first so the caller's .json() still works.
                 if (res.status === 403 && !onPwPage && !onLoginPage && !window.__petabyteAuthExpired) {
                     res.clone().json().then(function (body) {
                         if (body && /csrf/i.test(String(body.error || ''))) {
@@ -143,16 +108,15 @@
 })();
 
 const Auth = {
-    // ── Keys ─────────────────────────────────────────────────
+    // --- Keys ---
     SESSION_KEY: 'agenthub_session',
-    TOKEN_KEY:   'agenthub_token',     // Phase 39: no longer issued/stored — kept only so purge sites can clear leftovers
-    CSRF_KEY:    'agenthub_csrf',      // Phase 9: double-submit CSRF token
+    TOKEN_KEY:   'agenthub_token',     // legacy — only ever cleared, never written
+    CSRF_KEY:    'agenthub_csrf',      // double-submit CSRF token
     USERS_KEY: 'agenthub_admin_users',
     PROJECTS_KEY: 'agenthub_projects',
 
-    // ── Token helpers (Phase 9 + 39) ─────────────────────────
-    // Auth rides in the HttpOnly session cookie (attached automatically by
-    // the fetch patch above). authHeaders() only adds Content-Type + CSRF.
+    // --- Token helpers ---
+    // Auth rides in the HttpOnly cookie; authHeaders() adds only Content-Type + CSRF.
     getCsrf: function () {
         try { return localStorage.getItem(this.CSRF_KEY) || null; } catch (_) { return null; }
     },
@@ -163,11 +127,7 @@ const Auth = {
         if (extra) for (var k in extra) h[k] = extra[k];
         return h;
     },
-    /** Wrapper around fetch() that auto-attaches auth-related headers.
-     *  Usage: Auth.fetch('/api/users')  or  Auth.fetch('/api/users', { method:'POST', body: JSON.stringify(x) })
-     *  Returns a normal Response promise — caller handles .json() etc.
-     *  Phase 8: intercepts 423 (mustChangePassword) and 401 (session expired)
-     *  globally — single redirect point so we don't have to touch every caller. */
+    /** fetch() wrapper that adds auth headers and redirects on 423 (must change password). */
     fetch: function (url, opts) {
         opts = opts || {};
         opts.headers = this.authHeaders(opts.headers);
@@ -193,7 +153,7 @@ const Auth = {
         } catch (_) {}
     },
 
-    // ── Default projects ──────────────────────────────────────
+    // --- Default projects ---
     DEFAULT_PROJECTS: [
         {
             id: 'proj_sap_dev',
@@ -221,16 +181,15 @@ const Auth = {
         },
     ],
 
-    // ── Default users ─────────────────────────────────────────
+    // --- Default users ---
     DEFAULT_USERS: [
-        // PTB-FND-002: display-only demo rows — no passwords. Login is server-side only;
-        // these exist for the legacy localStorage mirrors.
+        // display-only demo rows, no passwords — login is server-side only
         { username: 'user', displayName: 'สมชาย ABAP Developer', projectId: 'proj_sap_dev', balance: 100.00 },
         { username: 'user2', displayName: 'วิชัย SAP Consultant', projectId: 'proj_sap_cons', balance: 250.00 },
         { username: 'user3', displayName: 'นิภา QA Engineer', projectId: 'proj_sap_qa', balance: 500.00 },
     ],
 
-    // ── Init default data ─────────────────────────────────────
+    // --- Init default data ---
     initDefaults() {
         if (!localStorage.getItem(this.PROJECTS_KEY)) {
             localStorage.setItem(this.PROJECTS_KEY, JSON.stringify(this.DEFAULT_PROJECTS));
@@ -265,21 +224,19 @@ const Auth = {
         });
     },
 
-    // ── Login (DB-backed) ─────────────────────────────────────
+    // --- Login (DB-backed) ---
     login(username, password) {
-        // Async login via PostgreSQL API
         return fetch(BASE + '/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
-            credentials: 'include',                          // Phase 9: receive HttpOnly cookie
+            credentials: 'include',                          // receive the HttpOnly cookie
             signal: AbortSignal.timeout(5000)
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) return { ok: false, error: data.error || 'Invalid credentials', locked: !!data.locked };
                 var u = data.user;
-                // Phase 8: must_change_password flag from server
                 var mustChangePw = !!(data.mustChangePassword || (u && u.mustChangePassword));
                 var session = {
                     userId: u.id,
@@ -291,39 +248,32 @@ const Auth = {
                     loginTime: new Date().toISOString(),
                 };
                 localStorage.setItem(Auth.SESSION_KEY, JSON.stringify(session));
-                // Phase 39: session token lives ONLY in the HttpOnly cookie —
-                // never store it in localStorage (purge any legacy leftover).
+                // the session token lives only in the HttpOnly cookie — never in localStorage
                 try { localStorage.removeItem(Auth.TOKEN_KEY); } catch (_) {}
-                // Phase 9: persist CSRF token — echoed back in X-CSRF-Token header
+                // CSRF token is echoed back in the X-CSRF-Token header
                 if (data.csrfToken) localStorage.setItem(Auth.CSRF_KEY, data.csrfToken);
-                // Mirror balance / project to top-level keys so legacy reads
-                // (older inline JS in index.html) keep working. app.js itself
-                // is gone (moved to _archive/legacy/) — these mirrors stay
-                // because index.html reads `agenthub_balance` directly on boot.
+                // mirror balance/project to top-level keys; index.html reads agenthub_balance on boot
                 localStorage.setItem('agenthub_balance', u.balance.toString());
                 localStorage.setItem('agenthub_history', JSON.stringify([]));
                 if (u.projectId) localStorage.setItem('agenthub_project', u.projectId);
                 return { ok: true, session, mustChangePassword: mustChangePw };
             })
             .catch(function (e) {
-                // เซิร์ฟเวอร์คือที่เดียวที่ยืนยันตัวตนได้ — เดิม fallback ไป localStorage แล้วได้ session ปลอม
+                // เซิร์ฟเวอร์เป็นที่เดียวที่ยืนยันตัวตนได้ — ห้าม fallback ไป localStorage
                 console.warn('[Auth] API unavailable:', e.message);
                 return { ok: false, error: 'ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง' };
             });
     },
 
-    // ── Session ───────────────────────────────────────────────
-    // Normalize role from any source (DB returns 'general user', legacy sessions
-    // may contain 'general user' literal). Frontend works with
-    // 'admin' / 'trainer' / 'user' (Phase 30: trainer = superadmin).
+    // --- Session ---
+    // Normalize a role from any source to 'admin' / 'trainer' / 'user' (trainer = superadmin).
     _normalizeRole: function (r) {
         var v = String(r || '').toLowerCase().trim();
         if (v === 'admin')   return 'admin';
         if (v === 'trainer') return 'trainer';
         return 'user';
     },
-    /** Phase 24: true only while the session-scoped `petabyte_active` marker
-     *  cookie is alive — i.e. the browser hasn't been closed since login. */
+    /** True while the session-scoped `petabyte_active` cookie is alive, i.e. the browser hasn't closed since login. */
     _hasActiveCookie() {
         try {
             return document.cookie.split(';').some(function (c) {
@@ -334,10 +284,7 @@ const Auth = {
     getSession() {
         try {
             const s = JSON.parse(localStorage.getItem(this.SESSION_KEY) || 'null');
-            // Phase 24: "close browser = logout". A session in localStorage is
-            // only valid while the marker cookie is alive. If the cookie is gone
-            // (browser was closed) but stale localStorage remains, clear it and
-            // report logged-out so the page guards send the user to login.
+            // "close browser = logout": a localStorage session is only valid while the marker cookie lives
             if (s && !this._hasActiveCookie()) {
                 try {
                     localStorage.removeItem(this.SESSION_KEY);
@@ -351,12 +298,11 @@ const Auth = {
         } catch { return null; }
     },
 
-    // Phase 30: requiredRole accepts a string OR an array of roles so the
-    // admin page can allow both 'admin' and 'trainer' (superadmin).
+    // requiredRole: a role string or an array of roles
     check(requiredRole) {
         const session = this.getSession();
         if (!session) { window.location.href = '/login'; return false; }
-        // Phase 8: must change password before doing anything else
+        // must change password before anything else
         if (session.mustChangePassword) {
             window.location.href = '/change-password';
             return false;
@@ -369,8 +315,7 @@ const Auth = {
         return true;
     },
 
-    /** Phase 8: change own password. On success, clears the
-     *  mustChangePassword flag locally so the user can proceed. */
+    /** Change own password; on success clears the local mustChangePassword flag. */
     changePassword: function (newPassword, currentPassword) {
         var session = this.getSession();
         if (!session || !session.userId) {
@@ -378,9 +323,9 @@ const Auth = {
         }
         return fetch(BASE + '/api/users/' + session.userId + '/password', {
             method: 'PUT',
-            headers: this.authHeaders(),                   // Phase 9: includes X-CSRF-Token
+            headers: this.authHeaders(),                   // includes X-CSRF-Token
             credentials: 'include',
-            // PTB-FND-004: the server verifies currentPassword for a self-change
+            // the server verifies currentPassword for a self-change
             body: JSON.stringify({ password: newPassword, currentPassword: currentPassword || '' }),
         })
             .then(function (r) { return r.json().then(function (d) { return { status: r.status, body: d }; }); })
@@ -411,9 +356,7 @@ const Auth = {
                 this.saveUsers(users);
             }
         }
-        // Phase 9: invalidate session on server (best-effort, non-blocking).
-        // The HttpOnly cookie rides along via credentials:'include'; server
-        // clears it + deletes the session row.
+        // invalidate the server session (best-effort, non-blocking); server clears cookie + row
         try {
             fetch(BASE + '/api/logout', {
                 method: 'POST',
@@ -428,7 +371,7 @@ const Auth = {
         window.location.href = '/login';
     },
 
-    // ── Users — async (DB) ────────────────────────────────────
+    // --- Users — async (DB) ---
     fetchUsers() {
         return fetch(BASE + '/api/users', { headers: this.authHeaders() })
             .then(r => r.json())
@@ -440,7 +383,7 @@ const Auth = {
             .catch(() => this.getUsers());
     },
 
-    // ── Users — sync localStorage (fallback) ─────────────────
+    // --- Users — sync localStorage (fallback) ---
     getUsers() {
         try { return JSON.parse(localStorage.getItem(this.USERS_KEY) || '[]'); } catch { return []; }
     },
@@ -495,7 +438,7 @@ const Auth = {
         }
     },
 
-    // ── Projects — async (DB) ─────────────────────────────────
+    // --- Projects — async (DB) ---
     fetchProjects() {
         return fetch(BASE + '/api/projects', { headers: this.authHeaders() })
             .then(r => r.json())
@@ -507,7 +450,7 @@ const Auth = {
             .catch(() => this.getProjects());
     },
 
-    // ── Projects — sync localStorage (fallback) ───────────────
+    // --- Projects — sync localStorage (fallback) ---
     getProjects() {
         try { return JSON.parse(localStorage.getItem(this.PROJECTS_KEY) || '[]'); } catch { return []; }
     },
@@ -570,5 +513,5 @@ const Auth = {
     },
 };
 
-// ES module แล้ว — global ต้องขึ้น window เอง (HTML และไฟล์อื่นเรียกผ่านชื่อเปล่า)
+// ES module: the global must be put on window explicitly
 window.Auth = Auth;

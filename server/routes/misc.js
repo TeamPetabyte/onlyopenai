@@ -17,8 +17,7 @@ const {
 router.get('/api/health', (req, res) => {
     res.json({
         ok: true,
-        // PTB-FND-043: unauthenticated — booleans only. Model and OpenAI object ids
-        // are on /api/version (admin) where they belong.
+        // Unauthenticated: booleans only; model and OpenAI object ids live on /api/version (admin).
         mode:          HAS_API_KEY ? 'openai' : 'mock',
         rag:           !!getVectorStoreId(),
     });
@@ -34,8 +33,7 @@ router.get('/api/version', requireAdmin, async (req, res) => {
             applied:  s.applied.length,
             pending:  s.pending.length,
             modified: s.modified.length,
-            // only list the problematic ones explicitly — applied list
-            // can be long and noisy
+            // the applied list can be long; list only pending/modified
             pendingFiles:  s.pending,
             modifiedFiles: s.modified,
         };

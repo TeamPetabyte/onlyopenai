@@ -2,7 +2,7 @@
 import { escapeHtml, flash, formatDateStd, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── SKILL PROMPTS ── มุมมอง registry; CRUD เต็มรออนุมัติย้ายลง DB
+  // --- Skill Prompts: registry view ---
   renderSkills: function () {
     var self = this;
     var statusEl = document.getElementById('skills-status');
@@ -96,8 +96,6 @@ export default {
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:8px;flex-shrink:0">'
-        // v1.5.1: test/history buttons removed — all testing lives in the
-        // 🧪 Prompt Lab tab now; this page only manages the prompts.
         +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
         +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
         +   '</div>'
@@ -131,7 +129,7 @@ export default {
       .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
-  // ── Phase 22: add / edit / delete skill prompts from the UI ──────
+  // add / edit / delete skill prompts from the UI
   _fillSkillModal: function (s) {
     var g = function (id) { return document.getElementById(id); };
     g('es-id').value      = s.id || '';
@@ -149,7 +147,7 @@ export default {
     if (el && c) c.textContent = (el.value || '').length.toLocaleString() + ' chars';
   },
 
-  // ── Prompt Lab ── ทดสอบ prompt โดยไม่แตะ budget gate/ประวัติแชทจริง — เลือก skill+model รัน ตัดสิน ดูประวัติ ในหน้าเดียว
+  // --- Prompt Lab: test a prompt without touching the budget gate or real chat history ---
 
   // Entry point from the Skill Prompts cards: 🧪 opens the lab on that skill,
   // 📋 additionally scrolls down to the history block.
@@ -173,8 +171,7 @@ export default {
         var sel = d.skills || [];
         var el  = document.getElementById('lab-skill');
         if (!el) return;
-        // v1.9.1: Auto is the default — the chat router picks the prompt so
-        // seniors don't have to; history shows which skill each run matched.
+        // Auto is the default: the chat router picks the prompt.
         var want = self._labSkillId || 'auto';
         el.innerHTML = '<option value="auto">' + escapeHtml(t('lab.autoSkill', '🤖 Auto — AI เลือก prompt เอง')) + '</option>'
           + sel.map(function (s) {
@@ -199,8 +196,7 @@ export default {
     this.loadTestHistory();
   },
 
-  // v1.8.8: one-click fresh test — clears the question, answer, meta and the
-  // approval bar so the next Run starts clean (no manual select-all-delete).
+  // One-click fresh test: clears question, answer, meta and the approval bar.
   labNewTest: function () {
     var box = document.getElementById('lab-question');
     if (box) box.value = '';
@@ -218,12 +214,11 @@ export default {
     if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
   },
 
-  // Show which system prompt is being tested (full content + length) so the
-  // page explains itself: question vs THIS prompt.
+  // Show which system prompt is being tested (full content + length).
   _loadLabPrompt: function () {
     var id = this._labSkillId;
     if (!id) return;
-    // v1.9.1: auto mode has no fixed prompt to preview.
+    // auto mode has no fixed prompt to preview.
     if (id === 'auto') {
       var sum = document.getElementById('lab-prompt-summary');
       var pre = document.getElementById('lab-prompt-preview');
@@ -276,7 +271,7 @@ export default {
         if (ans) ans.textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
           + (d.model ? ' · ' + d.model : '')
-          + (d.routed ? ' · 🎯 ' + (d.routed.label || d.routed.skillId || '') : '');   // v1.9.1: which prompt Auto matched
+          + (d.routed ? ' · 🎯 ' + (d.routed.label || d.routed.skillId || '') : '');   // which prompt Auto matched
         self.showVerdictBar('lab', d.logId || null);
         // The run itself created a (pending) history row — refresh the list.
         self.loadTestHistory(true);
@@ -287,7 +282,7 @@ export default {
       });
   },
 
-  // แนบไฟล์ Z-program: 1MB/ไฟล์ + รวม 1.5MB (express.json รับ 2MB) — append เข้า textarea ให้แก้ได้ backend ไม่ต้องเปลี่ยน
+  // แนบไฟล์ Z-program: 1MB/ไฟล์ + รวม 1.5MB (express.json รับ 2MB) — append เข้า textarea
   _LAB_MAX_FILE_BYTES:  1024 * 1024,
   _LAB_MAX_TOTAL_CHARS: 1536 * 1024,
 
@@ -342,7 +337,7 @@ export default {
     el.textContent = n ? n.toLocaleString() + ' ' + t('lab.charCount', 'ตัวอักษร') : '';
   },
 
-  // ── verdict ── renderer เดียวใช้ทั้ง modal เทสต์ (prefix ts) และหน้า history (th) — id ขึ้นต้นด้วย prefix กันชน
+  // --- Verdict: one renderer shared by the lab and the history detail; element ids carry the prefix ---
 
   _verdictLogIds: {},   // prefix → log_id currently being judged
   _verdictPick:   {},   // prefix → selected verdict value
@@ -353,8 +348,7 @@ export default {
     { v: 'incorrect', icon: '❌', key: 'modal.testSkill.vIncorrect', fb: 'ผิด' },
   ],
 
-  // Render the judgement bar into #<prefix>-verdict. `existing` (optional) is
-  // a full log record — the history detail passes it to prefill a past verdict.
+  // Render the judgement bar into #<prefix>-verdict; `existing` (a full log record) prefills a past verdict.
   showVerdictBar: function (prefix, logId, existing) {
     var box = document.getElementById(prefix + '-verdict');
     if (!box) return;
@@ -447,11 +441,10 @@ export default {
       .finally(function () { if (btn) { btn.disabled = false; btn.style.opacity = '1'; } });
   },
 
-  // keepDetail=true → don't collapse the open detail pane (used after saving
-  // a verdict from the detail view so the senior keeps their place).
+  // keepDetail=true keeps the open detail pane (after saving a verdict from it).
   loadTestHistory: function (keepDetail) {
     var self    = this;
-    // history เป็น GLOBAL ทุก skill — เคย scope ตาม dropdown แล้ว tester งงว่ารันหาย
+    // history เป็น GLOBAL ทุก skill
     var verdict = (document.getElementById('lab-filter') || {}).value || '';
     var errEl   = document.getElementById('lab-hist-error');
     var listEl  = document.getElementById('lab-list');
@@ -501,7 +494,7 @@ export default {
         + (r.is_eval_case ? '<span title="อยู่ในชุดข้อสอบ">⭐</span>' : '')
         + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
         + '<span style="font-family:Geist Mono,monospace;font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
-        // v1.8.5: global history — say which skill/prompt this run tested
+        // which skill/prompt this run tested
         + (r.skill_label ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--surface-3);border:1px solid var(--border-subtle);color:var(--text-2);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(r.skill_label) + '</span>' : '')
         + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
         + '<span style="flex:1;font-size:.78rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
@@ -535,8 +528,7 @@ export default {
         + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
         + escapeHtml(text || '') + '</pre>';
     };
-    // ⭐ promote/demote into the exam set. Only judged cases with a
-    // golden reference qualify — the backend enforces it; here we just hint.
+    // ⭐ promote/demote into the exam set; the backend enforces verdict + golden reference, this only hints.
     var canStar = log.verdict === 'correct' || (log.corrected_answer || '').trim();
     var starBtn = log.verdict
       ? '<button type="button" class="btn-action" style="padding:4px 12px;font-size:.75rem'
@@ -564,8 +556,7 @@ export default {
     det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 
-  // ⭐ toggle → backend validates (needs verdict + golden reference), then
-  // re-render both the detail (button state) and the list (row badge/stats).
+  // ⭐ toggle: backend validates, then re-render the detail and the list.
   toggleEvalCase: function (logId, on) {
     var self = this;
     fetch(BASE + '/api/skill-test-logs/' + logId + '/eval-case', {
@@ -587,7 +578,7 @@ export default {
       });
   },
 
-  // ── Phase 30: Evals page — exam runner + score report ─────────────────
+  // --- Evals: exam runner + score report ---
 
   renderEvals: function () {
     var self = this;
@@ -668,8 +659,7 @@ export default {
       });
   },
 
-  // Poll the active run every 2.5s until it leaves 'running'. Each case takes
-  // seconds (answer + judge), so this cadence is plenty.
+  // Poll the active run every 2.5s until it leaves 'running'.
   _pollEvalRun: function () {
     var self  = this;
     var runId = this._activeEvalRunId;
@@ -710,8 +700,7 @@ export default {
     fetch(BASE + '/api/evals/' + this._activeEvalRunId + '/cancel', {
       method: 'POST', headers: Auth.authHeaders(),
     }).catch(function () {});
-    // Keep polling — the loop flips the run to 'cancelled' after the current
-    // case and the poller closes the UI from that status change.
+    // Keep polling: the run flips to 'cancelled' after the current case and the poller closes the UI.
   },
 
   loadEvalRuns: function () {

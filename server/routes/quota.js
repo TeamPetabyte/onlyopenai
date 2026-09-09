@@ -14,8 +14,8 @@ const {
     spentToday,
 } = ctx;
 
-// flow: user ชน cap → POST ขอ → admin resolve; approve = bonus ของวันนี้ (Bangkok) ทำ cap ขยับ — pending ได้วันละหนึ่ง
-// POST /api/quota-requests   — user requests a temporary cap increase
+// flow: user ชน cap → POST ขอ → admin resolve; approve = bonus (Bangkok date) — pending ได้ทีละหนึ่ง
+// POST /api/quota-requests — user requests a temporary cap increase
 router.post('/api/quota-requests', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
     if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
@@ -27,9 +27,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
             message: 'requestedExtra must be > 0 and ≤ 10000' });
     }
     try {
-        // PTB-FND-023: one pending request per user, full stop — the same rule the
-        // partial unique index in phase57-001 enforces underneath (the old same-day
-        // rule was a check-then-act race and disagreed with any index).
+        // One pending request per user; the partial unique index enforces the same rule underneath.
         const dup = await pool.query(`
             SELECT request_id FROM tbl_quota_request
              WHERE user_id = $1
@@ -55,8 +53,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
             [uid, projectId, requestedExtra, reason || null]);
         res.json({ ok: true, request: r.rows[0] });
     } catch (e) {
-        // two requests racing past the check above: the unique index catches the
-        // second one — report it as the duplicate it is, not as a 500
+        // a request that raced past the check above hits the unique index: report it as a duplicate, not a 500
         if (e.code === '23505') {
             return res.status(409).json({ ok: false, error: 'pending_request_exists',
                 message: 'You already have a pending request — wait for an admin to respond first' });
@@ -71,7 +68,7 @@ router.post('/api/quota-requests', requireAuth, async (req, res) => {
 router.get('/api/quota-requests', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
     const role = req.session?.role;
-    const isAdmin = role === 'admin' || role === 'trainer';   // PTB-FND-011: normalizeRole never yields 'superadmin'; trainer is the superadmin
+    const isAdmin = role === 'admin' || role === 'trainer';   // trainer is the superadmin; normalizeRole never yields 'superadmin'
     const status = ['pending','approved','denied','cancelled'].includes(req.query.status)
         ? req.query.status : null;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
@@ -153,8 +150,7 @@ router.post('/api/quota-requests/:id/resolve', requireAdmin, async (req, res) =>
                 RETURNING bonus_id, bonus_date, extra_amount`,
                 [q.user_id, q.requested_extra, adminId, id, note]);
             bonus = ins.rows[0] || null;
-            // Phase 21.12 — credit the PERSISTENT bonus balance. This is the
-            // live spendable figure; it carries over until consumed.
+            // Credit the persistent bonus balance; it carries over until consumed.
             const bal = await client.query(
                 `UPDATE tbl_user
                     SET bonus_balance = COALESCE(bonus_balance, 0) + $1

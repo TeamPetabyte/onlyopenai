@@ -1,9 +1,5 @@
-// harness.js — boot one real server.js on a throwaway database for the route tests
-//
-// The DB name is fixed (petabyte_route_test) and dropped + recreated every run, so
-// the server's own migration runner is exercised from an empty schema each time.
-// OpenAI is pointed at a closed port: any request that reaches the network fails
-// fast instead of spending money.
+// harness.js — boot one real server.js on a throwaway database for the route tests.
+// The DB is dropped and recreated every run; OpenAI points at a closed port so nothing spends money.
 
 const { spawn } = require('child_process');
 const net = require('net');
@@ -79,7 +75,7 @@ async function start() {
 
     const pool = new Pool({ host: DB.host, port: DB.port, user: DB.user, password: DB.password, database: DB.name, max: 2 });
 
-    // role_id 1 = admin, 3 = trainer; the seeded 'admin' is promoted to trainer by a migration, so make our own
+    // role_id 1 = admin, 3 = trainer; the seeded 'admin' is promoted by a migration, so make our own
     async function createStaff(username, password, roleId = 1) {
         const hash = await bcrypt.hash(password, 10);
         const r = await pool.query(

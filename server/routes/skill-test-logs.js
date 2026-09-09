@@ -132,7 +132,6 @@ router.get('/api/skill-test-logs/:logId', requireTrainer, async (req, res) => {
     }
 });
 
-// eval harness: ทุก ⭐ case ตอบใหม่ด้วย model ที่ทดสอบ แล้วให้ judge เทียบเฉลย — รันทีละหนึ่ง (ช้า+เงินจริง)
 
 
 return router;

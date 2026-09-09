@@ -4,7 +4,7 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const bcrypt = require('bcrypt');
-// 12 คือค่าที่แนะนำปัจจุบัน (เดิม 10); hash เก่ายังเทียบผ่านได้เพราะ cost ฝังอยู่ในตัว hash
+// 12 = ค่าแนะนำปัจจุบัน; hash เก่ายังเทียบผ่านได้เพราะ cost ฝังอยู่ในตัว hash
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 12;
 const {
     _extractToken,
@@ -32,7 +32,7 @@ async function blockedByTargetRole(req, targetId) {
     return null;
 }
 
-// GET /api/users — admin only (user list is sensitive). Phase 7: hide soft-deleted.
+// GET /api/users — admin only; hides soft-deleted
 router.get('/api/users', requireAdmin, async (req, res) => {
     try {
         // effective_status รวม acc_status_id กับ locked_until — auto-lock ไม่ได้แตะ acc_status
@@ -62,7 +62,7 @@ router.get('/api/users', requireAdmin, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// GET /api/users/:id  — single user with balance. Phase 7: hide soft-deleted.
+// GET /api/users/:id — single user with balance
 router.get('/api/users/:id', requireAuth, async (req, res) => {
     // โปรไฟล์ของคนอื่นเป็นของ admin เท่านั้น — id เป็นเลขเรียงจึงไล่อ่านได้ถ้าไม่กัน
     const targetId = parseInt(req.params.id, 10);
@@ -90,15 +90,14 @@ router.get('/api/users/:id', requireAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// POST /api/users  — create user. Phase 7: enforce password policy on create.
+// POST /api/users — create user
 router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, res) => {
     const { username, password, displayName, role, balance, projectId } = req.body;
     // Strength check is still separate — schema only enforces length range
     const pwErr = validatePasswordStrength(password, username);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
     const balanceNum = (balance === undefined) ? 0 : balance;
-    // Concept B: per-user daily spending limit. null/'' = no cap (unlimited,
-    // bounded only by the project pool). Validated by createUserSchema.
+    // dailyCap: null/'' = no cap (bounded only by the project pool)
     const dailyCap = (req.body.dailyCap === undefined
                        || req.body.dailyCap === null
                        || req.body.dailyCap === '')
@@ -125,7 +124,7 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
             VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,1,$7,$8) RETURNING user_id`,
             [projId, roleId, username, hash, name, surname, mustChangePw, effDailyCap]);
         const userId = r.rows[0].user_id;
-        // คง tbl_credits ไว้ที่ 0 — Concept B ไม่ใช้แล้ว แต่บาง join ยังคาดหวังแถว
+        // คง tbl_credits ไว้ที่ 0 — บาง join ยังคาดหวังแถว
         if (projId) {
             await pool.query(`INSERT INTO tbl_credits (user_id, project_id, user_credits) VALUES ($1,$2,0)
                 ON CONFLICT (user_id) DO NOTHING`,
@@ -146,11 +145,10 @@ router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req
 
 // PUT /api/users/:id  — edit user
 router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (req, res) => {
-    // PARTIAL update — แตะเฉพาะ key ที่มากับ body (เคยเขียนทับทุกคอลัมน์ด้วย default)
+    // PARTIAL update — แตะเฉพาะ key ที่มากับ body
     const b = req.body;
     const has = k => Object.prototype.hasOwnProperty.call(b, k);
 
-    // Derive name/surname only if the caller sent them (or displayName).
     let name, surname, nameChanged = false;
     if (has('name') || has('surname')) {
         name    = has('name')    ? (b.name    || '') : undefined;
@@ -163,10 +161,8 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         nameChanged = true;
     }
 
-    // Enforce password policy when admin sets a new password
     if (b.password) {
-        // PTB-FND-004: this route has no current-password check, so it must not be
-        // a back door for changing one's own password.
+        // No current-password check here, so it must not change one's own password.
         if (req.session.userId === parseInt(req.params.id, 10)) {
             return res.status(400).json({ ok: false, error: 'Change your own password via the password page (current password required)' });
         }
@@ -190,8 +186,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
     const accStatusId = has('accStatusId') ? b.accStatusId : undefined;
 
     try {
-        // Snapshot current values before UPDATE so the audit row records
-        // exactly which fields changed (and from what).
+        // Snapshot for the audit diff.
         const beforeRows = await pool.query(
             `SELECT u.name, u.surname, u.role_id, u.project_id, u.acc_status_id,
                     COALESCE(cr.user_credits, 0) AS balance
@@ -201,7 +196,6 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         const before = beforeRows.rows[0] || null;
         if (!before) return res.json({ ok: false, error: 'User not found' });
 
-        // Build dynamic SET clause — only columns that were actually provided.
         const sets = [], params = [];
         const addSet = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
         if (nameChanged && name    !== undefined) addSet('name',    name);
@@ -219,8 +213,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
         if (b.password) {
             const hash = await bcrypt.hash(b.password, BCRYPT_COST);
             addSet('password', hash);
-            // force the target user to pick their own pw next login,
-            // unless admin is editing their own row (avoids self-lockout).
+            // target must pick their own password next login; skip on self-edit (avoids lockout)
             const flipFlag = req.session.userId !== parseInt(req.params.id, 10);
             addSet('must_change_password', flipFlag);
         }
@@ -248,8 +241,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
                 [req.params.id, credProjId, balanceNum]);
         }
 
-        // Compose diff — only consider fields that were provided this call
-        // AND actually changed. Everything else stays off the audit row.
+        // Audit only fields that were provided and actually changed.
         const afterSubset = {};
         if (nameChanged && name    !== undefined) afterSubset.name    = name;
         if (nameChanged && surname !== undefined) afterSubset.surname = surname;
@@ -280,8 +272,7 @@ router.put('/api/users/:id', requireAdmin, validate(schemas.updateUser), async (
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
 });
 
-// PUT /api/users/:id/password  — change own password (auth + self-only)
-// lets non-admin users change their own password without admin rights.
+// PUT /api/users/:id/password — change own password (staff may reset others)
 router.put('/api/users/:id/password', requireAuth, validate(schemas.changePassword), async (req, res) => {
     const targetId = parseInt(req.params.id);
     const isStaff = req.session.role === 'admin' || req.session.role === 'trainer';   // trainer = superadmin
@@ -289,7 +280,6 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
         return res.status(403).json({ ok: false, error: 'Can only change own password' });
     }
     const { password, currentPassword } = req.body;
-    // stronger password policy applied here too
     const pwErr = validatePasswordStrength(password);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
     const roleBlock = await blockedByTargetRole(req, targetId);
@@ -297,8 +287,7 @@ router.put('/api/users/:id/password', requireAuth, validate(schemas.changePasswo
     try {
         // เปลี่ยนรหัสตัวเอง = ล้าง must_change_password; admin reset ให้คนอื่น = คงไว้
         const isSelf = req.session.userId === targetId;
-        // PTB-FND-004: changing your own password proves you still hold the old one —
-        // otherwise a borrowed browser is a permanent takeover.
+        // Self-change requires the current password — otherwise a borrowed browser is a permanent takeover.
         if (isSelf) {
             if (typeof currentPassword !== 'string' || !currentPassword) {
                 return res.status(400).json({ ok: false, error: 'Current password is required' });
@@ -365,20 +354,17 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
         const prevBal = parseFloat(u.rows[0].user_credits) || 0;
         const delta   = balanceNum - prevBal;
 
-        // User must be on a project; we have nowhere to debit/credit from otherwise.
         if (!projId) {
             await client.query('ROLLBACK');
             return res.json({ ok: false, error: 'User is not assigned to a project — assign first then set credit' });
         }
 
-        // Lock project pool. LEFT JOIN-style fallback: a project with no top-up
-        // history yet has no tbl_balance row → treat pool as 0.
+        // Lock the pool; a project with no top-up yet has no tbl_balance row → 0.
         const pb = await client.query(
             `SELECT project_credits FROM tbl_balance
               WHERE project_id = $1 FOR UPDATE`, [projId]);
         const poolBefore = pb.rows.length ? parseFloat(pb.rows[0].project_credits) : 0;
 
-        // Insufficient pool check (only matters when allocating MORE to user).
         if (delta > 0 && poolBefore < delta) {
             await client.query('ROLLBACK');
             return res.json({
@@ -390,7 +376,6 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
             });
         }
 
-        // 1) Upsert user_credits to new value
         await client.query(`
             INSERT INTO tbl_credits (user_id, project_id, user_credits)
             VALUES ($1, $2, $3)
@@ -410,7 +395,7 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
                  prevBal, balanceNum, req.session.userId]);
         }
 
-        // 2) Adjust project pool by -delta (if user gets more, pool drops)
+        // pool moves by -delta
         let poolAfter = poolBefore;
         if (delta !== 0) {
             if (pb.rows.length) {
@@ -423,7 +408,7 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
                     [delta, projId]);
                 poolAfter = parseFloat(r.rows[0].project_credits);
             } else if (delta < 0) {
-                // No balance row yet, but user is returning credit → create one with the credit returned
+                // no pool row yet; returned credit creates it
                 await client.query(
                     `INSERT INTO tbl_balance (project_id, project_credits, top_up_date, top_up_time, user_id)
                      VALUES ($1, $2, CURRENT_DATE, NOW(), $3)`,
@@ -445,9 +430,9 @@ router.put('/api/users/:id/balance', requireAdmin, validate(schemas.setBalance),
         });
         res.json({
             ok: true,
-            balance: balanceNum,             // new user credit
+            balance: balanceNum,
             projectId: projId,
-            projectBalance: poolAfter,       // for UI to refresh project rows
+            projectBalance: poolAfter,
             delta,
         });
     } catch (e) {
@@ -506,7 +491,6 @@ router.put('/api/users/:id/daily-cap', requireAdmin, validate(schemas.dailyCap),
     const cap = req.body.dailyCap;
     const capVal = (cap === undefined || cap === null) ? null : cap;
     try {
-        // Snapshot previous cap for audit diff
         const prev = await pool.query(
             'SELECT daily_cap FROM tbl_user WHERE user_id=$1 AND is_deleted=FALSE',
             [req.params.id]);
@@ -555,14 +539,12 @@ router.get('/api/users/:id/daily-cap-status', requireAuth, async (req, res) => {
 router.delete('/api/users/:id', requireAdmin, async (req, res) => {
     const targetId = parseInt(req.params.id);
     if (!Number.isInteger(targetId)) return res.json({ ok: false, error: 'Invalid user id' });
-    // Don't let an admin nuke themselves out of the running session
     if (req.session.userId === targetId) {
         return res.json({ ok: false, error: 'Cannot delete your own account' });
     }
     const roleBlock = await blockedByTargetRole(req, targetId);
     if (roleBlock) return res.status(403).json({ ok: false, error: roleBlock });
     try {
-        // Snapshot who's being deleted for audit
         const before = await pool.query(
             'SELECT username, name, surname, role_id, project_id FROM tbl_user WHERE user_id=$1',
             [targetId]);
@@ -571,7 +553,6 @@ router.delete('/api/users/:id', requireAdmin, async (req, res) => {
              WHERE user_id = $1 AND is_deleted = FALSE`,
             [targetId]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'User not found' });
-        // Revoke any live sessions for this user
         const sessRows = await pool.query('DELETE FROM tbl_session WHERE user_id = $1', [targetId]);
         logAdminAction(req, {
             action: 'delete_user',

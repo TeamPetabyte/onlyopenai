@@ -1,5 +1,5 @@
 // smoke.mjs — เส้นทางเงินบน server ที่รันอยู่: login → chat 1 คำถาม → เครดิต project ถูกตัดเท่า cost
-// ใช้: $env:SMOKE_USER='...'; $env:SMOKE_PASS='...'; npm run smoke  (SMOKE_URL เปลี่ยน server ได้ ค่าเริ่มต้น :3001)
+// ใช้: SMOKE_USER, SMOKE_PASS (และ SMOKE_URL ค่าเริ่มต้น :3001) แล้ว npm run smoke
 
 const URL_BASE = process.env.SMOKE_URL || 'http://localhost:3001';
 const USER = process.env.SMOKE_USER, PASS = process.env.SMOKE_PASS;
@@ -33,7 +33,7 @@ const cookie = setCookies.map((c) => c.split(';')[0]).join('; ');
 if (!cookie.includes('petabyte_session=')) die('login สำเร็จแต่ไม่ได้ cookie petabyte_session');
 const auth = { cookie, 'x-csrf-token': login.csrfToken };
 
-// เงินจริงอยู่ที่ project_credits (Concept B) — ไม่ใช่ balance ราย user
+// เงินจริงอยู่ที่ project_credits — ไม่ใช่ balance ราย user
 async function projectBalance() {
     const r = await http('/api/projects', { headers: auth });
     const j = await r.json().catch(() => null);

@@ -8,7 +8,6 @@ export default {
     var balEl = document.getElementById('balance-table');
     var hisEl = document.getElementById('topup-history-table');
 
-    // cached render (instant)
     if (this._cachedDBProjects && this._cachedDBProjects.length) {
       this._renderBalanceTable(this._cachedDBProjects);
     } else if (balEl) {
@@ -16,7 +15,6 @@ export default {
     }
     if (hisEl) hisEl.innerHTML = '<tbody><tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:24px">⏳ กำลังโหลด...</td></tr></tbody>';
 
-    // fresh fetch (always)
     Promise.all([
       this.fetchProjectsFromDB().catch(function (e) {
         console.error('[balance] projects fetch failed:', e);
@@ -35,7 +33,7 @@ export default {
     });
   },
 
-  // ฟอร์แมตเฉพาะหน้า balance ("THB 2,050.00" ตาม mockup) — formatTHB กลางคงเดิม
+  // ฟอร์แมตเฉพาะหน้า balance ("THB 2,050.00")
   _formatBahtFmt: function (n) {
     var v = parseFloat(n || 0);
     return 'THB ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -105,11 +103,10 @@ export default {
       + '</tr></thead><tbody>' + rows + '</tbody>';
   },
 
-  // ── CREDITS PAGE ── สองแท็บ: Credit Management (delta model) + Usage Analytics
+  // Credits page: สองแท็บ Credit Management + Usage Analytics
   _currentCreditsTab: 'credit',
 
   renderCredits: function () {
-    // Hide whichever pane isn't selected; render content for selected tab.
     this.switchCreditsTab(this._currentCreditsTab || 'credit');
   },
 
@@ -130,8 +127,7 @@ export default {
       var el = document.getElementById(panes[k]);
       if (el) el.classList.toggle('hidden', k !== tab);
     });
-    // poll the Cap Management table so "used today" + project
-    // pool stay live while admin watches. Clear when leaving the tab.
+    // poll the Cap table so "used today" stays live; cleared when leaving the tab.
     if (this._capPollTimer) { clearInterval(this._capPollTimer); this._capPollTimer = null; }
     if (tab === 'credit') {
       this.renderCreditManagement();
@@ -149,8 +145,7 @@ export default {
     if (tab === 'usage')  this.renderUsage();
   },
 
-  // Cached snapshot from /api/credits so the Edit modal can read project
-  // balance and previous user credit without another round-trip.
+  // Snapshot from /api/credits so the Edit modal needs no second round-trip.
   _cachedCredits: [],
 
   renderCreditManagement: function (silent) {
@@ -206,7 +201,6 @@ export default {
           + (bonus > 0 ? '<span style="color:#16a34a;font-size:.7rem" title="bonus คงเหลือ"> +' + fmtB(bonus) + ' bonus</span>' : '')
           + '<span style="color:var(--text-3);font-size:.72rem"> ' + TTc('unit.perDay','/วัน') + '</span>';
 
-      // Real-time "used today" cell with progress bar.
       var usedCell;
       if (!hasCap) {
         usedCell = '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + fmtB(spent) + '</span>'
@@ -255,7 +249,7 @@ export default {
       + '</tr></thead><tbody>' + tbody + '</tbody>';
   },
 
-  // Phase 21.10 (Concept B) — open the Daily Cap editor for a user.
+  // Open the Daily Cap editor for a user.
   openEditCap: function (userId) {
     var row = (this._cachedCredits || []).find(function (x) { return x.userId === userId; });
     if (!row) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }

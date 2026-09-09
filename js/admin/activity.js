@@ -2,7 +2,7 @@
 import { escapeHtml, flash, formatDate, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── ACTIVITY LOG ──────────────────────────────────────
+  // Chat activity (per-user history)
   renderActivity: function () {
     var container = document.getElementById('activity-log');
     container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem">' + t('common.loadingFromDbData', '⏳ กำลังโหลดข้อมูลจาก DB...') + '</div>';
@@ -39,7 +39,7 @@ export default {
     });
   },
 
-  // ── Activity Log sub-tabs ───────────────────────────────
+  // Activity Log sub-tabs
   _currentActivityTab: 'chat',
   switchActivityTab: function (tab) {
     this._currentActivityTab = tab;
@@ -64,7 +64,7 @@ export default {
     this.switchActivityTab(this._currentActivityTab || 'chat');
   },
 
-  // ── Login/Logout history ── เอาเฉพาะแถว login_ok — ข้อมูล logout อยู่ในแถวเดียวกันแล้ว (แถว event อื่นเคยโชว์เป็น ghost login)
+  // Login/Logout history — เอาเฉพาะแถว login_ok (logout อยู่ในแถวเดียวกัน)
   renderAuditLog: function () {
     var body = document.getElementById('audit-log-body');
     if (!body) return;
@@ -93,10 +93,9 @@ export default {
               : (mins > 0 ? mins + 'm ' + secs + 's' : secs + 's');
           }
           var inFmt  = inDt  ? formatDate(inDt.toISOString())  : '—';
-          // log_out_time NULL = ยังไม่บันทึก logout — โชว์ "—" ไม่ใช่ "ยังออนไลน์" (ข้อมูลเก่าก็ NULL ได้)
+          // log_out_time NULL = ยังไม่บันทึก logout — โชว์ "—" ไม่ใช่ "ยังออนไลน์"
           var outFmt = outDt ? formatDate(outDt.toISOString()) : '<span style="color:var(--text-3)">—</span>';
-          // escape user-provided fields (display_name, username,
-          // name) before inlining into HTML.
+          // escape user-provided fields before inlining into HTML.
           var safeName  = escapeHtml(l.display_name || l.name || '—');
           var safeUname = escapeHtml(l.username || '—');
           return '<tr>' +
@@ -113,7 +112,7 @@ export default {
       });
   },
 
-  // ── Admin actions history ── ป้าย action + variant สี รวมไว้ที่เดียว
+  // Admin actions history: action labels + colour variant
   _actionLabels: {
     create_user:          { icon: '➕', text: 'สร้าง User',           variant: 'success' },
     update_user:          { icon: '✏️', text: 'แก้ไข User',            variant: '' },
@@ -183,7 +182,7 @@ export default {
     var after  = cj.after  || {};
     var extra  = cj.extra  || null;
 
-    // Collect all changed keys (union of before/after)
+    // union of before/after keys
     var keys = {};
     Object.keys(before).forEach(function (k) { keys[k] = true; });
     Object.keys(after).forEach(function (k) { keys[k] = true; });
@@ -191,17 +190,16 @@ export default {
 
     var rows = keyList.map(function (k) {
       var bv = before[k], av = after[k];
-      // Fields that only have an "after" (create, add) → show as "added"
+      // only "after" (create) → added
       if (!(k in before)) {
         return '<span class="diff-row"><span class="diff-key">' + self._esc(self._fieldName(k)) + ':</span> ' +
                '<span class="diff-val-after">+ ' + self._fmtVal(av) + '</span></span>';
       }
-      // Fields that only have a "before" (delete snapshot) → show as "removed"
+      // only "before" (delete snapshot) → removed
       if (!(k in after)) {
         return '<span class="diff-row"><span class="diff-key">' + self._esc(self._fieldName(k)) + ':</span> ' +
                '<span class="diff-val-before">' + self._fmtVal(bv) + '</span></span>';
       }
-      // Normal diff
       return '<span class="diff-row">' +
              '<span class="diff-key">' + self._esc(self._fieldName(k)) + ':</span> ' +
              '<span class="diff-val-before">' + self._fmtVal(bv) + '</span>' +
@@ -222,7 +220,7 @@ export default {
       ? rows.join(' ')
       : (extraHtml ? '' : '<span class="diff-none">' + t('diff.noFieldChanges', '— ไม่มีฟิลด์เปลี่ยนแปลง —') + '</span>');
 
-    // Raw JSON pane — always available for forensic drill-down
+    // Raw JSON pane for forensic drill-down
     var rawJson = JSON.stringify(cj, null, 2);
     var rawPane = '<details class="diff-raw"><summary>' + escapeHtml(t('diff.viewRawJson', 'ดู raw JSON')) + '</summary>' +
                   '<pre>' + this._esc(rawJson) + '</pre></details>';
@@ -233,8 +231,7 @@ export default {
   _renderTarget: function (l) {
     if (!l.target_type) return '<span class="diff-none">—</span>';
     if (l.target_type === 'user') {
-      // target_id is a user_id; we don't always have the username joined,
-      // but change_json often has it. Look in after/before for hints.
+      // target_id is a user_id; change_json often carries the username.
       var cj = l.change_json || {};
       var hint = (cj.after && cj.after.username) || (cj.before && cj.before.username);
       var label = '👤 User #' + (l.target_id != null ? l.target_id : '?');
@@ -287,20 +284,16 @@ export default {
         }
         body.innerHTML = d.logs.map(function (l) {
           var dt = l.edit_time ? formatDate(new Date(l.edit_time).toISOString()) : (l.edit_date || '—');
-          // Admin cell
           var adminHtml = '<span class="audit-name">' + self._esc(l.display_name || '—') + '</span>' +
                           '<br><span class="audit-username" style="font-size:.74rem">@' + self._esc(l.username || '—') + '</span>';
 
-          // Action cell (pill with icon)
           var meta = self._actionLabels[l.action_type] || { icon: '•', text: l.action_type || 'unknown', variant: '' };
           var actionText = t('action.' + l.action_type, meta.text);
           var actionHtml = '<span class="action-label ' + meta.variant + '">' +
                            meta.icon + ' ' + self._esc(actionText) + '</span>';
 
-          // Target cell
           var targetHtml = self._renderTarget(l);
 
-          // Details cell — before/after diff
           var diffHtml = self._renderDiff(l.change_json);
 
           return '<tr>' +

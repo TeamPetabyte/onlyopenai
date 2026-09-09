@@ -1,7 +1,4 @@
-/**
- * server.js — PetabyteAi Backend Server
- * OpenAI Streaming proxy + PostgreSQL database
- */
+// server.js — PetabyteAi backend: Express + OpenAI streaming proxy + PostgreSQL.
 
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express      = require('express');
@@ -10,46 +7,41 @@ const helmet       = require('helmet');
 const path         = require('path');
 const fs           = require('fs');
 const crypto       = require('crypto');
-const cookieParser = require('cookie-parser');    // Phase 9
+const cookieParser = require('cookie-parser');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
-const { validate, schemas } = require('./validation');  // Phase 10
-const { runMigrations, migrationStatus } = require('./migrate-schema'); // Phase 11
-const { logger, httpLogger, flushLogger } = require('./logger');        // Phase 11 C
-const openaiAdmin           = require('./openai-admin');                // Phase 15
-const cryptoStore           = require('./crypto');                       // Phase 17
+const { validate, schemas } = require('./validation');
+const { runMigrations, migrationStatus } = require('./migrate-schema');
+const { logger, httpLogger, flushLogger } = require('./logger');
+const openaiAdmin           = require('./openai-admin');
+const cryptoStore           = require('./crypto');
 const skillPrompts          = require('./skill-prompts');
-// pure logic lifted out of this file. No pool, no OpenAI client —
-// each of these can be exercised by a test directly.
-const promptLib             = require('./lib/prompt');                  // Phase 46
+// pure logic with no pool or OpenAI client — testable directly
+const promptLib             = require('./lib/prompt');
 const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = promptLib;
 const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// PTB-FND-038: "the browser reaches us over https" is its own switch. The tunnel
-// deploy runs with NODE_ENV unset and the origin on http://:3001, so keying the
-// Secure flag, HSTS and upgrade-insecure-requests on NODE_ENV alone left them off.
+// FORCE_HTTPS=true — the tunnel deploy runs with NODE_ENV unset on http://:3001 while the
+// browser is on https; this switch (not NODE_ENV) drives the Secure cookie, HSTS and upgrade-insecure-requests.
 const SECURE_TRANSPORT = process.env.NODE_ENV === 'production' || process.env.FORCE_HTTPS === 'true';
 
-// cloudflared ต่อเข้า localhost — ไม่ตั้งค่านี้ req.ip เป็น 127.0.0.1 ของทุกคน rate limit ต่อ IP จึงรวมถังเดียว
-// ใช้ TRUST_PROXY=0 ปิดได้เมื่อรันแบบเปิดพอร์ตตรง
+// TRUST_PROXY (default 1) — หลัง cloudflared ไม่ตั้งค่านี้ req.ip เป็น 127.0.0.1 ทุกคน; ตั้ง 0 เมื่อเปิดพอร์ตตรง
 app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
-// IP จริงของผู้เรียก: Cloudflare ใส่ CF-Connecting-IP ให้ (client ปลอมไม่ได้เพราะ tunnel เขียนทับ)
-// ส่วน X-Forwarded-For ดิบ client เติมหัวแถวเองได้ จึงห้ามใช้ตรง ๆ
+// IP จริง: CF-Connecting-IP (tunnel เขียนทับ client ปลอมไม่ได้); X-Forwarded-For ดิบ client เติมเองได้ ห้ามใช้
 app.use((req, res, next) => {
     const cf = req.headers['cf-connecting-ip'];
     req.clientIp = (typeof cf === 'string' && cf ? cf : req.ip || '').toString().slice(0, 45);
     next();
 });
 
-// cookie-parser must run BEFORE any route that reads req.cookies.
-// Single line, no secret needed (we use HttpOnly+SameSite=Strict, not signed).
+// cookie-parser before any route reading req.cookies; unsigned (HttpOnly+SameSite=Strict instead)
 app.use(cookieParser());
 
 // request log ต่อบรรทัด (redact header ลับ); /api/health ถูกข้ามกัน log ท่วม
 app.use(httpLogger);
 
-// CSP: ล็อกทุกอย่างยกเว้น 'unsafe-inline' (HTML ยังมี inline handler เป็นสิบ) + Google Fonts; HSTS เฉพาะ prod
+// CSP: ล็อกทุกอย่างยกเว้น 'unsafe-inline' (HTML ยังมี inline handler) + Google Fonts; HSTS เฉพาะ prod
 app.use(helmet({
     contentSecurityPolicy: {
         useDefaults: false,
@@ -60,7 +52,7 @@ app.use(helmet({
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
             fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
-            imgSrc:      ["'self'", 'data:'],   // PTB-FND-031: a model answer must not load remote images
+            imgSrc:      ["'self'", 'data:'],   // a model answer must not load remote images
             connectSrc:  ["'self'"],
             objectSrc:   ["'none'"],
             baseUri:     ["'self'"],
@@ -72,8 +64,7 @@ app.use(helmet({
         },
     },
     crossOriginEmbedderPolicy: false,    // would block external font/CSS CDNs
-    // hsts is only applied when NODE_ENV=production AND the request was https.
-    // In dev (http://localhost) helmet skips it automatically — no breakage.
+    // hsts only when NODE_ENV=production and the request was https
     hsts: SECURE_TRANSPORT ? {
         maxAge: 60 * 60 * 24 * 365,      // 1 year
         includeSubDomains: true,
@@ -81,11 +72,10 @@ app.use(helmet({
     } : false,
 }));
 
-// ── Tier 1 Security Config ────────────────────────────────
+// --- Security config ---
 const NODE_ENV = (process.env.NODE_ENV || 'development').toLowerCase();
 const IS_PROD  = NODE_ENV === 'production';
-// Anything reachable over https is deployed: the CORS allow-list is mandatory there
-// (a FORCE_HTTPS deploy with NODE_ENV unset used to boot in dev-open mode).
+// Anything reachable over https counts as deployed: the CORS allow-list is mandatory there.
 const IS_DEPLOYED = IS_PROD || SECURE_TRANSPORT;
 if (!SECURE_TRANSPORT) {
     console.warn('[security] NODE_ENV is not production and FORCE_HTTPS is not set — session cookie has no Secure flag and HSTS is off. Right for http://localhost, wrong behind a tunnel.');
@@ -95,7 +85,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 const CHAT_RATE_LIMIT_PER_MIN = parseInt(process.env.CHAT_RATE_LIMIT_PER_MIN) || 30;
 const MAX_BALANCE = parseFloat(process.env.MAX_BALANCE) || 1000000;
 
-// Hard-fail if production without an allow-list — prevents a public deploy from accepting any origin.
+// Deployed without an allow-list is a hard fail — never accept any origin publicly.
 if (IS_DEPLOYED && ALLOWED_ORIGINS.length === 0) {
     console.error('');
     console.error('╔════════════════════════════════════════════════════════════════╗');
@@ -112,15 +102,14 @@ if (!IS_DEPLOYED && ALLOWED_ORIGINS.length === 0) {
 }
 
 
-// Account lockout policy. Persistent (DB-backed) so it
-// survives restart and complements the in-memory rate limiter.
+// Lockout is DB-backed so it survives restart; complements the in-memory limiter.
 const LOCKOUT_THRESHOLD = parseInt(process.env.LOCKOUT_THRESHOLD) || 5;
 const LOCKOUT_MINUTES   = parseInt(process.env.LOCKOUT_MINUTES)   || 15;
 
 
 
 
-// ── PostgreSQL Database ────────────────────────────────────
+// --- PostgreSQL ---
 const { Pool } = require('pg');
 const DB_HOST = process.env.DB_HOST || 'localhost';
 const DB_PORT = parseInt(process.env.DB_PORT) || 5432;
@@ -133,18 +122,14 @@ const pool = new Pool({
     password:          process.env.DB_PASS     || '',
     max:               10,
     idleTimeoutMillis: 30000,
-    // Higher timeout for slower / VPN networks (was 5s — too tight)
+    // DB_CONNECT_TIMEOUT — generous for VPN links
     connectionTimeoutMillis: parseInt(process.env.DB_CONNECT_TIMEOUT) || 15000,
-    // Soft keepalive — recover from idle drop on flaky links
+    // recover from idle drop on flaky links
     keepAlive:         true,
-    // Send TCP keepalive after 10s idle → detect dead sockets faster
-    // (default ~2 hours on Linux → zombie connections linger forever)
+    // TCP keepalive after 10s idle (Linux default ~2h leaves zombie sockets)
     keepAliveInitialDelayMillis: 10000,
-    // Hard ceiling on any single query — stops a hung DB call from
-    // tying up an Express request indefinitely.
+    // ceiling per query — a hung DB call must not pin a request
     query_timeout:     30000,
-    // Don't hold the event loop open just because the pool is idle
-    // (useful for smoke scripts / one-shot CLI tools).
     allowExitOnIdle:   false,
 });
 
@@ -174,10 +159,9 @@ function connectWithRetry(attempt = 1, maxAttempts = 3) {
 }
 connectWithRetry();
 
-// โครงสร้างพื้นฐานย้ายไปเป็นโมดูล — ชื่อเดิมทั้งหมด destructure กลับมา
-// validateAmount ไม่ import — zod แทนที่ไปนานแล้ว (ใน validation.js)
+// โครงสร้างพื้นฐานอยู่ในโมดูล; validateAmount ไม่ import — zod แทนแล้ว (validation.js)
 const { validatePasswordStrength, normalizeRole } = require('./lib/validators');
-// cookie Secure flag follows the transport switch, not NODE_ENV (PTB-FND-038)
+// cookie Secure flag follows the transport switch, not NODE_ENV
 const sessionStore = require('./services/session-store')({ pool, isProd: SECURE_TRANSPORT });
 const { SESSION_COOKIE, ACTIVE_COOKIE,
         createSession, getSession, deleteSession,
@@ -211,13 +195,12 @@ app.use(cors({
     credentials:    true,
 }));
 app.use(express.json({ limit: '2mb' }));
-// PTB-FND-045: every /api response is per-user — no shared cache may keep it
+// every /api response is per-user — no shared cache
 app.use('/api', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-// CSRF guard runs after CORS+json so 403 responses still get CORS
-// headers and we have access to req.body if any future logic needs it.
+// CSRF guard after cors+json so 403 replies still carry CORS headers
 app.use(csrfGuard);
-// static เสิร์ฟ repo root ซึ่งมีทั้ง .git, server/, logs, backups — จึงใช้ allow-list ของสิ่งที่หน้าเว็บใช้จริง
-// (blocklist เดิมเทียบกับ req.path ดิบ แล้ว //server/x, /./server/x, /%2E/server/x หลุดไปถึงไฟล์)
+// static เสิร์ฟ repo root (มี .git, server/, logs) — ใช้ allow-list ของสิ่งที่หน้าเว็บใช้จริง
+// เทียบกับ path ที่ decode+normalize แล้ว ไม่ใช่ req.path ดิบ (//server/x, /%2E/server/x หลุด)
 const STATIC_ALLOW = /^\/$|^\/(?:assets|css|js|static)\/|^\/[A-Za-z0-9_-]+(?:\.html)?$/;
 function canonicalPath(raw) {
     let s;
@@ -252,7 +235,7 @@ const STATIC_OPTS = {
         }
     },
 };
-// เสิร์ฟ dist ก่อนแล้วตกลง source tree — dist ที่ build จาก commit อื่นต้องข้าม ไม่งั้นได้หน้าเก่าคู่ API ใหม่
+// เสิร์ฟ dist ก่อน แล้วตกไป source tree — dist จาก commit อื่นต้องข้าม ไม่งั้นหน้าเก่าคู่ API ใหม่
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 function distIsCurrent() {
     if (!fs.existsSync(DIST_DIR)) return false;
@@ -271,18 +254,15 @@ if (distIsCurrent()) {
 }
 app.use(express.static(path.join(__dirname, '..'), STATIC_OPTS));
 
-// ── Rate Limiting (per-user token bucket) ──────────────────
-// key by session token if present, otherwise by IP. Applied to expensive AI endpoints.
+// --- Rate limiting --- per-user bucket on the expensive AI endpoints
 const chatRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max:      CHAT_RATE_LIMIT_PER_MIN,
     standardHeaders: true,
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
-        // v8: ipKeyGenerator(ip) ไม่ใช่ (req,res) — เรียกผิดแล้ว key เป็น [object Object] รวมทุกคนถังเดียว
-        // key ตาม token ก่อน (ไม่ต้องแตะ DB) ไม่มีค่อยใช้ IP
-        // PTB-FND-022: key by user once requireAuth has run — a fresh login used to
-        // mean a fresh bucket. Token prefix is only the fallback for unauthenticated paths.
+        // v8: ipKeyGenerator(ip) ไม่ใช่ (req,res) — เรียกผิด key กลายเป็น [object Object] รวมทุกคนถังเดียว
+        // key ตาม user ก่อน (หลัง requireAuth); token prefix เฉพาะ path ที่ยังไม่ auth; สุดท้าย IP
         if (req.session?.userId) return `u:${req.session.userId}`;
         const tok = _extractToken(req);
         if (tok) return `t:${tok.slice(0, 16)}`;
@@ -295,20 +275,17 @@ const chatRateLimiter = rateLimit({
 });
 
 
-// สิ่งที่ error บอก client ได้: ข้อความที่เราเขียนเอง + ref สั้น ๆ — stack จริงลง log
-// (เดิม 62 handler ส่ง e.message ตรง ๆ ซึ่งสะกดชื่อตาราง/พาธออกไป)
+// error ที่บอก client ได้: ข้อความที่เราเขียนเอง + ref สั้น ๆ — stack จริงลง log (pg/fs/SDK สะกดชื่อตาราง/พาธ)
 function safeError(e, req) {
     const ref = crypto.randomBytes(4).toString('hex');
     const where = req ? `${req.method} ${req.originalUrl}` : '';
     console.error(`[error ${ref}] ${where}:`, e && e.stack ? e.stack : e);
-    // A message we wrote ourselves is meant for the user and stays; anything
-    // thrown by pg, fs or the OpenAI SDK does not.
+    // our own messages are for the user; anything from pg/fs/the SDK is not
     if (e && e.userFacing) return { error: String(e.message || 'Request failed'), ref };
     return { error: 'Something went wrong — quote reference ' + ref + ' when reporting it.', ref };
 }
 
-// brute-force protection on login. Per IP+username so an attacker
-// can't burn one user's rate budget for another.
+// login brute-force guard, per IP+username so one user cannot burn another's budget
 const LOGIN_MAX_PER_15MIN = parseInt(process.env.LOGIN_MAX_PER_15MIN) || 10;
 // backstop ของ route ที่เผาเงิน/บัฟเฟอร์ใหญ่ — กัน retry ค้าง/ดับเบิลคลิก ไม่ใช่โควต้า
 const EXPENSIVE_RATE_LIMIT_PER_MIN = Number(process.env.EXPENSIVE_RATE_LIMIT_PER_MIN) || 30;
@@ -319,7 +296,7 @@ const expensiveRateLimiter = rateLimit({
     legacyHeaders:   false,
     keyGenerator: (req, res) => {
         // key รวม path ด้วย — instance เดียวถังเดียว ไม่งั้นห้า route แชร์ 30/min ก้อนเดียว
-        const who = req.session?.userId ? `u:${req.session.userId}`               // PTB-FND-022
+        const who = req.session?.userId ? `u:${req.session.userId}`
                   : _extractToken(req)   ? `t:${_extractToken(req).slice(0, 16)}`
                                          : `ip:${ipKeyGenerator(req.ip)}`;
         return `${who}|${req.path}`;
@@ -337,8 +314,7 @@ const loginRateLimiter = rateLimit({
     legacyHeaders: false,
     skipSuccessfulRequests: true,    // only failed attempts count
     keyGenerator: (req, res) => {
-        // coerce with String() — attacker may send non-string shapes
-        // that crash toLowerCase. Clamp length so huge input doesn't grow keys.
+        // String() — non-string shapes crash toLowerCase; clamp so huge input cannot grow keys
         const u = String(req.body?.username || '').toLowerCase().slice(0, 64);
         return `${ipKeyGenerator(req.ip)}:${u}`;
     },
@@ -350,9 +326,7 @@ const loginRateLimiter = rateLimit({
     },
 });
 
-// ══════════════════════════════════════════════════════════
-//  ROUTES — Phase 49: หนึ่งกลุ่มหนึ่งไฟล์ใน ./routes, mount ตามลำดับเดิม
-// ══════════════════════════════════════════════════════════
+// --- Routes --- one group per file in ./routes, mounted in the original order
 const { PRICING_LATERAL_JOIN, PRICING_PRICE_EXPR_RAW, PRICING_COST_EXPR } = require('./lib/pricing-sql');
 const usageSync = require('./services/usage-sync')({ pool, openaiAdmin, logger });
 const { runUsageSync, startUsageSyncTimer, getSyncState } = usageSync;
@@ -396,7 +370,7 @@ app.use(require('./routes/misc')(ctx));
 app.use(require('./routes/chat')(ctx));
 
 
-// ── Start ── boot: migrations (fail = ไม่ start) → listen → signal handlers
+// --- Start --- migrations (fail = no start) → listen → signal handlers
 let _httpServer = null;
 let _shuttingDown = false;
 

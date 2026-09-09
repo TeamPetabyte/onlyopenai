@@ -1,15 +1,8 @@
-# verify-backup.ps1 - prove the DB backup is really happening. Run ON THE SERVER:
-#
-#   powershell -ExecutionPolicy Bypass -File C:\petabyte\onlyopenai-master\windows\verify-backup.ps1
-#   add -RestoreTest to also restore the newest dump into a scratch database, then drop it
-#
-# Checks, in order:
-#   1. the scheduled task "PetabyteAi DB Backup" exists, is enabled, and its last run exited 0
-#   2. the newest .dump in C:\petabyte\backups is younger than -MaxAgeHours (default 26)
-#   3. pg_restore --list can read that dump (archive is intact)
-#   4. (-RestoreTest) restore into <DB_NAME>_restoretest, count tbl_user rows, drop it again
-# Exit 0 = all good, 1 = something to fix. Nothing here touches the live database.
-# ASCII only on purpose - Windows PowerShell 5.1 mis-reads non-ASCII source files.
+# verify-backup.ps1 - prove the DB backup is really happening. Run on the server:
+#   powershell -ExecutionPolicy Bypass -File C:\petabyte\onlyopenai-master\windows\verify-backup.ps1 [-RestoreTest]
+# Checks: task "PetabyteAi DB Backup" exists/enabled/last exit 0; newest .dump younger than -MaxAgeHours;
+# pg_restore --list reads it; -RestoreTest restores into <DB_NAME>_restoretest, counts tbl_user, drops it.
+# Exit 0 = all good, 1 = something to fix. Never touches the live database. ASCII only (PowerShell 5.1).
 
 param(
     [string]$BackupDir = "C:\petabyte\backups",
@@ -65,7 +58,7 @@ elseif ($dump) {
 
 if ($RestoreTest -and $dump -and $pgRestore) {
     Write-Host "4) restore test"
-    # credentials come from server\.env exactly like backup-db.ps1; never from this file
+    # credentials come from server\.env, never from this file
     $envMap = @{}
     Get-Content (Join-Path $RepoDir "server\.env") | ForEach-Object {
         $line = $_.Trim()
@@ -84,7 +77,7 @@ if ($RestoreTest -and $dump -and $pgRestore) {
         & $psql -h $dbHost -p $dbPort -U $dbUser -d postgres -q -c "CREATE DATABASE $scratch" 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { Bad "could not create scratch database $scratch" }
         else {
-            # warnings about missing roles are normal here; the row count below is the verdict
+            # missing-role warnings are normal; the row count is the verdict
             & $pgRestore.FullName -h $dbHost -p $dbPort -U $dbUser -d $scratch --no-owner --no-privileges $dump.FullName 2>&1 | Out-Null
             $users = & $psql -h $dbHost -p $dbPort -U $dbUser -d $scratch -Atc "SELECT count(*) FROM tbl_user" 2>&1
             if ("$users" -match '^\d+$' -and [int]$users -gt 0) { Ok ("restored into " + $scratch + ": " + $users + " rows in tbl_user") }

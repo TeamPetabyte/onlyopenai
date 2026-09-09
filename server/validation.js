@@ -1,33 +1,17 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ Phase 10 — Central request validation (zod)               ║
-// ╚═══════════════════════════════════════════════════════════╝
-// Two goals:
-//   1. Reject malformed input early with a clear 400 so routes
-//      can assume req.body has the shape they expect.
-//   2. Strip unknown fields so an attacker can't mass-assign
-//      privileged columns (e.g. role, is_deleted, admin_api_key).
-//      Zod's default is `.strip()` — anything not in the schema
-//      is removed before it reaches the route.
-//
-// We prefer `.strip()` over `.strict()` because existing clients
-// may send extra harmless fields; strip silently drops them.
-// Schemas are conservative on types (string/number/enum) and
-// permissive on shape (optional everywhere possible) to avoid
-// breaking existing HTML forms.
+// Central request validation (zod). Schemas use zod's default .strip(), so unknown fields
+// (role, is_deleted, admin_api_key, …) never reach a route — the mass-assignment guard.
 
 const { z } = require('zod');
 
 const MAX_BALANCE = parseFloat(process.env.MAX_BALANCE) || 1000000;
 
-// ── Primitive building blocks ──────────────────────────────
 const username   = z.string().trim().min(1).max(64);
 const password   = z.string().min(1).max(128);       // strength check is a separate helper
 const displayStr = z.string().trim().max(128);       // used for name/surname/displayName
 const longText   = z.string().max(1024);             // description etc.
 const projectId  = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_\-]+$/,
     'projectId must be alphanumeric/_/-');
-// Phase 30.3: 'trainer' (superadmin) is deliberately NOT accepted here —
-// superadmin accounts are provisioned manually (SQL), never via the API.
+// 'trainer' (superadmin) is deliberately not accepted; superadmins are provisioned by SQL only.
 const roleEnum   = z.enum(['admin', 'user']);
 
 // Numbers may arrive as strings from HTML forms — coerce then clamp.
@@ -39,7 +23,6 @@ const rate       = z.coerce.number().finite()
     .min(0, 'rate must be >= 0').max(10000, 'rate too large');
 const intId      = z.coerce.number().int().positive();
 
-// ── Schemas per endpoint ───────────────────────────────────
 const loginSchema = z.object({
     username: username,
     password: password,
@@ -52,9 +35,8 @@ const createUserSchema = z.object({
     name:        displayStr.optional(),
     surname:     displayStr.optional(),
     role:        roleEnum.optional().default('user'),
-    balance:     amount.optional(),                  // legacy (Concept B uses dailyCap)
-    // Concept B: per-user daily spending limit set at creation.
-    // null / omitted = no cap (unlimited, bounded only by the project pool).
+    balance:     amount.optional(),                  // legacy; dailyCap is the live limit
+    // null / omitted = no cap (bounded only by the project pool)
     dailyCap:    z.coerce.number().finite().min(0).max(MAX_BALANCE).nullable().optional(),
     projectId:   projectId.optional(),
 });
@@ -74,7 +56,7 @@ const updateUserSchema = z.object({
 
 const changePasswordSchema = z.object({
     password: password,
-    // PTB-FND-004: required by the route for a self-change; optional here because an admin reset does not send it
+    // required by the route for a self-change; optional here because an admin reset does not send it
     currentPassword: z.string().max(200).optional(),
 });
 
@@ -85,8 +67,7 @@ const setBalanceSchema = z.object({
 const createProjectSchema = z.object({
     name:        z.string().trim().min(1).max(128),
     projectId:   projectId.optional(),
-    // Phase 16.2: bumped max from 128 → 256 — real OpenAI service-account keys
-    // (sk-svcacct-…) and project keys (sk-proj-…) are ~167 chars.
+    // 256: real OpenAI keys (sk-svcacct-…, sk-proj-…) are ~167 chars
     apiKey:      z.string().trim().max(256).optional(),
     description: longText.optional(),
     inputRate:   rate.optional(),
@@ -96,10 +77,7 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = z.object({
     name:        z.string().trim().min(1).max(128).optional(),
-    // Phase 16.2: bumped max from 128 → 256 — real OpenAI service-account keys
-    // (sk-svcacct-…) and project keys (sk-proj-…) are ~167 chars.
-    // Phase 16.5: also accept `null` so admin can CLEAR the stored key
-    //   (PUT body { apiKey: null } → server overwrites column with NULL).
+    // null clears the stored key; 256 fits real OpenAI keys (~167 chars)
     apiKey:      z.union([z.string().trim().max(256), z.null()]).optional(),
     credits:     amount.optional(),
     description: longText.optional(),
@@ -110,12 +88,11 @@ const updateProjectSchema = z.object({
 
 const topupSchema = z.object({
     amount: amountPos,
-    // Phase 16.1 / 21.2: optional admin note (free text, capped at 500 chars).
-    // Stored in tbl_topup_project.note. Mirrored into tbl_action_admin.extra.note.
+    // admin note; stored in tbl_topup_project.note, mirrored to tbl_action_admin.extra.note
     note:   z.string().trim().max(500).optional(),
 });
 
-// Phase 11 B3: daily cap. null or missing clears the cap.
+// Daily cap; null or missing clears it.
 const dailyCapSchema = z.object({
     dailyCap: z.coerce.number().finite()
         .min(0, 'dailyCap must be >= 0')
@@ -123,7 +100,6 @@ const dailyCapSchema = z.object({
         .nullable().optional(),
 });
 
-// Chat-style routes — keep loose because we don't dictate content.
 // systemPrompt/inputRate/outputRate/cachedInputRate ตั้งใจไม่อยู่ในนี้: prompt มาจาก tbl_prompt
 // และราคามาจาก tbl_pricing เท่านั้น — .strip() จะทิ้งค่าที่ client ส่งมาทับ
 const chatSchema = z.object({
@@ -135,7 +111,6 @@ const chatSchema = z.object({
     model:     z.string().trim().max(64).optional(),
     effort:    z.string().trim().max(16).optional(),
     useRouter: z.coerce.boolean().optional(),
-    // Any other field is silently stripped
 });
 
 const historyAddSchema = z.object({
@@ -158,10 +133,8 @@ const sessionUpdateSchema = z.object({
     threadId: z.string().max(128).optional(),
 });
 
-// ── The middleware factory ─────────────────────────────────
-// Validates req[key] (default 'body') against the schema. On failure
-// returns 400 with a single human-readable error message. On success
-// replaces req[key] with the parsed+stripped data.
+// Validates req[key] against the schema: 400 with one readable message on failure,
+// req[key] replaced by the parsed+stripped data on success.
 function validate(schema, key = 'body') {
     return function (req, res, next) {
         const result = schema.safeParse(req[key] || {});

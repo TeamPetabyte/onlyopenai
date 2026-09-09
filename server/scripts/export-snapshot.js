@@ -1,15 +1,6 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ PetabyteAi — full-DB snapshot exporter (no pg_dump needed) ║
-// ╚═══════════════════════════════════════════════════════════╝
-// Dumps every table in the `public` schema to a single timestamped
-// JSON file so test data can be kept and reviewed later. Read-only on
-// the DB — it only SELECTs. Uses the `pg` dependency already installed.
-//
-// Usage (from server/):
-//   node scripts/export-snapshot.js                 # → ~/Desktop/petabyte-backups/
-//   node scripts/export-snapshot.js --out /some/dir # custom output dir
-//
-// Env: DB_HOST DB_PORT DB_NAME DB_USER DB_PASS (from server/.env)
+// Full-DB snapshot (SELECT only, no pg_dump): every public table into one timestamped JSON file.
+// Usage: node scripts/export-snapshot.js [--out /dir]   (default ~/Desktop/petabyte-backups/)
+// Env: DB_HOST DB_PORT DB_NAME DB_USER DB_PASS (server/.env)
 
 'use strict';
 

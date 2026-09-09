@@ -1,8 +1,4 @@
-/* =====================================================
-   AgentHub — Shared Component Library (Phase 2)
-   Uses design tokens from tokens.css.
-   Everything is additive: safe to import alongside style.css.
-   ===================================================== */
+/* Shared component library on top of tokens.css; additive, safe alongside style.css. */
 
 /* ── Utility: visually hidden (a11y) ──────────────────── */
 .sr-only {
@@ -1144,11 +1140,7 @@
     justify-content: flex-end;
 }
 
-/* ──────────────────────────────────────────────────────────
-   Phase 19.5: moved out of admin.js (overview page budget bars).
-   Was injected inline as <style id="proj-tab-style"> on each render —
-   safer + faster to live here in components.css.
-   ────────────────────────────────────────────────────────── */
+/* Budget bars (overview page) */
 .budget-bar {
     height: 6px;
     border-radius: 3px;
@@ -1163,11 +1155,7 @@
     transition: width .5s ease;
 }
 
-/* ──────────────────────────────────────────────────────────
-   Phase 19.5: moved out of admin.js (overview page budget bars).
-   Was injected inline as <style id="proj-tab-style"> on each render —
-   safer + faster to live here in components.css.
-   ────────────────────────────────────────────────────────── */
+/* Budget bars (overview page) */
 .budget-bar {
     height: 6px;
     border-radius: 3px;

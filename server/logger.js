@@ -1,33 +1,11 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ Phase 11 Block C — Structured logging (pino)              ║
-// ╚═══════════════════════════════════════════════════════════╝
-// One place to make a logger, used everywhere.
-//
-// Design choices:
-//   • stdout stays human-readable in dev (pino-pretty), JSON in prod
-//     so log aggregators (Loki, Datadog, CloudWatch) can parse rows
-//     without a shim.
-//   • Also tee to a rotating file under logs/  — pino-roll rolls daily
-//     and keeps LOG_RETAIN_DAYS files. Zero external cron needed.
-//   • Sensitive keys are redacted (password, token, csrf, apiKey, cookie)
-//     regardless of where they appear in the payload.
-//   • pino is sync-by-default here: we pay the tiny cost for
-//     guaranteed-flushed logs around crashes and SIGTERM. The rotating
-//     file runs on a worker thread anyway (pino.transport).
-//
+// Structured logging (pino): pretty stdout in dev, JSON in prod, plus a daily-rolled file.
+// Sensitive keys (password, token, csrf, apiKey, cookie) are redacted wherever they appear.
 // Env:
 //   LOG_LEVEL         fatal|error|warn|info|debug|trace  (default info)
 //   LOG_DIR           folder for rolled files            (default ./logs)
 //   LOG_RETAIN_DAYS   files to keep                      (default 14)
-//   LOG_PRETTY        force pretty on/off                (default: auto;
-//                     pretty when NODE_ENV!=='production')
-//   LOG_FILE_DISABLE  '1' to skip the file transport entirely
-//                     (useful in smoke tests / ephemeral containers)
-//
-// Usage:
-//   const { logger, httpLogger } = require('./logger');
-//   logger.info({ userId }, 'user logged in');
-//   app.use(httpLogger);
+//   LOG_PRETTY        force pretty on/off                (default: pretty unless NODE_ENV=production)
+//   LOG_FILE_DISABLE  '1' skips the file transport
 
 'use strict';
 
@@ -51,11 +29,7 @@ if (!FILE_DISABLE) {
     catch (e) { /* fall through; transport will surface the error */ }
 }
 
-// ── Redaction paths ─────────────────────────────────────────
-// pino's redact lets us blank out fields by dotted path. We target
-// common request/response body keys plus headers. `remove: true`
-// removes the key entirely so it never hits the log sink.
-// PTB-FND-035: strip everything after '?' before a URL reaches a log line
+// strip everything after '?' before a URL reaches a log line
 const pathOnly = (u) => String(u || '').split('?')[0];
 
 const redactPaths = [
@@ -74,7 +48,6 @@ const redactPaths = [
     'apiKey',
 ];
 
-// ── Transport: pretty stdout + optional rolling file ────────
 const targets = [];
 
 if (PRETTY) {
@@ -120,10 +93,7 @@ const logger = pino({
     timestamp: pino.stdTimeFunctions.isoTime,
 }, pino.transport({ targets }));
 
-// ── HTTP middleware ─────────────────────────────────────────
-// pino-http adds req.log and logs one row per request at res.end.
-// We filter /api/health at info level (chatty, uninteresting) and
-// downgrade 4xx to warn, 5xx to error (sane defaults, but explicit).
+// pino-http: one row per request at res.end. /api/health is ignored; 4xx → warn, 5xx → error.
 const httpLogger = pinoHttp({
     logger,
     autoLogging: {
@@ -134,7 +104,7 @@ const httpLogger = pinoHttp({
         if (res.statusCode >= 400) return 'warn';
         return 'info';
     },
-    // PTB-FND-035: the query string carries chat-search terms and other user text — log the path only
+    // the query string carries user text (chat-search terms) — log the path only
     customSuccessMessage: (req, res) =>
         `${req.method} ${pathOnly(req.url)} → ${res.statusCode}`,
     customErrorMessage: (req, res, err) =>
@@ -150,10 +120,7 @@ const httpLogger = pinoHttp({
     },
 });
 
-// ── Shutdown flush ──────────────────────────────────────────
-// pino.transport writes on a worker thread; on process exit we call
-// logger.flush() so pending lines are not truncated. Callers who
-// install SIGTERM handlers should await this before exiting.
+// pino.transport writes on a worker thread; await this before exiting so pending lines are not truncated.
 async function flushLogger() {
     try {
         await new Promise((resolve) => logger.flush(() => resolve()));

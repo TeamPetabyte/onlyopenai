@@ -1,11 +1,9 @@
-// change-password.js — เปลี่ยนรหัส (ย้ายมาจาก change-password.html)
+// change-password.js — หน้าเปลี่ยนรหัสผ่าน
 
 
-        // Guard: must be logged in to be here
         (function () {
             const session = Auth.getSession();
             if (!session) { window.location.href = '/login'; return; }
-            // Show username
             document.getElementById('who').textContent = '@' + session.username;
         })();
 
@@ -49,20 +47,19 @@
             btn.disabled = true;
             btn.textContent = 'Saving...';
 
-            const result = await Auth.changePassword(pw, cur);   // PTB-FND-004
+            const result = await Auth.changePassword(pw, cur);
             if (!result.ok) {
                 showError(result.error || 'Password change failed');
                 btn.disabled = false;
                 btn.textContent = 'Change password';
                 return;
             }
-            // Done — redirect by role
             const session = Auth.getSession();
             window.location.href = (session && session.role === 'admin') ? '/admin' : '/';
         }
 
         function signOut() {
-            Auth.logout();    // also clears token + redirects to login.html
+            Auth.logout();    // clears the token and redirects to login
         }
 
 // ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window

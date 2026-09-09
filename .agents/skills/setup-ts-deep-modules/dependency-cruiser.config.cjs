@@ -1,26 +1,13 @@
 // @ts-check
-// Deep-module enforcement for dependency-cruiser.
-//
-// Each package under the packages root is a DEEP MODULE: a lot of behaviour
-// behind a small interface. A package's PUBLIC SURFACE is its ENTRY POINTS:
-// the files at the package root. Implementation lives in SUBFOLDERS and is
-// private (by convention `lib/` for implementation and `tests/` for tests,
-// though any subfolder is private). A package may expose several small entry
-// points (index.ts, client.ts, server.ts, …); prefer that over one giant
-// barrel index.
-//
-// The only thing you should ever need to edit here is PACKAGES_ROOT.
+// Deep-module enforcement for dependency-cruiser: a package's root files are its public entry
+// points; anything in a subfolder (lib/, tests/, …) is private. Edit only PACKAGES_ROOT.
 
 /** Where packages live. One immediate child dir per package (flat, no nesting). */
 const PACKAGES_ROOT = "src/packages";
 
-// --- derived patterns (no need to edit) -------------------------------------
+// --- derived patterns ---
 const R = PACKAGES_ROOT;
-/**
- * A package's private internals: anything nested inside a package subfolder.
- * The package's root files are its entry points and are NOT matched here:
- * they stay importable from outside.
- */
+/** A package's private internals: anything inside a package subfolder (root files stay importable). */
 const PACKAGE_INTERNALS = `^${R}/[^/]+/[^/]+/`;
 
 /** @type {import('dependency-cruiser').IConfiguration} */
@@ -73,17 +60,8 @@ module.exports = {
       to: { circular: true },
     },
 
-    // --- Layering (optional, off by default) ----------------------------------
-    // Interface-hiding controls HOW you import (through the entry points).
-    // Layering controls WHICH packages may depend on which. Add your own rules
-    // here, e.g.:
-    //
-    // {
-    //   name: "ui-may-not-depend-on-billing",
-    //   severity: "error",
-    //   from: { path: `^${R}/ui/` },
-    //   to:   { path: `^${R}/billing/` },
-    // },
+    // --- Layering (optional) — add rules for WHICH packages may depend on which, e.g.
+    // { name: "ui-may-not-depend-on-billing", from: { path: `^${R}/ui/` }, to: { path: `^${R}/billing/` } }
   ],
   options: {
     doNotFollow: { path: "node_modules" },

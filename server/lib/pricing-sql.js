@@ -1,8 +1,8 @@
 // @ts-check
 // pricing-sql.js — SQL ชิ้นที่คิดราคา/ต้นทุนต่อแถว ใช้ร่วมกันใน history และ cost-by-day
 
-// LATERAL หาแถว tbl_pricing ที่ active ณ r.created_at — ตรรกะเดียวกับ fn_build_daily_usage
-// ทุก endpoint ที่โชว์ cost ใช้ตัวนี้ ตัวเลขจึงตรงกันทุกหน้า (join ด้วย r.user_id ไม่ใช่ project กัน history รั่วข้าม user)
+// LATERAL หาแถว tbl_pricing ที่ active ณ r.created_at — ตรรกะเดียวกับ fn_build_daily_usage;
+// ทุก endpoint ที่โชว์ cost ใช้ตัวนี้ ตัวเลขจึงตรงกันทุกหน้า
 const PRICING_LATERAL_JOIN = `
     LEFT JOIN LATERAL (
         SELECT pr2.*

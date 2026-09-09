@@ -1,7 +1,5 @@
-/**
- * admin.js — ประกอบหน้า admin จากโมดูลตามแท็บใน js/admin/
- * แต่ละ slice เป็น object ของ method; spread รวมเป็นก้อนเดียว this จึงทำงานเหมือนเดิม
- */
+// admin.js — ประกอบหน้า admin จากโมดูลตามแท็บใน js/admin/
+// แต่ละ slice เป็น object ของ method; spread รวมเป็นก้อนเดียว this จึงทำงานเหมือนเดิม
 import { flash, hideModal } from './admin/helpers.js';
 import core from './admin/core.js';
 import overview from './admin/overview.js';
@@ -21,9 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var session = Auth.getSession();
   var el = document.getElementById('admin-display-name');
   if (el) el.textContent = session.displayName || session.username;
-  // Phase 30: role badge + tab visibility. Admin manages people/money only —
-  // the training tabs (Skill Prompts / Prompt Lab / Evals) are trainer-only.
-  // Hiding is UX; the real gate is requireTrainer (403) on the backend.
+  // Training tabs are trainer-only. Hiding is UX; the real gate is requireTrainer on the backend.
   var badge = document.getElementById('admin-role-badge');
   if (badge && session.role === 'trainer') {
     badge.textContent = 'TRAINER';
