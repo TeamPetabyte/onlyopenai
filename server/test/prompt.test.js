@@ -135,3 +135,15 @@ test('PROMPT_COMMON_APPENDIX: still says *### goes in column 1', () => {
     // An indented *### is not a comment in ABAP; it is a syntax error in the downloaded file.
     assert.ok(/column 1/.test(prompt.PROMPT_COMMON_APPENDIX));
 });
+
+test('targetReleaseBlock: a known release names itself and its limits', () => {
+    const b = prompt.targetReleaseBlock('v731');
+    assert.ok(b.includes('Target SAP release for this project: v731'));
+    assert.ok(b.includes('no inline declarations'));
+});
+
+test('targetReleaseBlock: unknown, missing or prototype keys fall back to v750', () => {
+    for (const r of [undefined, null, '', 'v999', 'constructor', '__proto__']) {
+        assert.ok(prompt.targetReleaseBlock(r).includes(': v750'), `${r} did not fall back`);
+    }
+});

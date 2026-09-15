@@ -131,6 +131,7 @@ export default {
     document.getElementById('ep-input-rate').value = p.inputRate || 0.5;
     document.getElementById('ep-output-rate').value = p.outputRate || 1.5;
     document.getElementById('ep-credit-limit').value = p.creditLimit || 0;
+    document.getElementById('ep-target-release').value = p.targetRelease || 'v750';
 
     // ไม่โชว์ key ที่เก็บไว้ — pill บอกแค่มี/ไม่มี; ช่องว่าง = คงค่าเดิม (COALESCE ฝั่ง server)
     var keyEl    = document.getElementById('ep-api-key');
@@ -184,6 +185,7 @@ export default {
     var body = {
       name: name, description: desc,
       inputRate: inputRate, outputRate: outputRate, creditLimit: creditLit,
+      targetRelease: document.getElementById('ep-target-release').value,
     };
     // empty apiKey = keep existing (server COALESCEs), so send it only when typed
     if (apiKeyNew) body.apiKey = apiKeyNew;

@@ -30,7 +30,7 @@ router.get('/api/projects', requireAuth, async (req, res) => {
         }
         const r = await pool.query(`
             SELECT p.project_id AS id, p.project_name AS name, p.project_api_key,
-                   p.description, p.input_rate, p.output_rate, p.credit_limit,
+                   p.description, p.input_rate, p.output_rate, p.credit_limit, p.target_release,
                    p.created_date AS created_at,
                    COALESCE(b.project_credits,        0) AS balance,
                    COALESCE(b.project_credits_amount, 0) AS lifetime_amount
@@ -141,7 +141,7 @@ router.post('/api/projects', requireAdmin, validate(schemas.createProject), asyn
 
 // PUT /api/projects/:id
 router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), async (req, res) => {
-    const { name, apiKey, credits, description, inputRate, outputRate, creditLimit } = req.body;
+    const { name, apiKey, credits, description, inputRate, outputRate, creditLimit, targetRelease } = req.body;
     // ยอดเงินเปลี่ยนได้ทางเดียวคือ PUT /:id/topup (ล็อกแถว บวก lifetime ลงประวัติ)
     if (credits !== undefined) {
         return res.status(400).json({ ok: false, error: 'credits_not_editable',
@@ -158,7 +158,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
         // Snapshot for diff — also ensures the project exists before UPDATE
         const prev = await pool.query(
             `SELECT p.project_name, p.project_api_key, p.description,
-                    p.input_rate, p.output_rate, p.credit_limit,
+                    p.input_rate, p.output_rate, p.credit_limit, p.target_release,
                     COALESCE(b.project_credits, 0) AS project_credits
                FROM tbl_project p
                LEFT JOIN tbl_balance b ON b.project_id = p.project_id
@@ -178,13 +178,14 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
                 description       = COALESCE($3, description),
                 input_rate        = COALESCE($4, input_rate),
                 output_rate       = COALESCE($5, output_rate),
-                credit_limit      = COALESCE($6, credit_limit)
+                credit_limit      = COALESCE($6, credit_limit),
+                target_release    = COALESCE($8, target_release)
              WHERE project_id = $7`,
             [name || null, apiKeyParam, description ?? null,
              (inputRate  !== undefined ? parseFloat(inputRate)  : null),
              (outputRate !== undefined ? parseFloat(outputRate) : null),
              (creditLimit !== undefined ? parseFloat(creditLimit) : null),
-             req.params.id]);
+             req.params.id, targetRelease ?? null]);
         if (r.rowCount === 0) return res.json({ ok: false, error: 'Project not found' });
         // drop the cached per-project client so the next chat reads the new key
         if (apiKeyAction !== 'keep') invalidateProjectClient(req.params.id);
@@ -196,6 +197,7 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
             input_rate:   inputRate   !== undefined ? parseFloat(inputRate)   : before?.input_rate,
             output_rate:  outputRate  !== undefined ? parseFloat(outputRate)  : before?.output_rate,
             credit_limit: creditLimit !== undefined ? parseFloat(creditLimit) : before?.credit_limit,
+            target_release: targetRelease ?? before?.target_release,
             ...(creditsNum !== null ? { project_credits: creditsNum } : {}),
             ...(apiKeyAction === 'set'   ? { api_key_changed: true } : {}),
             ...(apiKeyAction === 'clear' ? { api_key_cleared: true } : {}),

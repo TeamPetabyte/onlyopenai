@@ -83,6 +83,7 @@ const updateProjectSchema = z.object({
     inputRate:   rate.optional(),
     outputRate:  rate.optional(),
     creditLimit: amount.optional(),
+    targetRelease: z.enum(Object.keys(require('./lib/prompt').TARGET_RELEASES)).optional(),
 });
 
 const topupSchema = z.object({

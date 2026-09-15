@@ -225,6 +225,15 @@ test.describe('money gates', () => {
         const q = await srv.req('GET', '/api/quota-status', { auth: user });
         assert.equal(q.json.projectPool, 100);
     });
+
+    test('the project target release accepts only the four known values', async () => {
+        const bad = await srv.req('PUT', `/api/projects/${PROJECT}`, { auth: admin, body: { targetRelease: 'v999' } });
+        assert.equal(bad.status, 400, bad.text);
+        const ok = await srv.req('PUT', `/api/projects/${PROJECT}`, { auth: admin, body: { targetRelease: 'v731' } });
+        assert.equal(ok.status, 200, ok.text);
+        const list = await srv.req('GET', '/api/projects', { auth: admin });
+        assert.equal(list.json.projects.find(p => p.id === PROJECT).target_release, 'v731');
+    });
 });
 
 test.describe('tenant isolation', () => {

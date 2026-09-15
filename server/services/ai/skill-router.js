@@ -89,7 +89,7 @@ async function pickSkillFromCatalog(userMessage, oai, history) {
     const catchAllId  = skillPrompts.getCatchAllId();
     const hasCatchAll = catalog.some(s => s.id === catchAllId);
 
-    const sys = `You are a router for an SAP/ABAP code-review assistant. Pick exactly ONE skill from the list below that best fits the user's LATEST message.
+    const sys = `You are a router for an SAP/ABAP development assistant (code review and code generation). Pick exactly ONE skill from the list below that best fits the user's LATEST message.
 
 Available skills:
 ${catalogText}

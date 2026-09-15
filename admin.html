@@ -2328,6 +2328,15 @@
                 <label class="modal-label" data-i18n="m.field.creditLimitPerUser">Credit Limit ต่อ User (฿, 0 = ไม่จำกัด)</label>
                 <input class="modal-input" id="ep-credit-limit" type="number" step="1" min="0" placeholder="0" />
             </div>
+            <div class="modal-field">
+                <label class="modal-label">Target SAP release (โค้ดที่ AI สร้างต้อง compile บนรุ่นนี้)</label>
+                <select class="modal-input" id="ep-target-release">
+                    <option value="v731">ECC 6.0 ≤ EHP6 (ABAP 7.31)</option>
+                    <option value="v740sp08">ECC 6.0 EHP7+ (ABAP 7.40)</option>
+                    <option value="v750" selected>S/4HANA on-premise (ABAP 7.50+)</option>
+                    <option value="cloud">ABAP Cloud / BTP</option>
+                </select>
+            </div>
             <!-- OpenAI API key: the input stays empty on open (the stored secret is never shown).
                  Blank → backend keeps the stored value; a new key overwrites it. -->
             <div class="modal-field">

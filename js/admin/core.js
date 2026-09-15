@@ -147,6 +147,7 @@ export default {
             inputRate:   parseFloat(p.input_rate)   || 0.5,
             outputRate:  parseFloat(p.output_rate)  || 1.5,
             creditLimit: parseFloat(p.credit_limit) || 0,
+            targetRelease: p.target_release || 'v750',
             // balance = คงเหลือ, lifetimeAmount = ยอดเติมสะสม (ไม่ลด); totalTopUp เป็น alias ให้ renderer เก่า
             balance:        parseFloat(p.balance)          || 0,
             lifetimeAmount: parseFloat(p.lifetime_amount)  || 0,

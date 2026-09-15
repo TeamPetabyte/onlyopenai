@@ -114,22 +114,25 @@ async function _loadFromDb() {
 }
 
 /** First-boot seed: if tbl_prompt is empty, copy the JSON file into it. */
-async function _seedFromFileIfEmpty() {
-    const cnt = await _pool.query('SELECT count(*)::int AS n FROM tbl_prompt');
-    if (cnt.rows[0].n > 0) return false;
+// Seed every file skill the DB has never heard of. A skill the trainer deleted has a history
+// row, so it stays deleted; a skill newly added to the JSON reaches existing databases.
+async function _seedNewFromFile() {
     const fr = _readFile();
-    if (fr.error || fr.skills.length === 0) return false;
+    if (fr.error || fr.skills.length === 0) return 0;
+    let seeded = 0;
     for (let i = 0; i < fr.skills.length; i++) {
         const s = fr.skills[i];
-        await _pool.query(
+        const r = await _pool.query(
             `INSERT INTO tbl_prompt (id, label, description, content, openai_prompt_id, position, updated_by)
-             VALUES ($1,$2,$3,$4,$5,$6,'seed')
-             ON CONFLICT (id) DO NOTHING`,
+             SELECT $1,$2,$3,$4,$5,$6,'seed'
+              WHERE NOT EXISTS (SELECT 1 FROM tbl_prompt WHERE id = $1)
+                AND NOT EXISTS (SELECT 1 FROM tbl_prompt_history WHERE prompt_id = $1)
+             RETURNING id`,
             [s.id, s.label, s.description, s.content, s.openaiPromptId, i]);
-        await _writeHistory(s.id, 'seed', s, 'seed');
+        if (r.rowCount) { await _writeHistory(s.id, 'seed', s, 'seed'); seeded++; }
     }
-    console.log('[skill-prompts] seeded', fr.skills.length, 'prompts into tbl_prompt from JSON');
-    return true;
+    if (seeded) console.log('[skill-prompts] seeded', seeded, 'new prompt(s) into tbl_prompt from JSON');
+    return seeded;
 }
 
 /** Best-effort audit snapshot — never fails the calling write. */
@@ -151,7 +154,7 @@ async function _writeHistory(promptId, action, snapshot, changedBy) {
 async function load() {
     if (_pool) {
         try {
-            await _seedFromFileIfEmpty();
+            await _seedNewFromFile();
             const skills = await _loadFromDb();
             _cache = {
                 loadedAt: new Date().toISOString(),

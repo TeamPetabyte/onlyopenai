@@ -25,6 +25,7 @@ const {
     pickSkillFromCatalog,
     pool,
     PROMPT_COMMON_APPENDIX,
+    targetReleaseBlock,
     ragQueryOf,
     ragResultEvent,
     requireAuth,
@@ -212,6 +213,11 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         finalSystemPrompt += PROMPT_COMMON_APPENDIX;
         // org standards จาก cache — ไม่ยิง tool round trip ทุกคำตอบ
         finalSystemPrompt += orgStandardsBlock(await getOrgStandards());
+        // release the generated code must compile on — set per project by the admin (phase59-001)
+        const relRow = await pool.query(
+            `SELECT p.target_release FROM tbl_user u JOIN tbl_project p ON p.project_id = u.project_id
+              WHERE u.user_id = $1`, [req.session.userId]);
+        finalSystemPrompt += targetReleaseBlock(relRow.rows[0]?.target_release);
         // ความรู้ skill รองต่อท้าย org standards — เอกสารองค์กรชนะเสมอ
         finalSystemPrompt += supportingKnowledgeBlock(supportingSkillIds);
         // static scan + matching documents up front, so the model spends its budget on judgement.

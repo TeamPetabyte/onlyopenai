@@ -87,6 +87,24 @@ function applyCodePlaceholder(systemPrompt, question) {
 }
 
 
+// Which ABAP release the project's code must run on — keyed by abaplint version names so a
+// syntax checker can share the value. Unknown/missing → v750 (S/4HANA on-prem).
+const TARGET_RELEASES = {
+    v731:     'ECC 6.0 up to EHP6 (ABAP 7.31): no inline declarations (DATA(x), @DATA), no string templates with expressions, no NEW #( ), classic syntax only.',
+    v740sp08: 'ECC 6.0 EHP7+ (ABAP 7.40 SP08+): inline declarations, string templates, NEW #( ), VALUE #( ), CL_SALV_TABLE are all available; Open SQL still without CDS-only features.',
+    v750:     'SAP S/4HANA on-premise (ABAP 7.50+): full modern ABAP syntax and CL_SALV_TABLE; classic dynpro/report programs are allowed.',
+    cloud:    'ABAP Cloud (BTP / S/4HANA Cloud): released APIs only — NO classic reports, selection screens, WRITE, CL_SALV_TABLE, or direct access to unreleased tables. Build with RAP and CDS; say so plainly if the request needs a classic program.',
+};
+const DEFAULT_TARGET_RELEASE = 'v750';
+function targetReleaseBlock(release) {
+    const key = Object.prototype.hasOwnProperty.call(TARGET_RELEASES, release) ? release : DEFAULT_TARGET_RELEASE;
+    return `
+
+## Target SAP release for this project: ${key}
+${TARGET_RELEASES[key]}
+Every line you write must compile on this release. If the user names a different release in the message, that message wins for that answer.`;
+}
+
 function orgStandardsBlock(std) {
     if (!std || !std.text) return '';
     return `
@@ -131,6 +149,7 @@ function supportingKnowledgeBlock(ids, skills) {
 
 
 module.exports = {
+    TARGET_RELEASES, DEFAULT_TARGET_RELEASE, targetReleaseBlock,
     PROMPT_COMMON_APPENDIX,
     applyCodePlaceholder,
     orgStandardsBlock,

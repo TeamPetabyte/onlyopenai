@@ -17,7 +17,7 @@ const cryptoStore           = require('./crypto');
 const skillPrompts          = require('./skill-prompts');
 // pure logic with no pool or OpenAI client — testable directly
 const promptLib             = require('./lib/prompt');
-const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = promptLib;
+const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock, targetReleaseBlock } = promptLib;
 const pkg                   = require('./package.json');
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -345,7 +345,7 @@ const ctx = {
     spentToday, getEffectiveDailyCap, getProjectPool, checkChatBudget, getActivePricing,
     // AI engine (client/tools/router/runner)
     ...aiClient, ...aiTools, ...skillRouter, runSkillPromptOnce,
-    PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock,
+    PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock, targetReleaseBlock,
     // misc deps
     skillPrompts, openaiAdmin, cryptoStore, migrationStatus, pkg,
     runUsageSync, getSyncState,
