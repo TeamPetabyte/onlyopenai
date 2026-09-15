@@ -126,11 +126,10 @@ ingress:
 
 ## 🔄 อัปเดตเวอร์ชันใหม่ภายหลัง
 ```powershell
-cd C:\petabyte\onlyopenai
-git pull                         # หรือ copy ไฟล์ใหม่ทับ
-cd server; npm install --omit=dev
-nssm restart PetabyteAi          # migrate รันอัตโนมัติตอน boot
+powershell -ExecutionPolicy Bypass -File C:\petabyte\onlyopenai-master\windows\deploy.ps1
 ```
+สคริปต์ทำให้ครบ: `git reset --hard origin/master` → `npm ci` / `npm install` **เฉพาะเมื่อ package-lock เปลี่ยน** →
+`npm run build` (ต้องทำทุกรอบ เพราะ `dist/` ไม่อยู่ใน git และ server จะข้าม build เก่า) → `nssm restart` (migrate รันเองตอน boot)
 
 ---
 
