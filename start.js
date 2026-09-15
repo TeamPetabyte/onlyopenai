@@ -1,19 +1,7 @@
 #!/usr/bin/env node
-/**
- * start.js — PetabyteAi launcher (cross-platform)
- *
- * Spawns the backend (Express on :3001) and a built-in static server
- * (frontend on :8080), runs pre-flight checks, then opens the browser.
- *
- *   node start.js                 # production mode
- *   node start.js --dev           # nodemon hot-reload backend
- *   node start.js --no-browser    # don't auto-open browser
- *   node start.js --port-backend=3001 --port-static=8080
- *
- * Pure Node — zero external deps in the launcher itself.
- * The backend's own deps (express, pg, openai, etc.) are installed
- * automatically into server/node_modules on first run.
- */
+// start.js — PetabyteAi launcher: spawns the backend (:3001) and a zero-dep static server (:8080),
+// runs pre-flight checks, then opens the browser. Backend deps are installed on first run.
+// Flags: --dev (nodemon backend)  --no-browser  --port-backend=N  --port-static=N  --open=PATH
 
 'use strict';
 
@@ -24,7 +12,6 @@ const fs          = require('fs');
 const path        = require('path');
 const os          = require('os');
 
-// ─── Config ──────────────────────────────────────────────────────────
 const ROOT        = __dirname;
 const SERVER_DIR  = path.join(ROOT, 'server');
 const ENV_FILE    = path.join(SERVER_DIR, '.env');
@@ -35,8 +22,7 @@ const ARG = {
     noBrowser:     args.includes('--no-browser'),
     portBackend:   parseInt(getArg('--port-backend'), 10) || 3001,
     portStatic:    parseInt(getArg('--port-static'),  10) || 8080,
-    // ?loggedout=1 → bypass login.html's auto-redirect-if-session IIFE
-    // so a fresh server launch always shows the login form.
+    // ?loggedout=1 bypasses login.html's auto-redirect so a fresh launch shows the login form
     openPath:      getArg('--open') || '/login.html?loggedout=1',
 };
 
@@ -45,7 +31,6 @@ function getArg(key) {
     return a ? a.slice(key.length + 1) : null;
 }
 
-// ─── Pretty terminal output ──────────────────────────────────────────
 const supportsColor = process.stdout.isTTY && process.env.TERM !== 'dumb';
 const C = supportsColor ? {
     reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -76,7 +61,6 @@ const log = {
     tag:   (tag, msg, color = C.gray) => process.stdout.write(`${color}[${tag}]${C.reset} ${msg}`),
 };
 
-// ─── Pre-flight checks ───────────────────────────────────────────────
 async function preflight() {
     log.step('Pre-flight checks');
 
@@ -177,7 +161,6 @@ function runOnce(cmd, cmdArgs, opts = {}) {
     });
 }
 
-// ─── Wait for backend health ─────────────────────────────────────────
 function waitForBackend(port, timeoutMs = 30000) {
     const url = `http://localhost:${port}/api/health`;
     const start = Date.now();
@@ -203,7 +186,6 @@ function waitForBackend(port, timeoutMs = 30000) {
     });
 }
 
-// ─── Built-in static server (zero deps) ──────────────────────────────
 const MIME = {
     '.html': 'text/html; charset=utf-8',
     '.js':   'application/javascript; charset=utf-8',
@@ -224,19 +206,16 @@ const MIME = {
 function startStaticServer(port) {
     const server = http.createServer((req, res) => {
         try {
-            // Bare root → redirect to /login.html?loggedout=1 so the
-            // login form is always shown on initial visit (no surprise
-            // auto-redirect from a stale localStorage session).
+            // bare root → login form, bypassing a stale-session auto-redirect
             if (req.url === '/' || req.url === '') {
                 res.writeHead(302, { Location: '/login.html?loggedout=1' });
                 res.end();
                 return;
             }
-            // Strip query / decode
             let urlPath = decodeURIComponent(req.url.split('?')[0]);
             if (urlPath === '/' || urlPath === '') urlPath = '/login.html';
 
-            // Resolve and ensure no directory escape
+            // no directory escape
             const filePath = path.join(ROOT, urlPath);
             const rel      = path.relative(ROOT, filePath);
             if (rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -256,8 +235,7 @@ function startStaticServer(port) {
                 }
                 const ext  = path.extname(filePath).toLowerCase();
                 const mime = MIME[ext] || 'application/octet-stream';
-                // HTML must never be cached so users always get the
-                // latest references to versioned JS/CSS files.
+                // HTML never cached so versioned JS/CSS references stay fresh
                 const cacheCtl = (ext === '.html')
                     ? 'no-store, no-cache, must-revalidate, max-age=0'
                     : 'no-cache';
@@ -280,7 +258,6 @@ function startStaticServer(port) {
     });
 }
 
-// ─── Open browser ────────────────────────────────────────────────────
 function openBrowser(url) {
     try {
         let cmd, cmdArgs;
@@ -294,7 +271,6 @@ function openBrowser(url) {
     } catch { /* swallow — non-fatal */ }
 }
 
-// ─── Spawn backend ───────────────────────────────────────────────────
 function spawnBackend() {
     const cmd  = ARG.dev ? 'npx' : 'node';
     const cmdArgs = ARG.dev ? ['nodemon', '--quiet', 'server.js'] : ['server.js'];
@@ -311,7 +287,6 @@ function spawnBackend() {
     return child;
 }
 
-// ─── Graceful shutdown ───────────────────────────────────────────────
 function attachShutdown(children, staticServer) {
     let shuttingDown = false;
     const shutdown = (sig) => {
@@ -334,7 +309,6 @@ function attachShutdown(children, staticServer) {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-// ─── Main ────────────────────────────────────────────────────────────
 (async function main() {
     banner();
     const env = await preflight();

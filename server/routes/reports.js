@@ -77,7 +77,7 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
     const groupBy = (req.query.groupBy === 'month') ? 'month' : 'day';
     const limit   = Math.min(Math.max(parseInt(req.query.limit) || 200, 1), 1000);
 
-    // Date defaults: keep it tight so the default load is fast.
+    // Tight default range keeps the default load fast.
     const today   = new Date();
     const tzShift = 7 * 60 * 60 * 1000;             // shift UTC → Bangkok for date math
     const todayBkk = new Date(today.getTime() + tzShift).toISOString().slice(0, 10);
@@ -91,7 +91,6 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
         return res.status(400).json({ ok: false, error: 'invalid_date', message: 'from/to ต้องเป็นรูปแบบ YYYY-MM-DD' });
     }
 
-    // Optional project filter
     const projFilter = (req.query.projectId || '').trim();
     const params = [from, to, limit];
     let projWhere = '';
@@ -112,7 +111,6 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
     try {
         let rows;
         if (groupBy === 'month') {
-            // Aggregate: (month, user, type) → sum amount, count events
             const sql = `
                 SELECT
                     TO_CHAR(tx_month, 'FMMonth YYYY')    AS period_label,
@@ -137,7 +135,6 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
             const r = await pool.query(sql, params);
             rows = r.rows;
         } else {
-            // Per-event detail
             const sql = `
                 SELECT
                     transaction_id,
@@ -186,7 +183,7 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
     const format  = (req.query.format === 'xlsx') ? 'xlsx' : 'csv';
     const groupBy = (req.query.groupBy === 'month') ? 'month' : 'day';
 
-    // Date defaults — same logic as /api/transactions
+    // Same date defaults as /api/transactions
     const today    = new Date();
     const tzShift  = 7 * 60 * 60 * 1000;
     const todayBkk = new Date(today.getTime() + tzShift).toISOString().slice(0, 10);
@@ -292,8 +289,7 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
         }
 
         if (format === 'csv') {
-            // Simple CSV writer — proper escaping for commas/quotes/newlines.
-            // BOM prefix so Excel opens UTF-8 (Thai names) correctly.
+            // CSV with a BOM so Excel opens UTF-8 (Thai names) correctly.
             const esc = (v) => {
                 if (v === null || v === undefined) return '';
                 let s = String(v);
@@ -312,7 +308,6 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
             return;
         }
 
-        // xlsx via exceljs
         const ExcelJS = require('exceljs');
         const wb = new ExcelJS.Workbook();
         wb.creator = 'PetabyteAi';
@@ -323,7 +318,6 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
         ws.columns = columns;
         ws.addRows(rows);
 
-        // Header styling — Petabyte accent
         const headerRow = ws.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         headerRow.fill = {
@@ -333,7 +327,6 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
         headerRow.alignment = { vertical: 'middle', horizontal: 'left' };
         headerRow.height = 22;
 
-        // Number formats for money columns
         if (groupBy === 'month') {
             ws.getColumn('amount').numFmt = '#,##0.00';
             ws.getColumn('event_count').alignment = { horizontal: 'right' };

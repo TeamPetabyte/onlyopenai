@@ -1,61 +1,27 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ Markdown + code-highlight + copy-buttons helper           ║
-// ╚═══════════════════════════════════════════════════════════╝
-// Exposes a single global `MD` with:
-//   MD.render(text)         → safe HTML string
-//   MD.postProcess(element) → attach copy buttons to code blocks
-//   MD.attachMessageCopy(el, rawText) → put a ⧉ Copy button on a message
-//
-// Pipeline: raw markdown
-//   → marked.parse() → HTML
-//   → DOMPurify.sanitize() → safe HTML (strips <script>, on* handlers, etc.)
-//   → insert into DOM
-//   → hljs.highlightElement() on each <pre><code>
-//   → add "Copy" button to each <pre>
-//
-// XSS hardening notes:
-//   - DOMPurify removes all javascript: URIs and inline handlers by default.
-//   - We also strip `target` / `onload` / `onerror` attributes explicitly.
-//   - We block data: URIs on <img> to prevent giant embedded payloads from
-//     blowing up the browser (AI sometimes hallucinates base64 images).
-//   - Links are forced to rel="noopener noreferrer" and target="_blank".
-//
-// Streaming strategy:
-//   During streaming, we use plain-text rendering (escape only) because
-//   markdown is not parseable mid-sentence. When streaming ends, we swap
-//   to rendered markdown + syntax highlight in one pass.
+// Markdown rendering for chat: marked → DOMPurify → hljs, plus copy/download buttons.
+// Exposes global MD: render(text), postProcess(el), attachMessageCopy(el, rawText).
+// While streaming, callers render escaped plain text and swap to markdown at the end.
 
 (function () {
     'use strict';
 
-    // ─── Wait-until-ready guard (libs load via <script> in <head>) ──
-    // marked and DOMPurify export global objects of the same name; hljs
-    // is available as window.hljs.
+    // libs load via <script> in <head>; marked, DOMPurify and hljs are globals.
     function libsReady() {
         return typeof window.marked !== 'undefined'
             && typeof window.DOMPurify !== 'undefined'
             && typeof window.hljs !== 'undefined';
     }
 
-    // ─── marked options ─────────────────────────────────────
+    // marked options
     if (typeof window.marked !== 'undefined') {
         window.marked.setOptions({
             gfm:         true,   // GitHub Flavored Markdown (tables, task lists)
-            breaks:      true,   // treat single \n as <br>  — AI output prefers this
+            breaks:      true,   // treat single \n as <br>
             pedantic:    false,
             smartLists:  true,
         });
 
-        // Phase 41: turn GFM strikethrough OFF. In ABAP, `~` joins a table alias
-        // to a field — `stock~matnr`. GFM reads the text between two tildes as
-        // strikethrough, so a SELECT list containing several aliased fields had
-        // every tilde swallowed:
-        //     SELECT stock~werks, ... stock~matnr    (what the model wrote)
-        //  →  SELECT stockwerks,  ... stockmatnr     (what the user saw)
-        // The reviewer reasonably concluded the AI was inventing field names
-        // that don't exist. It wasn't — we were corrupting correct ABAP on the
-        // way to the screen, and a user could paste the result into SAP.
-        // Strikethrough is worth nothing here; `~` is load-bearing syntax.
+        // GFM strikethrough off: in ABAP `~` joins alias to field (stock~matnr) and GFM would swallow it.
         try {
             window.marked.use({ tokenizer: { del: () => false } });
         } catch (e) {
@@ -63,14 +29,8 @@
         }
     }
 
-    // ─── Normalize the model's XML answer wrappers ──────────
-    // Phase 41: the skill prompts ask for <analysis>…</analysis> and
-    // <code>…</code> rather than markdown fences, so the ABAP arrived as plain
-    // prose: inline markdown applied to it, and the whole listing collapsed
-    // onto one line because nothing marked it as code. Rewrite those wrappers
-    // into their markdown equivalents before parsing, which also restores
-    // syntax highlighting and the copy button. Unclosed tags are handled too —
-    // at least one prompt in the catalog never closes the block it opens.
+    // Rewrite the model's <analysis> / <code> wrappers into markdown before parsing, so the
+    // ABAP is fenced (highlight + copy button). Unclosed tags are handled too.
     function normalizeModelBlocks(text) {
         let t = String(text);
         t = t.replace(/<analysis>\s*([\s\S]*?)\s*<\/analysis>/gi, '\n\n$1\n\n');
@@ -82,8 +42,7 @@
         return t;
     }
 
-    // ─── DOMPurify config ───────────────────────────────────
-    // Tight allowlist. Anything AI outputs outside of this is stripped.
+    // DOMPurify config: tight allowlist, anything else is stripped.
     const PURIFY_CONFIG = {
         ALLOWED_TAGS: [
             'h1','h2','h3','h4','h5','h6',
@@ -93,12 +52,12 @@
             'ul','ol','li',
             'blockquote',
             'table','thead','tbody','tr','th','td',
-            'img',
+            // no <img>: a model answer could embed a src that leaks the reader's IP
         ],
         ALLOWED_ATTR: ['href','title','alt','src','class','name','id','start','type'],
         FORBID_ATTR: ['style','onerror','onload','onclick','onmouseover'],
         ALLOW_DATA_ATTR: false,
-        // Force http(s) only — blocks javascript:, data: (except image at our discretion)
+        // http(s)/mailto/tel only; blocks javascript: and data:
         ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|#|\/)/i,
     };
 
@@ -121,22 +80,17 @@
         }
     }
 
-    // ─── Post-process: apply syntax highlight + copy buttons ──
+    // Post-process: syntax highlight + copy buttons
     function postProcess(rootEl) {
         if (!rootEl || !libsReady()) return;
 
-        // After DOMPurify we trust the subtree. Force-link safety.
+        // Force safe link attributes.
         rootEl.querySelectorAll('a[href]').forEach(a => {
             a.setAttribute('target', '_blank');
             a.setAttribute('rel', 'noopener noreferrer');
         });
 
-        // Phase 33 (v1.7.0): wrap every <table> in a horizontally-scrollable
-        // container. Wide AI tables (e.g. migration analyses) then keep their
-        // natural column widths and scroll inside their own frame, instead of
-        // being crushed until Thai headers wrap letter-by-letter. Done here so
-        // it applies everywhere markdown renders (live stream finalize,
-        // history reload, regenerate).
+        // Wrap every <table> in a scrollable container so wide tables keep their column widths.
         rootEl.querySelectorAll('table').forEach(tb => {
             if (tb.parentElement && tb.parentElement.classList.contains('md-table-wrap')) return;
             const wrap = document.createElement('div');
@@ -145,7 +99,6 @@
             wrap.appendChild(tb);
         });
 
-        // Syntax highlight every <pre><code>
         rootEl.querySelectorAll('pre > code').forEach(codeEl => {
             // hljs decides the language from a `language-xxx` class if present.
             try { window.hljs.highlightElement(codeEl); } catch (_) {}
@@ -153,7 +106,7 @@
             const pre = codeEl.parentElement;
             if (pre.querySelector('.code-copy-btn')) return;   // idempotent
 
-            // ─── copy button (absolute-positioned) ──────────
+            // copy button
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'code-copy-btn';
@@ -164,7 +117,7 @@
         });
     }
 
-    // ─── Whole-message copy button ─────────────────────────
+    // Whole-message copy button
     function attachMessageCopy(bubbleEl, rawText) {
         if (!bubbleEl) return;
         if (bubbleEl.querySelector('.msg-actions')) return;
@@ -184,9 +137,7 @@
         return actions;   // caller can append more buttons (e.g. Regenerate)
     }
 
-    // Phase 45: when the answer carries a corrected source file, download the
-    // code alone. Saving the whole message put the summary and the ⚠️ section
-    // at the top of a .abap file, so it wouldn't compile.
+    // When the answer carries a corrected source file, download the code alone so the .abap compiles.
     function downloadableBody(rawText) {
         const t = String(rawText || '');
         const blocks = [...t.matchAll(/```(?:\w+)?\r?\n([\s\S]*?)```/g)].map(m => m[1]);
@@ -194,7 +145,7 @@
         return blocks.reduce((a, b) => (b.length > a.length ? b : a)).replace(/\s+$/, '') + '\n';
     }
 
-    // ─── Download button: save the AI response as a file ──
+    // Download button: save the AI response as a file
     function attachMessageDownload(actionsEl, rawText, filename) {
         if (!actionsEl) return;
         if (actionsEl.querySelector('.msg-action-download')) return;   // idempotent
@@ -212,9 +163,7 @@
         return dlBtn;
     }
 
-    // ─── Pick a sensible filename/extension from the response ──
-    // If the AI response is a single fenced code block, use its language
-    // for the extension so e.g. ABAP code downloads as .abap not .txt.
+    // Extension from the fenced block's language, so ABAP downloads as .abap not .txt.
     const LANG_EXT = {
         abap: 'abap', javascript: 'js', typescript: 'ts', python: 'py',
         java: 'java', json: 'json', sql: 'sql', xml: 'xml', html: 'html',
@@ -222,8 +171,7 @@
         c: 'c', cpp: 'cpp', csharp: 'cs', go: 'go', ruby: 'rb', php: 'php',
         markdown: 'md', md: 'md', plaintext: 'txt', text: 'txt',
     };
-    // Uploads often arrive without one ("Zlmmrp29_batch"); take it from the
-    // code block's language so the file opens as ABAP.
+    // Uploads often arrive without an extension; take it from the code block's language.
     function withExtension(name, rawText) {
         if (/\.[A-Za-z0-9]{1,6}$/.test(name)) return name;
         const m = /^```(\w+)?/m.exec(String(rawText || ''));
@@ -238,7 +186,7 @@
         return `pipekai-response-${ts}.${ext}`;
     }
 
-    // ─── Trigger a client-side file download via Blob + <a download> ──
+    // Client-side download via Blob + <a download>
     function downloadText(text, filename) {
         try {
             const blob = new Blob([String(text || '')], { type: 'text/plain;charset=utf-8' });
@@ -255,7 +203,7 @@
         }
     }
 
-    // ─── Copy helper with feedback ─────────────────────────
+    // Copy helper with feedback
     function copyTextTo(text, btnEl) {
         const done = () => {
             if (!btnEl) return;
@@ -288,7 +236,7 @@
         document.body.removeChild(ta);
     }
 
-    // ─── Public API ────────────────────────────────────────
+    // Public API
     window.MD = {
         render,
         postProcess,

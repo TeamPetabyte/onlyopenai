@@ -15,9 +15,7 @@
     <!-- tokens.css MUST load before style.css — defines --sidebar-w, --surface-0, --accent, etc. -->
     <link rel="stylesheet" href="css/tokens.css?v=1.3.8.1" />
 
-    <!-- Phase 16.15: theme bootstrap. Reads saved preference and sets
-         data-theme BEFORE first paint to prevent a brief flash of the
-         default (dark) theme on first load when user prefers light. -->
+    <!-- Apply the saved theme before first paint to avoid a flash of the default dark theme. -->
     <script>
         (function () {
             try {
@@ -42,9 +40,7 @@
             if (moon)  moon.style.display  = isLight ? 'none' : '';
             if (sun)   sun.style.display   = isLight ? '' : 'none';
             if (label) label.textContent   = isLight ? 'Dark Mode' : 'Light Mode';
-            // Phase 19.5 a11y: aria-pressed reflects the toggle state so
-            // screen readers announce "Toggle theme, pressed" when in light
-            // mode. Pair with a more descriptive aria-label.
+            // aria-pressed lets screen readers announce the toggle state.
             if (btn) {
                 btn.setAttribute('aria-pressed', isLight ? 'true' : 'false');
                 btn.setAttribute('aria-label', isLight
@@ -227,7 +223,7 @@
             margin-bottom: 14px;
         }
 
-        /* ── Phase 21.5: Transaction by Date section ─────────────────── */
+        /* ── Transaction by Date section ── */
         .tx-header {
             display: flex;
             align-items: flex-start;
@@ -380,7 +376,7 @@
             margin-left: auto;
         }
 
-        /* ── Phase 21.10: Quota Requests card ─────────────────────────── */
+        /* ── Quota Requests card ── */
         .qr-header {
             display: flex;
             justify-content: space-between;
@@ -638,9 +634,7 @@
             .tx-table tbody td { padding: 8px; font-size: .78rem; }
         }
 
-        /* overview — Phase 20.2: auto-fit so 5 cards never wrap to a
-           lonely orphan on the next row. min 220px keeps each card
-           readable; cards reflow to 2/3/4/5 per row as width allows. */
+        /* overview: auto-fit so 5 cards never leave a lone orphan; min 220px keeps each readable */
         .overview-mini {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -817,10 +811,7 @@
             transition: border-color .2s;
         }
 
-        /* v1.8.4: browsers default textareas to resize:both, which lets the
-           drag handle pull the box wider than its card (it "escapes" the
-           layout). Vertical-only keeps resizing useful — the page reflows
-           with the taller box — while the width stays bound to the column. */
+        /* Vertical-only resize: resize:both lets the drag handle pull the box wider than its card */
         textarea.modal-input { resize: vertical; }
 
         .modal-input:focus {
@@ -828,9 +819,7 @@
             border-color: var(--border-strong);
         }
 
-        /* Phase 19.3: was #333 — nearly invisible on dark --surface-3. Use
-           the token so placeholder follows the theme (and is readable on
-           both light & dark). */
+        /* Token colour so the placeholder is readable on both themes */
         .modal-input::placeholder {
             color: var(--text-3);
             opacity: 1;
@@ -856,7 +845,7 @@
             margin-top: 20px;
         }
 
-        /* ── Phase 21.5: Edit User modal polish ───────────────────────── */
+        /* ── Edit User modal ── */
         .modal-box-eu {
             max-width: 520px;
         }
@@ -1146,9 +1135,6 @@
             display: block;
         }
 
-        /* Phase 20.2: .overview-mini uses auto-fit above — no per-breakpoint
-           overrides needed. Cards reflow naturally as the viewport shrinks. */
-
         @media(max-width:540px) {
             .modal-row {
                 grid-template-columns: 1fr;
@@ -1265,10 +1251,7 @@
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-        <!-- v1.4.2.1: swapped the Petabyte wordmark logo for the PipekAI mascot.
-             object-fit:contain keeps the image proportions whatever the slot
-             size; the wrapper enforces a tight 32×32 box so the sidebar row
-             height stays the same as before. -->
+        <!-- PipekAI mascot; object-fit:contain + a tight 32×32 wrapper keeps the row height fixed -->
         <div class="sidebar-brand">
             <div class="brand-icon" style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center">
                 <img src="/assets/mascot.png" alt="PipekAI"
@@ -1285,9 +1268,7 @@
             </div>
         </div>
 
-        <!-- Phase 16.3: hierarchical sidebar.
-             Top-level: Dashboard, User Management (section), Balance.
-             Sub-items under User Management: Project, User, Activity Log, Credits, Login History. -->
+        <!-- Hierarchical sidebar: Dashboard, User Management (Project, User, Activity Log, Credits, Login History), Balance -->
         <nav class="sidebar-nav">
             <a class="nav-item active" onclick="admin.navigate('overview');return false;" href="#" id="nav-overview">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1327,7 +1308,7 @@
                 <span data-i18n="nav.loginHistory">Login History</span>
             </a>
 
-            <!-- Phase 16.1: Balance + Top-up admin page -->
+            <!-- Balance + Top-up admin page -->
             <a class="nav-item" onclick="admin.navigate('balance');return false;" href="#" id="nav-balance">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="2" y="6" width="20" height="12" rx="2" />
@@ -1336,8 +1317,7 @@
                 </svg>
                 <span data-i18n="nav.balance">Balance</span>
             </a>
-            <!-- Phase 22: Skill Prompts — prompt engineers add/edit prompts
-                 and hot-reload directly from this admin page. -->
+            <!-- Skill Prompts — add/edit prompts and hot-reload -->
             <a class="nav-item" onclick="admin.navigate('skills');return false;"
                href="#" id="nav-skills">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1347,9 +1327,7 @@
                 <span>Skill Prompts</span>
             </a>
 
-            <!-- Phase 29: Prompt Lab — full-page workspace to test a skill's
-                 system prompt, judge the answers (senior verdict) and browse
-                 the test history. Replaces the old test/history modals. -->
+            <!-- Prompt Lab — test a skill's system prompt, judge answers, browse history -->
             <a class="nav-item" onclick="admin.navigate('lab');return false;"
                href="#" id="nav-lab">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1359,8 +1337,7 @@
                 <span data-i18n="nav.lab">Prompt Lab</span>
             </a>
 
-            <!-- Phase 30: Evals — batch-exam a skill's prompt against the ⭐
-                 golden dataset and score it with an AI judge. -->
+            <!-- Evals — batch-exam a skill's prompt against the golden dataset with an AI judge -->
             <a class="nav-item" onclick="admin.navigate('evals');return false;"
                href="#" id="nav-evals">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1370,11 +1347,8 @@
                 <span data-i18n="nav.evals">Evals</span>
             </a>
 
-            <!-- Phase 17.4: Sync Status — HIDDEN pending PM approval.
-                 The view + JS handlers + backend endpoints + background
-                 sync job all remain wired so usage data keeps accumulating
-                 in tbl_daily_token while we wait. To re-enable, remove the
-                 inline `display:none`. -->
+            <!-- Sync Status — HIDDEN pending PM approval. View, handlers, endpoints and the sync job stay
+                 wired so tbl_daily_token keeps filling; to re-enable, remove the inline display:none. -->
             <a class="nav-item" onclick="admin.navigate('sync');return false;" href="#" id="nav-sync"
                style="display:none">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1387,10 +1361,7 @@
         </nav>
 
         <div class="sidebar-logout">
-            <!-- Phase 16.15: theme toggle. Click switches between dark/light.
-                 Preference is persisted in localStorage; bootstrap script in
-                 <head> applies the saved theme BEFORE first paint to avoid
-                 a flash of the wrong palette. -->
+            <!-- Theme toggle; preference persisted in localStorage and applied by the <head> bootstrap -->
             <button class="theme-toggle-btn" id="theme-toggle-btn" type="button"
                     onclick="toggleTheme()" aria-label="Toggle theme">
                 <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24"
@@ -1404,7 +1375,7 @@
                 </svg>
                 <span id="theme-toggle-label" data-i18n="theme.light">Light Mode</span>
             </button>
-            <!-- Phase 3: language toggle (TH ⇄ EN) -->
+            <!-- language toggle (TH ⇄ EN) -->
             <button class="theme-toggle-btn" id="lang-toggle-btn" type="button"
                     onclick="I18N.toggle()" aria-label="Toggle language"
                     style="margin-top:8px">
@@ -1449,7 +1420,7 @@
                 <div id="overview-user-list" style="margin-top:14px"></div>
             </div>
 
-            <!-- Phase 21.5: Transaction by Date — per-event journal + monthly rollup -->
+            <!-- Transaction by Date — per-event journal + monthly rollup -->
             <div class="glass-card" id="tx-card" style="margin-top:18px">
                 <div class="tx-header">
                     <div>
@@ -1496,7 +1467,7 @@
                 </div>
             </div>
 
-            <!-- Phase 21.10: Quota Requests — pending first, then resolved -->
+            <!-- Quota Requests — pending first, then resolved -->
             <div class="glass-card" id="qr-card" style="margin-top:18px">
                 <div class="qr-header">
                     <div>
@@ -1525,8 +1496,7 @@
                 <button class="btn-action btn-primary-sm" style="padding:9px 20px;font-size:.875rem"
                     onclick="admin.openAddUser()" data-i18n="btn.addUser">+ Add User</button>
             </div>
-            <!-- Phase 16.24: container changed from <table> to <div> —
-                 renderUsers now produces div-based row-cards, not <tr><td>. -->
+            <!-- renderUsers produces div-based row-cards, not <tr><td> -->
             <div id="user-table"></div>
         </div>
 
@@ -1545,10 +1515,8 @@
 
         <!-- ACTIVITY LOG -->
         <div class="view hidden" id="view-activity">
-            <!-- Phase 16.12: page-header element ids added so navigate() can
-                 swap title/subtitle when entering as either:
-                   - 'activity'      → Activity Log (chat + admin tabs visible)
-                   - 'login-history' → Login History (tab bar hidden, audit only) -->
+            <!-- navigate() swaps title/subtitle: 'activity' → Activity Log (tabs visible),
+                 'login-history' → Login History (audit only) -->
             <div class="page-header">
                 <div>
                     <h2 class="page-title" id="activity-page-title">Activity Log</h2>
@@ -1560,11 +1528,7 @@
                 </div>
             </div>
 
-            <!-- Sub-tabs (chat / action) — hidden entirely when entering as Login History.
-                 Phase 16.10 removed Login/Logout from this tab set; Phase 16.12
-                 also hides the tab bar itself when the page is opened from the
-                 sidebar "Login History" entry, so admins see a clean dedicated
-                 page rather than a tab bar with one logical option. -->
+            <!-- Sub-tabs (chat / action) — hidden entirely when entering as Login History -->
             <div class="audit-tabs" id="activity-tabs" role="tablist" aria-label="Activity log sub-tabs">
                 <button type="button" class="audit-tab active" data-tab="chat"   role="tab" aria-selected="true"  onclick="admin.switchActivityTab('chat')" data-i18n="tab.chatHistory">💬 Chat History</button>
                 <button type="button" class="audit-tab"        data-tab="action" role="tab" aria-selected="false" onclick="admin.switchActivityTab('action')" data-i18n="tab.adminActions">⚙️ Admin Actions</button>
@@ -1575,7 +1539,7 @@
                 <div id="activity-log"></div>
             </div>
 
-            <!-- Login / Logout (NEW — tbl_audit_log) -->
+            <!-- Login / Logout (tbl_audit_log) -->
             <div class="glass-card audit-pane hidden" id="pane-audit">
                 <div class="audit-table-wrap">
                     <table class="audit-table" id="audit-log-table">
@@ -1595,9 +1559,9 @@
                 </div>
             </div>
 
-            <!-- Admin actions (NEW — tbl_action_admin) -->
+            <!-- Admin actions (tbl_action_admin) -->
             <div class="glass-card audit-pane hidden" id="pane-action">
-                <!-- Phase 14.3: filters for drill-down; Phase 16.14: custom dropdowns -->
+                <!-- filters for drill-down (custom dropdowns) -->
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
                     <input type="hidden" id="action-log-filter-type" />
                     <button type="button" class="dd-trigger" id="action-log-filter-type-trigger"
@@ -1640,7 +1604,7 @@
                 </div>
             </div>
 
-            <!-- Phase 14.3: inline styling for the audit detail diff -->
+            <!-- inline styling for the audit detail diff -->
             <style>
                 .action-label {
                     display: inline-flex; align-items: center; gap: 4px;
@@ -1709,7 +1673,7 @@
             </style>
         </div>
 
-        <!-- CREDITS (Phase 16.11) — 2 sub-tabs: Credit Management + Usage Analytics -->
+        <!-- CREDITS — 2 sub-tabs: Credit Management + Usage Analytics -->
         <div class="view hidden" id="view-usage">
             <div class="page-header">
                 <div>
@@ -1719,9 +1683,7 @@
                 <button class="btn-action btn-save" onclick="admin.refreshCreditsTab()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
             </div>
 
-            <!-- Sub-tabs (Credit Management / Usage Analytics).
-                 Default tab on first navigation = Credit Management (action page).
-                 Usage Analytics keeps existing render code untouched. -->
+            <!-- Sub-tabs; default on first navigation = Credit Management -->
             <div class="audit-tabs" role="tablist" aria-label="Credits sub-tabs">
                 <button type="button" class="audit-tab active" data-tab="credit"
                         role="tab" aria-selected="true"
@@ -1731,13 +1693,12 @@
                         onclick="admin.switchCreditsTab('usage')" data-i18n="tab.usageAnalytics">📊 Usage Analytics</button>
             </div>
 
-            <!-- Pane 1: Credit Management (NEW, matches mockup) -->
+            <!-- Pane 1: Credit Management -->
             <div class="glass-card audit-pane" id="pane-credit" style="overflow-x:auto">
                 <table class="user-table" id="credit-table"></table>
             </div>
 
-            <!-- Pane 2: Usage Analytics — Phase 16.13/14: project filter row
-                 with custom dropdown (replaces native <select> for theme fit). -->
+            <!-- Pane 2: Usage Analytics — project filter row with custom dropdown -->
             <div class="audit-pane hidden" id="pane-usage">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
                     <label style="color:var(--text-2);font-size:.85rem;font-weight:600">📂 Project:</label>
@@ -1767,7 +1728,7 @@
             </div>
         </div>
 
-        <!-- BALANCE & TOP-UP (Phase 16.1) -->
+        <!-- BALANCE & TOP-UP -->
         <div class="view hidden" id="view-balance">
             <div class="page-header">
                 <div>
@@ -1794,7 +1755,7 @@
             </div>
         </div>
 
-        <!-- SKILL PROMPTS (Phase 18) — read-only view of skill-prompts.json -->
+        <!-- SKILL PROMPTS — read-only view of skill-prompts.json -->
         <div class="view hidden" id="view-skills">
             <div class="page-header">
                 <div>
@@ -1817,10 +1778,8 @@
             <div id="skills-list"></div>
         </div>
 
-        <!-- PROMPT LAB (Phase 29) — one-page workspace: pick a skill, see the
-             system prompt being tested, run a question, judge the answer and
-             browse/judge past runs. All rendering logic lives in admin.js
-             (renderLab / labRun / loadTestHistory / showVerdictBar). -->
+        <!-- PROMPT LAB — pick a skill, run a question, judge the answer, browse past runs.
+             Logic in admin.js (renderLab / labRun / loadTestHistory / showVerdictBar). -->
         <div class="view hidden" id="view-lab">
             <div class="page-header">
                 <div>
@@ -1869,10 +1828,8 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
                         <label class="modal-label" style="margin:0" data-i18n="lab.questionLabel">โจทย์ (วางโค้ด ABAP หรือคำถาม)</label>
                         <div style="display:flex;gap:8px">
-                            <!-- v1.5.1: attach Z-program source files — read client-side
-                                 and appended into the textarea (visible + editable). -->
-                            <!-- v1.8.8: one-click fresh test — no more select-all-delete
-                                 before every new question. -->
+                            <!-- attach Z-program source files — read client-side and appended into the textarea -->
+                            <!-- one-click fresh test -->
                             <button class="btn-action" style="padding:8px 14px" onclick="admin.labNewTest()">➕ <span data-i18n="lab.newTest">ทดสอบใหม่</span></button>
                             <button class="btn-action" style="padding:8px 14px" onclick="document.getElementById('lab-file-input').click()">📎 <span data-i18n="lab.attachFile">แนบไฟล์</span></button>
                             <button class="btn-action btn-primary-sm" id="lab-run-btn" style="padding:8px 22px" onclick="admin.labRun()">▶ <span data-i18n="btn.run">Run</span></button>
@@ -1881,9 +1838,8 @@
                     <input type="file" id="lab-file-input" multiple style="display:none"
                         accept=".abap,.txt,.md,.cds,.ddls,.sql,.js,.ts,.xml,.json,.csv,.yaml,.yml,.log,.properties,.ini,.conf,.text"
                         onchange="admin.labAttachFiles(event)" />
-                    <!-- v1.8.4: wrap="off" + white-space:pre → long ABAP lines keep
-                         their shape with a horizontal scrollbar instead of wrapping;
-                         resize stays vertical-only so the box can't escape the card. -->
+                    <!-- wrap="off" + white-space:pre: long ABAP lines scroll horizontally instead of wrapping;
+                         resize stays vertical-only -->
                     <textarea class="modal-input" id="lab-question" rows="14" wrap="off"
                         style="font-family:'Geist Mono',monospace;font-size:.8rem;white-space:pre;overflow-x:auto;min-height:180px;tab-size:4"
                         data-i18n-ph="lab.questionPh"
@@ -1925,10 +1881,8 @@
             </div>
         </div>
 
-        <!-- EVALS (Phase 30) — exam the skill prompt against the ⭐ golden
-             dataset. Start a run, watch live progress, read the score report
-             and drill into failed cases. Logic in admin.js (renderEvals /
-             startEvalRun / loadEvalRuns / openEvalRunDetail). -->
+        <!-- EVALS — exam the skill prompt against the golden dataset.
+             Logic in admin.js (renderEvals / startEvalRun / loadEvalRuns / openEvalRunDetail). -->
         <div class="view hidden" id="view-evals">
             <div class="page-header">
                 <div>
@@ -1993,7 +1947,7 @@
             </div>
         </div>
 
-        <!-- SYNC STATUS (Phase 17.4) — monitors the OpenAI usage sync job -->
+        <!-- SYNC STATUS — monitors the OpenAI usage sync job -->
         <div class="view hidden" id="view-sync">
             <div class="page-header">
                 <div>
@@ -2026,15 +1980,11 @@
         <div class="modal-box" style="max-width:500px">
             <div class="modal-title">Create a new user</div>
 
-            <!-- Phase 30.2: Role comes FIRST — it decides which fields below
-                 make sense. Staff accounts (admin/trainer) have no project
-                 binding and no daily cap, so those fields hide. The picker
-                 itself is only rendered for trainers (superadmin). -->
+            <!-- Role first — staff accounts (admin/trainer) have no project or daily cap, so those
+                 fields hide. The picker is only rendered for trainers (superadmin). -->
             <div class="modal-field" id="au-role-field" style="display:none">
                 <label class="modal-label" data-i18n="m.field.role">บทบาท (Role)</label>
-                <!-- Phase 30.3: no trainer option here — superadmin accounts are
-                     deliberately NOT creatable from the app (provisioned
-                     manually when needed). -->
+                <!-- No trainer option: superadmin accounts are provisioned manually, never from the app -->
                 <select class="modal-input" id="au-role" onchange="admin.onAddUserRoleChange(this.value)">
                     <option value="user" selected data-i18n="m.role.user">👤 User — ใช้งาน chat</option>
                     <option value="admin" data-i18n="m.role.admin">🛡️ Admin — จัดการคน+เงิน</option>
@@ -2149,9 +2099,7 @@
                 </div>
             </div>
 
-            <!-- Daily Cap (Concept B) — per-user daily spending limit drawn from
-                 the project pool. Leave blank = no cap (unlimited / pool only).
-                 Chat users only — hidden for staff roles (no chat, no cap). -->
+            <!-- Daily Cap — per-user daily limit drawn from the project pool; blank = no cap. Chat users only. -->
             <div class="modal-field" id="au-dailycap-field">
                 <label class="modal-label" data-i18n="m.field.startDailyCap">Daily Cap เริ่มต้น (฿/วัน)</label>
                 <input class="modal-input" id="au-dailycap" type="number" step="0.01" min="0"
@@ -2182,8 +2130,7 @@
                 <label class="modal-label" data-i18n="m.field.description">คำอธิบาย (ไม่บังคับ)</label>
                 <input class="modal-input" id="ap-desc" type="text" data-i18n-ph="m.ph.projectDesc" placeholder="รายละเอียด project..." />
             </div>
-            <!-- Input/Output rates default to ฿0.50 / ฿1.50 per 1K tokens on create.
-                 Admins can fine-tune them later via the Edit Project modal. -->
+            <!-- Rates default to ฿0.50 / ฿1.50 per 1K tokens; editable later in Edit Project -->
             <div class="modal-error" id="ap-error"></div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-add-project')"><span data-i18n="btn.cancelTh">ยกเลิก</span></button>
@@ -2192,13 +2139,8 @@
         </div>
     </div>
 
-    <!-- MODAL: Edit User (Phase 16.4) — replaces inline table editing.
-         Centralises project assignment, status, balance, daily cap, reset PW, delete. -->
-    <!-- Phase 21.5: Edit User modal redesigned — identity edits only.
-         Credit + Daily Cap moved out (already covered by the dedicated
-         Credit Management page). What stays here is account profile:
-         Name, Surname, Project, Account Status, plus the two destructive
-         actions (Reset PW / Delete) tucked at the bottom. -->
+    <!-- MODAL: Edit User — identity only (Name, Surname, Project, Status, Reset PW, Delete);
+         credit and daily cap live in Credit Management. -->
     <div class="modal-overlay" id="modal-edit-user">
         <div class="modal-box modal-box-eu">
             <div class="modal-title">
@@ -2284,10 +2226,9 @@
         </div>
     </div>
 
-    <!-- MODAL: Edit User Credit (Phase 16.11) — delta model.
-         Setting a new user-credit moves money between project pool and user wallet.
-         Live preview shows what the project balance WILL be after save. -->
-    <!-- MODAL: Edit Daily Cap (Phase 21.10, Concept B) -->
+    <!-- MODAL: Edit User Credit — delta model: moves money between the project pool and the user
+         wallet; the live preview shows the resulting project balance. -->
+    <!-- MODAL: Edit Daily Cap -->
     <div class="modal-overlay" id="modal-edit-credit">
         <div class="modal-box" style="max-width:440px">
             <div class="modal-title" data-i18n="m.cap.title">🎯 ตั้งโควต้ารายวัน (Daily Cap)</div>
@@ -2331,9 +2272,7 @@
         </div>
     </div>
 
-    <!-- MODAL: Insufficient project pool (Phase 16.11) — custom replacement
-         for browser confirm/alert. Shown when /api/users/:id/balance returns
-         code='INSUFFICIENT_POOL'. -->
+    <!-- MODAL: Insufficient project pool — shown when /api/users/:id/balance returns code='INSUFFICIENT_POOL' -->
     <div class="modal-overlay" id="modal-insufficient-pool">
         <div class="modal-box" style="max-width:420px">
             <div class="modal-title" style="color:#e25563"><span data-i18n="m.pool.title">⚠️ Project pool ไม่พอ</span></div>
@@ -2387,11 +2326,8 @@
                 <label class="modal-label" data-i18n="m.field.creditLimitPerUser">Credit Limit ต่อ User (฿, 0 = ไม่จำกัด)</label>
                 <input class="modal-input" id="ep-credit-limit" type="number" step="1" min="0" placeholder="0" />
             </div>
-            <!-- Phase 16.2: OpenAI API key field.
-                 Status indicator above shows whether the project currently has a key.
-                 The input itself is type=password and stays empty when the modal opens
-                 (we never display the existing secret). Leave blank → backend keeps the
-                 stored value (COALESCE). Type a new key → backend overwrites. -->
+            <!-- OpenAI API key: the input stays empty on open (the stored secret is never shown).
+                 Blank → backend keeps the stored value; a new key overwrites it. -->
             <div class="modal-field">
                 <label class="modal-label">OpenAI API Key</label>
                 <div id="ep-api-key-status"
@@ -2412,7 +2348,7 @@
         </div>
     </div>
 
-    <!-- MODAL: Add / Edit Skill Prompt (Phase 22) -->
+    <!-- MODAL: Add / Edit Skill Prompt -->
     <div class="modal-overlay" id="modal-edit-skill">
         <div class="modal-box" style="max-width:760px">
             <div class="modal-title" id="es-title">✏️ แก้ไข Skill</div>
@@ -2462,8 +2398,7 @@
     <div class="modal-overlay" id="modal-topup">
         <div class="modal-box" style="max-width:420px">
             <div class="modal-title">💰 Top up balance</div>
-            <!-- Project picker — Phase 16.1: admin can switch project inside the modal
-                 instead of having to close and reopen from another row (matches mockup). -->
+            <!-- Project picker — switch project inside the modal -->
             <div class="modal-field">
                 <label class="modal-label">Project <span style="color:#d04545">*</span></label>
                 <input type="hidden" id="tu-proj-id" />
@@ -2495,9 +2430,7 @@
         </div>
     </div>
 
-    <!-- Phase 14.1: in-app confirm modal for admin.deleteUser() -->
-    <!-- Replaces the browser-native confirm() so we match app styling     -->
-    <!-- and can show richer context (display name, role, balance).        -->
+    <!-- Confirm modal for admin.deleteUser() — shows display name, role, balance -->
     <style>
         .btn-modal-danger {
             padding: 9px 20px;
@@ -2526,13 +2459,8 @@
         .confirm-target .cd-row b { color: var(--text-1); }
     </style>
 
-    <!-- Phase 16.8: in-app confirm modal for toggling user active/inactive.
-         Replaces the browser-native confirm() so styling matches the rest of
-         the app. Three variants depending on current status:
-           active   -> inactive  (orange theme: "deactivating")
-           inactive -> active    (green theme:  "activating")
-           locked   -> active    (blue theme:   "unlocking")
-         Theme + copy is filled in by admin.openConfirmStatusToggle().  -->
+    <!-- Confirm modal for toggling user status. Variants: active→inactive (orange), inactive→active (green),
+         locked→active (blue); theme + copy filled by admin.openConfirmStatusToggle(). -->
     <style>
         .cts-target {
             margin: 4px 0 16px;
@@ -2620,10 +2548,8 @@
         </div>
     </div>
 
-    <!-- Phase 14.1: confirm-delete Project modal -->
-    <!-- Shows member count + credit balance so admin sees the blast radius -->
-    <!-- before confirming. Server rejects if project has chat history;      -->
-    <!-- that error is surfaced in #cdp-error without closing the modal.     -->
+    <!-- Confirm-delete Project modal: shows member count + balance. The server rejects a project
+         with chat history; that error goes to #cdp-error without closing the modal. -->
     <div class="modal-overlay" id="modal-confirm-delete-project">
         <div class="modal-box" style="max-width:460px">
             <div class="modal-title" data-i18n="m.delProj.title">⚠️ ยืนยันการลบ Project</div>
@@ -2648,9 +2574,7 @@
         </div>
     </div>
 
-    <!-- Phase 14.1: confirm remove-user-from-project modal -->
-    <!-- Lighter variant: not destructive, just unassigns. Uses neutral      -->
-    <!-- submit button rather than danger red.                               -->
+    <!-- Confirm remove-user-from-project modal — non-destructive, neutral submit button -->
     <div class="modal-overlay" id="modal-confirm-remove-user-from-project">
         <div class="modal-box" style="max-width:420px">
             <div class="modal-title" data-i18n="m.removeUser.title">🚪 ย้าย User ออกจาก Project</div>
@@ -2674,8 +2598,7 @@
         </div>
     </div>
 
-    <!-- Phase 19.3: reset password modal (replaces browser prompt()) -->
-    <!-- Mirrors server policy: 8+ chars, must contain letter + digit. -->
+    <!-- Reset password modal. Mirrors server policy: 8+ chars, letter + digit. -->
     <div class="modal-overlay" id="modal-reset-password">
         <div class="modal-box" style="max-width:440px">
             <div class="modal-title" data-i18n="m.resetPw.title">🔑 รีเซ็ตรหัสผ่าน</div>
@@ -2712,7 +2635,7 @@
         </div>
     </div>
 
-    <!-- Phase 19.3: clear-project-API-key modal (replaces confirm()) -->
+    <!-- Clear-project-API-key modal -->
     <div class="modal-overlay" id="modal-confirm-clear-apikey">
         <div class="modal-box" style="max-width:420px">
             <div class="modal-title" data-i18n="m.clearKey.title">🔐 ลบ API key</div>
@@ -2736,9 +2659,7 @@
         </div>
     </div>
 
-    <!-- Phase 19.3: clear-all-history modal (typed confirmation) -->
-    <!-- destructive: wipes activity log for every user → require typing      -->
-    <!-- the word "DELETE" before the button enables. Belt-and-braces.       -->
+    <!-- Clear-all-history modal — destructive, so the user must type "DELETE" before the button enables -->
     <div class="modal-overlay" id="modal-confirm-clear-history">
         <div class="modal-box" style="max-width:460px">
             <div class="modal-title" data-i18n="m.clearHist.title">🗑 ล้าง Activity Log ทั้งหมด</div>
@@ -2764,7 +2685,7 @@
         </div>
     </div>
 
-    <!-- Phase 19.3: sync-now confirm modal (replaces confirm()) -->
+    <!-- Sync-now confirm modal -->
     <div class="modal-overlay" id="modal-confirm-sync-now">
         <div class="modal-box" style="max-width:420px">
             <div class="modal-title" data-i18n="m.syncNow.title">🔄 เริ่ม Usage Sync</div>
@@ -2782,7 +2703,7 @@
         </div>
     </div>
 
-    <!-- Phase 21.13: Quota request approve/deny modal (replaces confirm/prompt) -->
+    <!-- Quota request approve/deny modal -->
     <div class="modal-overlay" id="modal-quota-resolve">
         <div class="modal-box" style="max-width:440px">
             <div class="modal-title" id="qr-resolve-title">Quota Request</div>
@@ -2815,9 +2736,7 @@
         </div>
     </div>
 
-    <!-- Phase 26: view a single chat turn (full prompt + response) — lets
-         admin see exactly what a user typed and what the AI answered, for
-         incident investigation (unexpected charges, weird behaviour, etc). -->
+    <!-- View a single chat turn (full prompt + response) for incident investigation -->
     <div class="modal-overlay" id="modal-view-turn">
         <div class="modal-box" style="max-width:640px">
             <div class="modal-title" data-i18n="vt.title">💬 รายละเอียดการสนทนา</div>
@@ -2842,9 +2761,7 @@
         </div>
     </div>
 
-    <!-- Phase 29: default to English on this page too until the user
-         toggles (must be set before i18n.js loads/reads it) — matches
-         index.html so the whole app defaults EN, not just the chat page. -->
+    <!-- Default to English until the user toggles; must be set before i18n.js reads it -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
     <script type="module" src="js/pages/admin-page.js"></script>
 </body>

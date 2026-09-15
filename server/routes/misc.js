@@ -4,7 +4,7 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const {
-    getAssistantId,
+
     getVectorStoreId,
     HAS_API_KEY,
     migrationStatus,
@@ -17,10 +17,8 @@ const {
 router.get('/api/health', (req, res) => {
     res.json({
         ok: true,
+        // Unauthenticated: booleans only; model and OpenAI object ids live on /api/version (admin).
         mode:          HAS_API_KEY ? 'openai' : 'mock',
-        model:         HAS_API_KEY ? MODEL : null,
-        assistantId:   getAssistantId(),
-        vectorStoreId: getVectorStoreId(),
         rag:           !!getVectorStoreId(),
     });
 });
@@ -35,8 +33,7 @@ router.get('/api/version', requireAdmin, async (req, res) => {
             applied:  s.applied.length,
             pending:  s.pending.length,
             modified: s.modified.length,
-            // only list the problematic ones explicitly — applied list
-            // can be long and noisy
+            // the applied list can be long; list only pending/modified
             pendingFiles:  s.pending,
             modifiedFiles: s.modified,
         };

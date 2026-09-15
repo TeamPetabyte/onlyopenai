@@ -12,8 +12,7 @@ const {
     runUsageSync,
     safeError,
 } = ctx;
-// GET /api/sync-status
-// Returns the current sync state + per-project usage summary (drift report).
+// GET /api/sync-status — sync state plus per-project usage summary.
 router.get('/api/sync-status', requireAdmin, async (req, res) => {
     try {
         const state = await pool.query(
@@ -45,13 +44,6 @@ router.get('/api/sync-status', requireAdmin, async (req, res) => {
         res.status(500).json({ ok: false, ...safeError(e, req) });
     }
 });
-
-
-/** Phase 19.3: stronger placeholder detector — flags REPLACE-prefixed stubs,
- *  "TODO: fill in", "PLACEHOLDER", one-line stubs etc.
- *  Phase 40: the rule itself now lives in skill-prompts.js, because the
- *  registry needs it too (to keep stubs out of the router catalog) and two
- *  copies would eventually disagree about what counts as "not ready". */
 
 
 // POST /api/sync-now — manual trigger. Returns the result of THIS run.

@@ -6,9 +6,9 @@ const { looksLikeAbapCode, checkAbapSyntax } = abapScan;
 
 module.exports = function createAiTools({ ai }) {
 const { HAS_API_KEY, openai, getVectorStoreId, markProjectKeyInvalid, KNOWLEDGE_DIR } = ai;
-// Assistants-API chat stack ถูกถอดตั้งแต่ v1.7.2 — Assistants เหลือใช้แค่ RAG/vector store
+// Assistants API เหลือใช้แค่ RAG/vector store — ไม่ใช่ chat
 
-// ── TOOL EXECUTION ──
+// --- Tool execution ---
 
 /** ค้นหา BAPI/RFC จาก knowledge file */
 function findBapi(task, module) {
@@ -17,7 +17,6 @@ function findBapi(task, module) {
         const taskWords = task.toLowerCase().split(/\s+/);
         const moduleLower = (module || '').toLowerCase();
 
-        // แบ่งเป็น section ตาม BAPI แต่ละตัว (split by ###)
         const sections = content.split('###').filter(s => s.trim());
         const scored = sections.map(s => {
             const lower = s.toLowerCase();
@@ -40,7 +39,6 @@ function findBapi(task, module) {
     }
 }
 
-/** ตรวจสอบ ABAP syntax และ obsolete patterns */
 /** ดูข้อมูล SAP Transaction Code */
 function getTransactionInfo(tcode) {
     try {
@@ -107,7 +105,7 @@ function lookupAuthObject(object, intent) {
         const up      = String(object || '').toUpperCase().trim();
         if (!up) return { found: false, message: 'กรุณาระบุ authorization object' };
 
-        // Common objects → canonical blurbs (fast-path, doesn't depend on file parse)
+        // Fast-path catalog; does not depend on the file parse
         const CATALOG = {
             'S_DEVELOP':   { fields: ['DEVCLASS','OBJTYPE','OBJNAME','P_GROUP','ACTVT'], actvt: ['01 create','02 change','03 display','06 delete','16 execute'], use: 'ABAP workbench access — ควบคุม class/program/table ตาม P_GROUP' },
             'S_TCODE':     { fields: ['TCD'],                                             actvt: ['(no ACTVT — ผ่านการเข้า tx เท่านั้น)'],                 use: 'อนุญาตให้เข้า transaction code; ต่อด้วย object อื่นใน tx นั้นอีกที' },
@@ -127,7 +125,7 @@ function lookupAuthObject(object, intent) {
             ? `AUTHORITY-CHECK OBJECT '${up}'\n  ID '${cat.fields[0] || 'X'}' FIELD lv_val${cat.fields.includes('ACTVT') ? "\n  ID 'ACTVT'     FIELD '03'" : ''}.\nIF sy-subrc <> 0.\n  MESSAGE 'No authorization' TYPE 'E'.\nENDIF.`
             : null;
 
-        // Also fetch surrounding knowledge-file context if it mentions the object
+        // Surrounding knowledge-file context, if it mentions the object
         let kbContext = null;
         const idx = content.toUpperCase().indexOf(up);
         if (idx !== -1) {
@@ -159,10 +157,9 @@ function explainTcodeConfig(tcode, module) {
         const up = String(tcode || '').toUpperCase().trim();
         if (!up) return { found: false, message: 'กรุณาระบุ T-code' };
 
-        // 1) Base description from 03_sap_transactions.txt
         const base = getTransactionInfo(up);
 
-        // 2) Scan functional KB for SPRO path + config table hints
+        // Functional KB: SPRO path + config table hints
         const funcContent = fs_mod.readFileSync(path_mod.join(KNOWLEDGE_DIR, '17_functional_config_spro.txt'), 'utf8');
         const lines = funcContent.split('\n');
         const matchIdx = lines.findIndex(l => l.toUpperCase().includes(up));
@@ -171,7 +168,7 @@ function explainTcodeConfig(tcode, module) {
             funcSnippet = lines.slice(Math.max(0, matchIdx - 2), matchIdx + 8).join('\n').trim();
         }
 
-        // 3) Enhancement hints — quick heuristics by module
+        // Enhancement hints — quick heuristics by tx
         const ENH_HINTS = {
             VA01: { badi: 'BADI_SD_SALES_ITEM', user_exit: 'USEREXIT_MOVE_FIELD_TO_VBAK (MV45AFZZ)', tables: ['VBAK','VBAP','VBKD'] },
             VA02: { badi: 'BADI_SD_SALES_ITEM', user_exit: 'USEREXIT_SAVE_DOCUMENT_PREPARE (MV45AFZZ)', tables: ['VBAK','VBAP'] },
@@ -207,10 +204,7 @@ function explainTcodeConfig(tcode, module) {
     } catch (e) { return { found: false, error: e.message }; }
 }
 
-/** Dispatcher — เรียก tool function ที่ถูกต้อง */
-/** Phase 35: semantic search ทั้ง vector store — ครอบคลุมทุกไฟล์รวมเอกสาร
- *  ที่อัพโหลดใหม่ (PDF/DOCX) โดยไม่ต้องแก้โค้ดเพิ่ม ต่างจาก tool ตัวอื่น
- *  ที่อ่านไฟล์ .txt แบบระบุชื่อตายตัว */
+/** Semantic search over the whole vector store, so newly uploaded PDF/DOCX are covered without code changes. */
 async function searchKnowledge(query) {
     if (!query) return { found: false, error: 'empty query' };
     if (!HAS_API_KEY || !getVectorStoreId()) {
@@ -221,8 +215,8 @@ async function searchKnowledge(query) {
             query,
             max_num_results: 6,
         });
-        // แต่ละ result: { filename, score, content: [{type:'text', text}] }
-        // จำกัดขนาด chunk กัน context บวม — 6 × 2500 chars ≈ 4k tokens สูงสุด
+        // result: { filename, score, content: [{type:'text', text}] }
+        // chunk cap: 6 × 2500 chars ≈ 4k tokens max
         const results = (page?.data || [])
             .map(r => ({
                 file:  r.filename,
@@ -244,12 +238,11 @@ async function searchKnowledge(query) {
     }
 }
 
-// org standards: ทุกคำตอบเคยเปิดด้วย search เดิมซ้ำ ๆ — round trip ละหนึ่งรอบ reasoning เต็ม ๆ
-// จึง fetch ครั้งเดียว cache 6 ชม. แล้วแนบใน prompt แทน; หาไม่เจอ = ไม่แนบ ให้ model ค้นเองแบบเดิม
+// org standards: fetched once, cached 6h, attached to the prompt; if none found the model searches itself.
 const ORG_STANDARDS_QUERY     = 'organization ABAP development standards naming conventions error handling documentation';
 const ORG_STANDARDS_TTL_MS    = 6 * 60 * 60 * 1000;   // re-read a few times a day
 const ORG_STANDARDS_MAX_CHARS = 6000;                 // ~1.5k tokens; fits two chunks of the org doc
-// จัดไฟล์ standards ององค์กรขึ้นก่อน — คะแนน search ดันคู่มือ SAP ทั่วไปชนะเอกสารจริง
+// org standards file first — generic SAP manuals otherwise outscore the real document
 const ORG_STANDARDS_FILE_RE   = /standard|keystone/i;
 let _orgStandards = { text: '', files: [], fetchedAt: 0 };
 
@@ -286,8 +279,7 @@ async function getOrgStandards() {
     return _orgStandards;
 }
 
-// pre-analysis: งานที่ rule ตัดสินได้ทำฝั่ง server ก่อน — แนบผล scan (บรรทัดแม่น) + เอกสารที่ตรง
-// เหลือให้ model แค่ส่วนที่มันเก่ง: ตัดสินวิธีแก้และอธิบาย
+// pre-analysis: rule-decidable work runs server-side; attach scan findings (exact lines) plus matching docs.
 const PREANALYSIS_MAX_CHARS = 4000;
 
 function scanQueryTerms(scan) {
@@ -320,9 +312,8 @@ async function buildPreAnalysis(userMessage) {
             }
         }
 
-        // query สร้างจาก defect ที่ scan เจอ + prose บรรทัดแรกสั้น ๆ — ยาวกว่านั้นลาก header report มาปนจน query เละ
+        // query = defects found by the scan + a short first prose line (longer drags report headers in)
         const terms = scanQueryTerms(scan);
-        // ใช้ firstProseLine จาก abap-scan — กติกาเดียว ที่เดียว ไม่ก๊อปมา drift
         const ask = abapScan.firstProseLine(text);
         const query = [...terms, ask.slice(0, 120)].filter(Boolean).join(' ').trim();
         if (query) {
@@ -348,8 +339,7 @@ async function buildPreAnalysis(userMessage) {
     return block;
 }
 
-/** The prompt block carrying the standards, or '' when we have none. */
-// badge ฝั่ง UI: ดึง query จาก tool-call แล้วสรุปผลเป็น event สั้น (ชื่อไฟล์ top ไม่ส่ง chunk)
+// UI badge: query from the tool call, result summarised to a short event (top filenames, no chunks)
 function ragQueryOf(name, rawArgs) {
     if (name !== 'search_knowledge') return null;
     try { return String((JSON.parse(rawArgs || '{}')).query || ''); } catch (_) { return ''; }
@@ -360,7 +350,11 @@ function ragResultEvent(result) {
 }
 
 async function executeTool(name, args) {
-    console.log(`[🔧 tool] ${name}(${JSON.stringify(args).slice(0, 120)})`);
+    // args carry the user's code — log argument names and sizes, never content
+    const shape = (args && typeof args === 'object' && !Array.isArray(args))
+        ? Object.entries(args).map(([k, v]) => `${k}:${typeof v === 'string' ? v.length + 'ch' : typeof v}`).join(',')
+        : typeof args;
+    console.log(`[🔧 tool] ${name}(${shape})`);
     switch (name) {
         case 'find_bapi':            return findBapi(args.task, args.module);
         case 'check_abap_syntax':    return checkAbapSyntax(args.code || '');
@@ -390,14 +384,13 @@ function toResponsesTools(tools) {
 
 async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, history, tools, sendEvent, acc, isAborted, setStream }) {
     const MAX_TOOL_TURNS = 3;
-    const MAX_LENGTH_CONTINUATIONS = 4;   // Phase 32 analog for Responses
-    // เพดาน output คงที่ต่อ effort สูง ๆ — reasoning แชร์ budget เดียวกับ text, เพดานต่ำเคยได้ bubble เปล่า
-    // token คิดตามใช้จริง เพดานใหญ่ไม่เสียอะไรกับคำตอบสั้น
+    const MAX_LENGTH_CONTINUATIONS = 4;
+    // Output cap per effort: reasoning shares the budget with text, and a low cap yields an empty bubble.
     const RESP_MAX_OUT = { none: 12000, low: 12000, medium: 16000, high: 24000, xhigh: 24000, max: 32000 };
     const maxOutputTokens = RESP_MAX_OUT[effort] || 8000;
     const rTools = toResponsesTools(tools);
-    // store:false — OpenAI ไม่เก็บบทสนทนาไว้ฝั่งตน (โค้ดลูกค้าอยู่ในนั้น) แลกกับที่เราต้องพก context เองทุก call
-    // input จึงเป็น array เสมอ และผลลัพธ์ของแต่ละ turn ถูกต่อกลับเข้าไปแทน previous_response_id
+    // store:false — OpenAI keeps no conversation state (customer code is in there), so we carry
+    // the context ourselves: input is always an array and each turn's output is appended to it.
     const STORE_ARGS = { store: false, include: ['reasoning.encrypted_content'] };
     let input = [
         ...((history && history.length) ? history.map(m => ({ role: m.role, content: m.content })) : []),
@@ -406,10 +399,9 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
     let toolTurn = 0;
     let lengthContinuations = 0;
 
-    // One streaming Responses call. Accumulates text + tool calls, updates acc
-    // usage/text, returns { calls, incomplete, respId }.
+    // One streaming Responses call; updates acc, returns { calls, incomplete, outputItems }.
     async function once(args) {
-        // นับจำนวน call ต่อคำตอบ — ตัวเลขที่อธิบาย turn ช้า ไม่ใช่ token รวม
+        // calls per answer — the number that explains a slow turn
         acc.apiCalls = (acc.apiCalls || 0) + 1;
         let stream;
         try {
@@ -440,13 +432,12 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
                     case 'response.function_call_arguments.delta':
                         if (fcalls[ev.item_id]) fcalls[ev.item_id].args += ev.delta;
                         break;
-                    // truncated จบด้วย response.incomplete ไม่ใช่ .completed — เคยพลาดจน usage ไม่ถูกอ่าน (บิลขาด),
-                    // continuation ไม่ทำงาน (ไฟล์โดนตัดเงียบ) และ chain ของ response.id ขาด; สอง event รูปเดียวกันเลยแชร์ case
+                    // A truncated response ends with response.incomplete, not .completed; both carry usage and output.
                     case 'response.completed':
                     case 'response.incomplete':
                         usage = ev.response?.usage;
                         incomplete = ev.response?.incomplete_details;
-                        // item ที่โมเดลผลิต (reasoning + message + function_call) — ต้องส่งกลับเป็น context เอง
+                        // items the model produced (reasoning + message + function_call) go back as context
                         outputItems = ev.response?.output || [];
                         break;
                     case 'response.failed':
@@ -466,7 +457,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
             acc.cachedTokens    += usage.input_tokens_details?.cached_tokens     || 0;
             acc.reasoningTokens += usage.output_tokens_details?.reasoning_tokens || 0;
         } else if (!isAborted()) {
-            // call จบโดยไม่มี usage = token หายจากบิลทั้งก้อน — ตะโกนไว้ดีกว่าเงียบ
+            // no usage = the call's tokens go unbilled — warn loudly
             console.warn('[chat/responses] a call ended with no usage — tokens for it are NOT billed'
                 + ` (text so far ${acc.fullText.length} chars). Unhandled terminal event?`);
         }
@@ -478,13 +469,13 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         const args = {
             model, stream: true, max_output_tokens: maxOutputTokens,
             tools: rTools, reasoning: { effort }, ...STORE_ARGS,
-            instructions,      // ส่งใหม่ทุก call — ไม่มี state ฝั่ง OpenAI ให้สืบทอด
+            instructions,      // resent every call — no server-side state
             input,
         };
 
         const { calls, incomplete, outputItems } = await once(args);
         if (isAborted()) return;
-        // ผลของ turn นี้กลายเป็น context ของ turn ถัดไป (เดิม previous_response_id ทำให้แทน)
+        // this turn's output becomes the next turn's context
         if (outputItems.length) input = input.concat(outputItems);
 
         // Truncated by the output cap (no tool call pending) → ask to continue.
@@ -500,8 +491,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
 
         if (calls.length === 0) return;   // plain answer → done
 
-        // Tool calls → execute and feed outputs back on the next turn.
-        // attach the document-search query so the UI badge can show it.
+        // Tool calls: execute, feed outputs back next turn; attach the search query for the UI badge.
         const rQuery = calls.map(c => ragQueryOf(c.name, c.args)).find(q => q != null);
         sendEvent({ type: 'tool_call', tools: calls.map(c => c.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
         const outputs = [];
@@ -517,7 +507,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         acc.toolTurns = (acc.toolTurns || 0) + 1;
     }
 
-    // ชน tool-turn cap โดยไม่มีคำตอบ → ยิงปิดท้าย พร้อมส่ง tool output ที่ค้าง — ทิ้งไปจะโดน 400 No tool output
+    // tool-turn cap hit with no answer: one final call carrying the pending tool outputs (dropping them gives 400)
     if (!isAborted() && acc.fullText.length === 0 && toolTurn > 0) {
         console.warn(`[chat/responses] hit MAX_TOOL_TURNS — forcing a final answer turn`
             + ` (${input.length} context item(s) carried over)`);

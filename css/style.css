@@ -1,10 +1,7 @@
-/* =====================================================
-   AgentHub — Unified Dark Premium (uses tokens.css)
-   Legacy variable names aliased → new design tokens.
-   ===================================================== */
+/* Legacy app styles; legacy variable names alias to tokens.css. */
 
 :root {
-    /* ── Legacy aliases → new tokens (backward compat) ── */
+    /* Legacy aliases → tokens */
     --bg-base: var(--surface-0);
     --bg-surface: var(--surface-1);
     --bg-card: var(--surface-1);
@@ -12,9 +9,7 @@
     --border: var(--border-default);
     --border-bright: var(--border-strong);
 
-    /* Legacy accent names → indigo accent system.
-       (Old code that referenced --purple/--green/--blue now
-       inherits the new accent + semantic palette automatically.) */
+    /* Legacy accent names → accent + semantic palette */
     --purple: var(--accent);
     --purple-dim: var(--accent-weak);
     --blue: var(--info);
@@ -92,9 +87,7 @@ img {
     max-width: 100%;
 }
 
-/* ========================
-   SIDEBAR
-   ======================== */
+/* --- SIDEBAR --- */
 .sidebar {
     width: var(--sidebar-w);
     min-height: 100vh;
@@ -184,11 +177,9 @@ img {
     flex-shrink: 0;
 }
 
-/* Phase 16.3: hierarchical sidebar — section headers + sub-items
-   to match the requested layout (Dashboard / User Management { Project,
-   User, Activity Log, Credits, Login History } / Balance). */
+/* Hierarchical sidebar: section headers + sub-items */
 .nav-section {
-    /* Non-clickable group label. Slightly muted, no hover state. */
+    /* Non-clickable group label */
     display: flex;
     align-items: center;
     gap: 12px;
@@ -203,8 +194,8 @@ img {
 .nav-section:first-of-type { margin-top: 0; }
 
 .nav-item.nav-sub {
-    /* Indented sub-item; smaller font, no left accent bar so the active
-       state still reads clearly without competing with the section header. */
+    /* Indented sub-item; no left accent bar so the active state
+       does not compete with the section header. */
     padding-left: 36px;
     font-size: 0.825rem;
 }
@@ -213,8 +204,7 @@ img {
     left: 22px;
 }
 
-/* Pencil-icon edit button used in the User table (Phase 16.4) — keeps the
-   row clean while still allowing edits. Hover state mirrors text-secondary. */
+/* Pencil-icon edit button in the User table */
 .btn-icon-edit {
     background: transparent;
     border: none;
@@ -229,8 +219,7 @@ img {
 }
 .btn-icon-edit:hover { background: var(--surface-3); color: var(--text-1); }
 
-/* Phase 16.21: larger icon-action buttons used in Project card header
-   (text + icon together so the user knows what they do at a glance). */
+/* Larger icon-action buttons (text + icon) in the Project card header */
 .btn-icon-action {
     display: inline-flex;
     align-items: center;
@@ -258,9 +247,7 @@ img {
     background: rgba(239, 68, 68, 0.06);
 }
 
-/* ── Theme toggle button (Phase 16.15) ───────────────────────────
-   Lives in the sidebar above the logout button. Subtle by default,
-   accent-tinted on hover so the user notices it's interactive. */
+/* ── Theme toggle button (sidebar, above logout) ── */
 .theme-toggle-btn {
     display: flex;
     align-items: center;
@@ -285,13 +272,9 @@ img {
 }
 .theme-toggle-btn svg { flex-shrink: 0; }
 
-/* ── Custom dropdown (Phase 16.14) ────────────────────────────────────
-   A reusable trigger + popup pair. The trigger looks like a modal input
-   (dark bg, soft border, subtle hover); the popup uses absolute positioning
-   set inline by JS so it lines up under the trigger. The browser's native
-   <select> can't deliver this look reliably across platforms, especially
-   the options menu (Chromium/Firefox/Safari each render their own way). */
-/* Phase 16.15: token-driven so dark + light themes share the same rules. */
+/* ── Custom dropdown: trigger + popup (positioned inline by JS).
+   Native <select> options cannot be styled consistently across browsers. */
+/* Token-driven so dark + light share the same rules */
 .dd-trigger {
     display: inline-flex;
     align-items: center;
@@ -466,9 +449,7 @@ img {
     margin-top: 2px;
 }
 
-/* ========================
-   MOBILE HEADER
-   ======================== */
+/* --- MOBILE HEADER --- */
 .mobile-header {
     display: none;
     position: fixed;
@@ -510,9 +491,7 @@ img {
     transition: all 0.2s;
 }
 
-/* ========================
-   MAIN CONTENT
-   ======================== */
+/* --- MAIN CONTENT --- */
 .main-content {
     margin-left: var(--sidebar-w);
     flex: 1;
@@ -542,9 +521,7 @@ img {
     }
 }
 
-/* ========================
-   GLASS CARD
-   ======================== */
+/* --- GLASS CARD --- */
 .glass-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -571,9 +548,7 @@ img {
     margin-bottom: 20px;
 }
 
-/* ========================
-   BUTTONS
-   ======================== */
+/* --- BUTTONS --- */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -636,9 +611,7 @@ img {
     transform: none !important;
 }
 
-/* ========================
-   HOME / HERO
-   ======================== */
+/* --- HOME / HERO --- */
 .hero {
     text-align: center;
     padding: 48px 40px 64px;
@@ -760,9 +733,7 @@ img {
     line-height: 1.65;
 }
 
-/* ========================
-   PAGE HEADER
-   ======================== */
+/* --- PAGE HEADER --- */
 .page-header {
     display: flex;
     align-items: flex-start;
@@ -806,9 +777,7 @@ img {
     font-weight: 600;
 }
 
-/* ========================
-   DASHBOARD STATS
-   ======================== */
+/* --- DASHBOARD STATS --- */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -958,9 +927,7 @@ img {
     transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ========================
-   AGENT SKILLS CATALOG
-   ======================== */
+/* --- AGENT SKILLS CATALOG --- */
 .search-box {
     display: flex;
     align-items: center;
@@ -1078,9 +1045,7 @@ img {
     transform: translateY(0);
 }
 
-/* ========================
-   PLAYGROUND
-   ======================== */
+/* --- PLAYGROUND --- */
 .playground-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1325,9 +1290,7 @@ img {
     border-radius: var(--radius-sm);
 }
 
-/* ========================
-   PRICING
-   ======================== */
+/* --- PRICING --- */
 .pricing-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1527,9 +1490,7 @@ img {
     color: var(--purple);
 }
 
-/* ========================
-   BILLING
-   ======================== */
+/* --- BILLING --- */
 .billing-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1612,9 +1573,7 @@ img {
     font-weight: 500;
 }
 
-/* ========================
-   EMPTY STATE
-   ======================== */
+/* --- EMPTY STATE --- */
 .empty-state {
     display: flex;
     flex-direction: column;
@@ -1653,9 +1612,7 @@ img {
     text-decoration: underline;
 }
 
-/* ========================
-   LOADING & TOAST
-   ======================== */
+/* --- LOADING & TOAST --- */
 .loading-overlay {
     position: fixed;
     inset: 0;
@@ -1731,9 +1688,7 @@ img {
     }
 }
 
-/* ========================
-   RESPONSIVE
-   ======================== */
+/* --- RESPONSIVE --- */
 /* ABAP / Code output block */
 .code-block {
     background: #0a0f1c;

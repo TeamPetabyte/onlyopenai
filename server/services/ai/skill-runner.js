@@ -4,10 +4,8 @@ const { PROMPT_COMMON_APPENDIX, applyCodePlaceholder, orgStandardsBlock } = requ
 module.exports = function createSkillRunner({ ai, tools }) {
 const { openai, resolveModel, resolveEffort, PHASE4_TOOLS } = ai;
 const { getOrgStandards, buildPreAnalysis, runResponsesTurn, executeTool } = tools;
-// runner หนึ่งคำถามหนึ่ง skill — เส้นทางเดียวกับแชทจริง ใช้ทั้ง Prompt Lab และ eval
 async function runSkillPromptOnce({ userId, skillContent, question, model, effort }) {
-    // shared {code} handling — substitutes only when the message
-    // actually looks like ABAP, so plain questions get answered directly.
+    // {code} is substituted only when the message looks like ABAP.
     let { systemPrompt, userPrompt } = applyCodePlaceholder(skillContent, question);
     // appendix + org standards ชุดเดียวกับแชทจริง — คำตอบ Lab/eval ถึงใช้เทียบ baseline ได้
     systemPrompt += PROMPT_COMMON_APPENDIX;

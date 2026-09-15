@@ -1,9 +1,6 @@
-// responses-turn.test.js — การร้อย context ของ Responses API เมื่อไม่ให้ OpenAI เก็บบทสนทนา
-//
-// store:false แปลว่าไม่มี state ฝั่งผู้ให้บริการให้อ้างถึง ทุก call จึงต้องพก
-// reasoning + function_call ของ turn ก่อนหน้ามาเอง พลาดตรงนี้แล้วโมเดลลืมว่าเพิ่งเรียก tool อะไร
-// (และเคยแก้ด้วย previous_response_id ซึ่งบังคับให้ต้อง store:true)
-// ทดสอบด้วย client ปลอม — ไม่มีการต่อเน็ตและไม่มีค่าใช้จ่าย
+// responses-turn.test.js — Responses API context threading with store:false.
+// Every call must carry the previous turn's reasoning + function_call itself; no previous_response_id.
+// Uses a fake client — no network, no cost.
 
 const test = require('node:test');
 const assert = require('node:assert');

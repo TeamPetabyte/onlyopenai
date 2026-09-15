@@ -300,7 +300,7 @@ app.yourdomain.com {
 | Server start ได้ | `systemctl status petabyte` → active (running) |
 | DB connect ได้ | log มี `✅ PostgreSQL connected` |
 | Migrations ครบ | log มี `23 up-to-date (23 total)` |
-| Login admin ได้ | เปิด /login.html → admin/admin123 |
+| Login admin ได้ | เปิด /login → บัญชี admin ด้วยรหัสจาก `node reset-admin.js` (ไม่มีรหัสเริ่มต้นอีกต่อไป) |
 | Chat ส่งได้ | user/user123 → ส่งข้อความใดๆ → ได้ response |
 | Top-up project ได้ | admin → Credits → Top up → ดู balance อัปเดต |
 | Logs ถูกเก็บ | `tail -f /var/log/petabyte/app.log` |

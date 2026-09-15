@@ -1,8 +1,8 @@
 // audit.js — เขียน tbl_action_admin / tbl_audit_log (best-effort เสมอ)
 
 module.exports = function createAudit({ pool }) {
-// เขียน tbl_action_admin — detail แบบ object (action/target/before/after) หรือสองอาร์กแบบเก่าก็ได้
-// ห้ามใส่รหัสผ่าน/token ใน before/after — redactor ช่วยกรอง แต่ผู้เรียกคือด่านแรก
+// logAdminAction detail = { action, targetType, targetId, before, after, extra }.
+// ห้ามใส่รหัสผ่าน/token ใน before/after — redactor เป็นแค่ด่านสำรอง ผู้เรียกคือด่านแรก
 const REDACT_KEYS = new Set([
     'password', 'password_hash', 'pw', 'pw_hash',
     'csrf_token', 'csrf', 'token', 'bearer', 'session_token',
@@ -30,13 +30,12 @@ async function logAdminAction(req, detail = {}) {
         const targetType = detail.targetType ? String(detail.targetType).slice(0, 20) : null;
         const targetId   = Number.isInteger(detail.targetId) ? detail.targetId : null;
 
-        // Build change_json only if either before or after was provided.
         let changeJson = null;
         if (detail.before || detail.after) {
             changeJson = {};
             if (detail.before) changeJson.before = _redactSecrets(detail.before);
             if (detail.after)  changeJson.after  = _redactSecrets(detail.after);
-            // Optional free-form extras (e.g. reason, notes)
+            // free-form extras (reason, notes)
             if (detail.extra && typeof detail.extra === 'object') {
                 changeJson.extra = _redactSecrets(detail.extra);
             }
@@ -58,7 +57,7 @@ async function logAdminAction(req, detail = {}) {
 // เหตุการณ์ auth (login fail/lockout/logout) ลง tbl_audit_log — user_id เป็น NULL ได้
 async function logAuthEvent(eventType, userId, req, detail = {}) {
     try {
-        // req.clientIp มาจาก middleware ใน server.js (CF-Connecting-IP → req.ip) — ไม่อ่าน XFF ดิบ
+        // req.clientIp is set by server.js middleware (CF-Connecting-IP → req.ip); never read raw XFF here
         const ip = (req?.clientIp || req?.ip || '').toString().slice(0, 45);
         await pool.query(
             `INSERT INTO tbl_audit_log

@@ -1,8 +1,5 @@
-// api.test.js — the HTTP contract of login, the auth gates, and the money gates
-//
-// Runs against a real server.js on a throwaway Postgres (see harness.js). The unit
-// tests cover lib/*; this is the first layer that sees routes, middleware, cookies
-// and SQL together. Needs a reachable Postgres: `npm run test:routes` in server/.
+// api.spec.js — the HTTP contract of login, the auth gates and the money gates.
+// Runs against a real server.js on a throwaway Postgres (harness.js): `npm run test:routes` in server/.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -34,6 +31,12 @@ test('health answers without a session', async () => {
     const r = await srv.req('GET', '/api/health');
     assert.equal(r.status, 200);
     assert.equal(r.json.ok, true);
+    // unauthenticated: no model name, no OpenAI object ids
+    assert.equal(r.json.assistantId, undefined);
+    assert.equal(r.json.vectorStoreId, undefined);
+    assert.equal(r.json.model, undefined);
+    // every /api response is no-store
+    assert.match(String(r.headers.get('cache-control')), /no-store/);
 });
 
 test.describe('login', () => {
@@ -67,7 +70,14 @@ test.describe('login', () => {
         assert.equal(gated.status, 423);
         assert.equal(gated.json.mustChangePassword, true);
 
-        const change = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth, body: { password: USER.changed } });
+        // a self-change must prove the current password
+        const noCur = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth, body: { password: USER.changed } });
+        assert.equal(noCur.status, 400, noCur.text);
+        const wrongCur = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth,
+            body: { password: USER.changed, currentPassword: 'NotTheOne#9' } });
+        assert.equal(wrongCur.status, 401, wrongCur.text);
+        const change = await srv.req('PUT', `/api/users/${userId}/password`, { auth: r.auth,
+            body: { password: USER.changed, currentPassword: USER.password } });
         assert.equal(change.status, 200, change.text);
         assert.equal(change.json.ok, true);
         USER.password = USER.changed;
@@ -217,7 +227,6 @@ test.describe('money gates', () => {
     });
 });
 
-// สิ่งที่รีวิว PTB-CR-FR-2026-003 พบ — เทสต์กันไม่ให้ย้อนกลับมาอีก
 test.describe('tenant isolation', () => {
     let user, otherId;
     test.before(async () => {
@@ -279,7 +288,8 @@ test.describe('privilege boundaries', () => {
             body: { username: victim.username, password: victim.password, projectId: PROJECT } });
         const vid = c.json.id;
         const first = await srv.login(victim.username, victim.password);
-        await srv.req('PUT', `/api/users/${vid}/password`, { auth: first.auth, body: { password: 'RouteVictim#2' } });
+        await srv.req('PUT', `/api/users/${vid}/password`, { auth: first.auth,
+            body: { password: 'RouteVictim#2', currentPassword: victim.password } });
         const live = await srv.login(victim.username, 'RouteVictim#2');
         assert.equal((await srv.req('GET', '/api/quota-status', { auth: live.auth })).status, 200);
 

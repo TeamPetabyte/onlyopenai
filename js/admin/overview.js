@@ -2,11 +2,11 @@
 import { escapeHtml, jsArg, flash, formatMoney, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── OVERVIEW ──────────────────────────────────────────
+  // --- Overview ---
   renderOverview: function () {
     var self = this;
     var projects = this._projectsList();
-    // ดึง rollup ต่อ user สดจาก /api/credits — dashboard สะท้อน pool model ไม่ใช่ localStorage
+    // rollup ต่อ user สดจาก /api/credits — dashboard สะท้อน pool ไม่ใช่ localStorage
     Promise.all([
       this.fetchUsersFromDB(),
       fetch(BASE + '/api/credits', { headers: Auth.authHeaders() })
@@ -19,19 +19,16 @@ export default {
       self._cachedDBUsers = dbUsers;
       self._cachedCredits = credits;   // shared with renderProjectDetail / Cap page
 
-      // Totals from DB (accurate) — sum lifetime rollups across all users.
       var totalRequests = credits.reduce(function (s, c) { return s + Number(c.lifetimeRequests || 0); }, 0);
       var totalTokens   = credits.reduce(function (s, c) { return s + Number(c.lifetimeTokens   || 0); }, 0);
       var totalSpendAll = credits.reduce(function (s, c) { return s + Number(c.lifetimeSpend    || 0); }, 0);
-      // Project-level money totals (Concept B): current pool + lifetime top-up.
       var totalTopUpAll  = projects.reduce(function (s, p) { return s + (p.lifetimeAmount || 0); }, 0);
       var totalBalanceAll = projects.reduce(function (s, p) { return s + (p.balance || p.totalTopUp || 0); }, 0);
-      // mini-card แบบเดียวกับ stat-card ของ project + แถบสี accent ซ้าย
+      // mini-card แบบ stat-card ของ project + แถบ accent ซ้าย
       var miniCard = function (icon, label, value, sub) {
         return '<div style="position:relative;padding:18px 20px 18px 22px;'
           + 'background:var(--surface-2);border:1px solid var(--border-default);'
           + 'border-radius:12px;overflow:hidden">'
-          // Left accent stripe
           + '<div style="position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--accent)"></div>'
           + '<div style="font-size:.68rem;color:var(--text-3);text-transform:uppercase;'
           +   'letter-spacing:.06em;margin-bottom:8px;font-weight:600">'
@@ -47,13 +44,12 @@ export default {
           miniCard('👥', TT('dash.users','Users'),           dbUsers.length.toLocaleString(),  projects.length + ' projects')
         + miniCard('🔢', TT('dash.totalTokens','Total Tokens'), totalTokens.toLocaleString(),  TT('dash.tokensSub','สะสมทุก user'))
         + miniCard('💸', TT('dash.totalSpend','Total Spend'), formatMoney(totalSpendAll),       TT('dash.spendSub','ใช้จ่ายสะสมทุก user'))
-        // two related but distinct numbers — lifetime sum of every
-        // top-up (never decreases) vs. current redeemable balance.
+        // lifetime top-up never decreases; balance is what is redeemable now
         + miniCard('💰', TT('dash.lifetimeTopup','Lifetime Top-up'), formatMoney(totalTopUpAll), TT('dash.topupSub','ยอดสะสมที่ลูกค้าเคยเติม'))
         + miniCard('🏦', TT('dash.projectBalance','Project Balance'), formatMoney(totalBalanceAll), TT('dash.balanceSub','ยอดคงเหลือกองกลางตอนนี้'));
 
       var saved = self._selectedProject || (projects[0] && projects[0].id) || null;
-      // project picker เป็น dropdown custom — hidden input คงค่าให้ selectProject เดิมใช้ต่อ
+      // project picker เป็น dropdown custom — hidden input คงค่าให้ selectProject
       var selectHtml;
       if (projects.length === 0) {
         selectHtml = '<div style="color:var(--text-3);font-size:0.85rem;padding:12px 0">' + t('empty.noProjectShort', 'ยังไม่มี Project') + '</div>';
@@ -77,18 +73,14 @@ export default {
         '<div style="margin-bottom:18px">' + selectHtml + '</div>'
         + '<div id="proj-detail"></div>';
 
-      // .budget-bar / .budget-bar-fill styles moved to
-      // css/components.css — no more runtime <style> injection here.
-
       if (saved) {
         self.renderProjectDetail(saved);
-        // transaction journal is project-scoped — render
-        // alongside the project detail so both stay in sync.
+        // transaction journal is project-scoped — keep it in sync with the detail
         self.renderTransactions(saved);
       } else {
         self.renderTransactions(null);
       }
-      // quota requests are global (not per-project) — always render.
+      // quota requests are global — always render
       self.renderQuotaRequests();
     });
   },
@@ -101,7 +93,7 @@ export default {
     this.renderTransactions(projectId);
   },
 
-  // ── Transaction by Date ── day = แถวต่อ event, month = SUM ต่อ (เดือน,user,type); state จำไว้บน instance
+  // --- Transaction by date --- day = แถวต่อ event, month = SUM ต่อ (เดือน,user,type)
   _txMode: 'day',
   _txFrom: null,
   _txTo:   null,
@@ -132,8 +124,7 @@ export default {
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
-    // Reset date range to the mode's natural default — admin can still
-    // override via the date pickers afterwards.
+    // reset range to the mode's default; date pickers can still override
     var r = this._txDefaultRange(mode);
     this._txFrom = r.from;
     this._txTo   = r.to;
@@ -180,8 +171,7 @@ export default {
     }
 
     var url = BASE + '/api/transactions/export' + qs;
-    // Use fetch (not <a href>) so we can read Content-Disposition for the
-    // filename and surface HTTP errors (auth rides in the cookie either way).
+    // fetch (not <a href>) so we can read Content-Disposition and surface HTTP errors
     fetch(url, { headers: Auth.authHeaders() })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -362,11 +352,10 @@ export default {
       + paginationHtml;
   },
 
-  // project detail: hero + budget รวม + mini stats 3 ใบ + แถวสมาชิก
+  // --- Project detail --- hero + budget + 3 mini stats + members
   renderProjectDetail: function (projectId) {
     var self = this;
-    // pull project from the DB cache (Auth.getProjectById reads
-    // legacy localStorage which doesn't have `balance` / `lifetimeAmount`).
+    // DB cache, not Auth.getProjectById (localStorage lacks balance/lifetimeAmount)
     var p = (this._cachedDBProjects || []).find(function (x) { return x.id === projectId; })
             || Auth.getProjectById(projectId);
     if (!p) return;
@@ -374,7 +363,7 @@ export default {
     if (!container) return;
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
 
-    // สมาชิกมาจาก /api/credits (DB จริง) — เงินอยู่ที่ pool ไม่มี "แจกเข้า user" แล้ว
+    // สมาชิกจาก /api/credits — เงินอยู่ที่ pool ไม่มี "แจกเข้า user"
     var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
     var users = (this._cachedCredits || []).filter(function (c) { return c.projectId === projectId; });
 
@@ -388,8 +377,7 @@ export default {
     var poolColor = pool > 0 ? 'var(--success-hover, #34d399)' : 'var(--danger-hover, #f87171)';
     var budget = { totalTopUp: totalTopUp, pool: pool, costBilled: costBilled };
 
-    // —— Hero header ——————————————————————————————————————
-    // Project name, ID pill (monospace, click-to-copy), rate chips, CTA.
+    // hero: name, ID pill (click-to-copy), rate chips, CTA
     var hero =
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;'
       + 'padding:20px 22px;background:var(--surface-2);border:1px solid var(--border-default);'
@@ -469,8 +457,7 @@ export default {
       +   '<div style="font-size:.7rem;color:var(--text-3);margin-top:6px">' + footHtml + '</div>'
       + '</div>';
 
-    // —— 3 secondary stat cards ——————————————————————————
-    // Top-up is in the hero already; show derived figures here.
+    // secondary stat cards — derived figures (top-up is in the hero)
     var statCard = function (icon, label, value, valueColor, sub) {
       return '<div style="padding:14px 16px;background:var(--surface-2);'
         + 'border:1px solid var(--border-default);border-radius:10px">'
@@ -489,7 +476,7 @@ export default {
                    budget.totalTopUp > 0 ? usedPct.toFixed(1) + '% ' + TT('proj.ofTopup','ของยอดเติม') : '—')
       + '</div>';
 
-    // —— Members section ——————————————————————————————————
+    // members
     var membersTitle =
         '<div style="display:flex;align-items:center;gap:10px;margin:24px 0 12px">'
       +   '<h3 style="font-size:.9rem;color:var(--text-1);font-weight:700;margin:0">' + TT('dash.members','Members') + '</h3>'
@@ -549,12 +536,10 @@ export default {
           + 'gap:14px;align-items:center;padding:12px 16px;'
           + (idx > 0 ? 'border-top:1px solid var(--border-subtle);' : '')
           + 'transition:background .15s">'
-          // Avatar circle
           + '<div style="width:36px;height:36px;border-radius:50%;background:var(--accent-soft-bg);'
           +   'color:var(--accent);font-weight:700;font-size:.95rem;'
           +   'display:flex;align-items:center;justify-content:center;'
           +   'border:1px solid var(--accent-soft-border)">' + escapeHtml(initial) + '</div>'
-          // Name + username
           + '<div style="min-width:0">'
           +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(u.displayName || u.username) + '</div>'
           +   '<div style="font-size:.7rem;color:var(--text-3);margin-top:1px">@' + escapeHtml(u.username) + '</div>'
@@ -573,8 +558,7 @@ export default {
   },
 
   openTopup: function (projectId) {
-    // project picker is now a custom dropdown (hidden input + button).
-    // Pre-select either the projectId passed in (per-row "+") or the first project.
+    // custom dropdown (hidden input + button); pre-select the given projectId or the first
     var projects = this._projectsList();
     var pid = projectId || (projects[0] && projects[0].id) || '';
     document.getElementById('tu-proj-id').value = pid;
@@ -612,7 +596,7 @@ export default {
     var errEl  = document.getElementById('tu-error');
     if (isNaN(amount) || amount <= 0) { errEl.textContent = '❌ ' + t('err.invalidAmount', 'กรุณาใส่จำนวนเงินที่ถูกต้อง'); return; }
     var self = this;
-    // Phase 16.1 / 21.2: send optional note (server stores it in tbl_topup_project.note)
+    // optional note → tbl_topup_project.note
     var body = { amount: amount };
     if (note) body.note = note;
     fetch(BASE + '/api/projects/' + encodeURIComponent(projectId) + '/topup', {
@@ -629,7 +613,6 @@ export default {
         flash('✅ ' + tf('msg.topupSuccess', { amt: formatTHB(amount), total: formatTHB(parseFloat(d.newBalance)) }, 'เติมเงิน {amt} เข้า project แล้ว (DB total {total})'));
         // Refresh from DB across all relevant views
         self.fetchProjectsFromDB().then(function () {
-          // Always refresh whichever view we're on. Cheap; no state lost.
           if (self.currentView === 'projects')      self.renderProjectDetail(projectId);
           else if (self.currentView === 'overview') self.renderOverview();
           else if (self.currentView === 'balance')  self.renderBalance();

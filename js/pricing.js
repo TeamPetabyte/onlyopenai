@@ -1,10 +1,6 @@
-/**
- * pricing.js — Custom Rate Calculation Engine
- * AgentHub SAP Edition — ราคาของเราเอง ไม่เกี่ยวกับเรทของ OpenAI
- */
+// pricing.js — plan rate table, skill catalog and cost calculator (our own prices, not OpenAI's).
 
 const PRICING = {
-  // แผนราคาทั้งหมด
   plans: {
     starter: {
       id: 'starter',
@@ -68,7 +64,6 @@ const PRICING = {
     },
   },
 
-  // รายการ SAP/ABAP Agent Skills
   skills: [
     {
       id: 'auto',
@@ -1107,10 +1102,7 @@ ENDIF.
     };
   },
 
-  /**
-   * ประมาณ tokens จาก text length
-   * ABAP code: ~1 token per 3.5 chars
-   */
+  /** ประมาณ tokens จาก text length — ABAP ~1 token ต่อ 3.5 chars */
   estimateTokens(text) {
     if (!text) return 0;
     return Math.ceil(text.length / 3.5);

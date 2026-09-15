@@ -1,25 +1,6 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  skill-prompts.js — Phase 18 / 23 skill prompt registry   ║
-// ╚═══════════════════════════════════════════════════════════╝
-//
-// Source of truth (Phase 23): the `tbl_prompt` DB table.
-//   - On first boot, if the table is EMPTY, it is seeded from
-//     server/config/skill-prompts.json (the prompts committed in git).
-//   - After that, the DB is canonical: the admin UI add/edit/delete writes
-//     go to the DB (persist across redeploys, shared across instances, with
-//     a tbl_prompt_history audit trail).
-//
-// Resilience: if the DB is unreachable OR no pool has been wired in, the
-// registry falls back to reading skill-prompts.json directly, so the chat
-// router never breaks. The JSON file therefore doubles as the seed + the
-// offline fallback.
-//
-// In-memory cache: the catalog is loaded into `_cache` on boot / reload /
-// after every write. The hot chat path (getSkills / buildRouterCatalog) reads
-// the cache SYNCHRONOUSLY — DB I/O only happens on load() and on writes.
-//
-// Safety: invalid rows are skipped, never crash the server — getSkills()
-// returns [] and the chat path falls back to "no extra instructions".
+// Skill prompt registry. Source of truth is tbl_prompt; server/config/skill-prompts.json
+// seeds it on first boot and is the read fallback when no pool is wired or the DB is down.
+// The chat hot path reads the in-memory cache synchronously; DB I/O only on load() and writes.
 
 const fs = require('fs');
 const path = require('path');
@@ -34,19 +15,16 @@ let _cache = {
     source:   'none',   // 'db' | 'file' | 'none'
 };
 
-// Phase 19.3: cap the registry file at 4 MB so an accidentally-pasted huge
-// prompt (or a binary blob renamed to .json) doesn't get pulled fully into
-// memory. The whole catalog is < 100 KB today; 4 MB is ~40x headroom.
+// Cap the registry file at 4 MB so a pasted blob is never pulled fully into memory.
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 
 const SKILL_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/i;
 
-// Phase 23: the pg pool, injected by server.js at boot (setPool). When null,
-// the registry runs in file-only mode.
+// pg pool injected by server.js at boot; null means file-only mode.
 let _pool = null;
 function setPool(pool) { _pool = pool; }
 
-// ── File source (seed + fallback) ─────────────────────────────
+// --- File source (seed + fallback) ---
 function _readFile() {
     if (!fs.existsSync(FILE)) {
         return { error: 'skill-prompts.json not found at ' + FILE, skills: [], raw: null };
@@ -116,7 +94,7 @@ function _loadFromFile() {
     return _cache;
 }
 
-// ── DB source (Phase 23) ──────────────────────────────────────
+// --- DB source ---
 function _rowToSkill(r) {
     return {
         id:             String(r.id),
@@ -199,7 +177,7 @@ function _warnMissingKnowledge() {
     }
 }
 
-// ── Sync read API (hot path — reads the cache) ────────────────
+// --- Sync read API (hot path, reads the cache) ---
 /** Return all known skills (id, label, description, content, openaiPromptId). */
 function getSkills() { return _cache.skills.slice(); }
 
@@ -220,10 +198,7 @@ function getStatus() {
     };
 }
 
-/** Phase 40: placeholder detector — "is this skill still an unfinished stub?".
- *  It lives HERE rather than in server.js so the registry itself can keep
- *  stubs out of the router catalog, and server.js can share the exact same
- *  rule instead of maintaining a second copy that drifts. */
+/** True when a skill is still an unfinished stub. Shared with server.js so the rule has one copy. */
 function isPlaceholder(content) {
     const c = String(content || '');
     if (c.trim().length < 50) return true;
@@ -234,24 +209,12 @@ function isPlaceholder(content) {
     return false;
 }
 
-/** Phase 45: pull just the ABAP knowledge out of a skill prompt.
- *
- *  Orchestration needs to combine several skills in one answer, and it cannot
- *  send whole prompts — each one carries its own "answer in this format"
- *  instructions, and those contradict each other. So it takes the knowledge
- *  block and leaves the rest behind.
- *
- *  Six skills wrap that block in <best_practices>; the two newest use
- *  <best_practice>. Both spellings are accepted, and so is a missing closing
- *  tag, because the tag was never a documented contract — nobody writing a
- *  skill was told which one to use. Matching only one spelling would drop a
- *  skill's knowledge silently, which is the failure nobody notices.
- *
- *  Returns '' when there is no block to take. */
+/** Pull just the ABAP knowledge block out of a skill prompt, for orchestration (whole
+ *  prompts carry contradicting output-format instructions). Accepts <best_practices> and
+ *  <best_practice>, with or without a closing tag. Returns '' when there is no block. */
 const KB_OPEN  = /<best_practices?>/i;
 const KB_CLOSE = /<\/best_practices?>/i;
-// where the knowledge ends when the closing tag is missing: the output-format
-// section that every skill puts after it.
+// Where the knowledge ends when the closing tag is missing: the output-format section.
 const KB_STOP  = /<(?:modified\s+code|analysis|code)>/i;
 
 function knowledgeBlockOf(content) {
@@ -274,11 +237,8 @@ function auditKnowledgeBlocks() {
     };
 }
 
-/** Build the router prompt that lists skills for the LLM to pick from.
- *  Phase 40: half-finished prompts are no longer offered. The router used to
- *  be able to pick one, and the chat path then dropped it and answered with
- *  NO skill at all — no second-best, no log the user would see. Not listing
- *  them is simpler and makes a "none" from the router mean what it says. */
+/** Build the router catalog the LLM picks from. Placeholders are not listed,
+ *  so a "none" from the router means what it says. */
 function buildRouterCatalog() {
     return _cache.skills
         .filter(s => !isPlaceholder(s.content))
@@ -289,24 +249,20 @@ function buildRouterCatalog() {
         }));
 }
 
-// Phase 40: the skill a generic-but-on-topic question falls back to
-// ("ช่วยรีวิวโค้ดนี้ให้หน่อย") instead of injecting no skill at all. Override
-// per deployment with ROUTER_CATCHALL_SKILL_ID.
+// Skill a generic-but-on-topic question falls back to. Override with ROUTER_CATCHALL_SKILL_ID.
 const CATCHALL_ID = process.env.ROUTER_CATCHALL_SKILL_ID || 'abap_best_practice';
 
-/** The configured catch-all, or null when that id is unknown / still a
- *  placeholder — callers then behave exactly as they did before Phase 40. */
+/** The configured catch-all, or null when that id is unknown or still a placeholder. */
 function getCatchAllSkill() {
     const s = getSkill(CATCHALL_ID);
     if (!s || isPlaceholder(s.content)) return null;
     return s;
 }
 
-/** The configured catch-all id, whether or not it resolves to a usable skill
- *  (the router prompt names it so the LLM can return it). */
+/** The configured catch-all id, even when it does not resolve to a usable skill. */
 function getCatchAllId() { return CATCHALL_ID; }
 
-// ── File write-path (fallback only, when no DB pool) ──────────
+// --- File write-path (fallback only, when no DB pool) ---
 function _readDocForWrite() {
     let doc = { version: 1, skills: [] };
     if (fs.existsSync(FILE)) {
@@ -340,18 +296,14 @@ function _writeDoc(doc) {
         try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
         return { error: 'write failed: ' + e.message };
     }
-    _loadFromFile(); // refresh in-memory cache + router catalog
+    _loadFromFile(); // refresh the cache
     return { error: null };
 }
 
-// ── Write API (Phase 22/23): admin prompt management ──────────
-// DB-first when a pool is wired in; otherwise falls back to the JSON file.
+// --- Write API: admin prompt management. DB-first, JSON file fallback ---
 
-/**
- * Create or update a skill. `input` = { id, label, description, content,
- * openaiPromptId, updatedBy? }. Returns { ok, created, skill } or
- * { ok:false, error }.
- */
+/** Create or update a skill from { id, label, description, content, openaiPromptId, updatedBy? }.
+ *  Returns { ok, created, skill } or { ok:false, error }. */
 async function upsertSkill(input) {
     if (!input || typeof input !== 'object') return { ok: false, error: 'no payload' };
     const id = String(input.id || '').trim();
@@ -395,7 +347,7 @@ async function upsertSkill(input) {
         }
     }
 
-    // ── file fallback ──
+    // file fallback
     const { doc, error } = _readDocForWrite();
     if (error) return { ok: false, error };
     const idx = doc.skills.findIndex(s => s && s.id === id);
@@ -429,7 +381,7 @@ async function deleteSkill(id, opts = {}) {
         }
     }
 
-    // ── file fallback ──
+    // file fallback
     const { doc, error } = _readDocForWrite();
     if (error) return { ok: false, error };
     const before = doc.skills.length;
@@ -443,8 +395,6 @@ async function deleteSkill(id, opts = {}) {
 module.exports = {
     setPool, load, getSkills, getSkill, getStatus, buildRouterCatalog,
     upsertSkill, deleteSkill,
-    // Phase 40
     isPlaceholder, getCatchAllSkill, getCatchAllId,
-    // Phase 45
     knowledgeBlockOf, auditKnowledgeBlocks,
 };

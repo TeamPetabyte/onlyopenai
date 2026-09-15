@@ -2,7 +2,7 @@
 import { escapeHtml, flash, formatDate, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── USAGE ANALYTICS ── filter project แบบ sticky ('' = ทุกคน)
+  // --- Usage Analytics: sticky project filter ('' = everyone) ---
   _usageProjectFilter: '',
 
   setUsageProjectFilter: function (projectId) {
@@ -10,12 +10,11 @@ export default {
     this.renderUsage();
   },
 
-  // ── dropdown กลาง ── single-select ธีมเดียวกันทั้งแอป: openDropdown(triggerId,{items,selected,searchable,allowEmpty,onPick})
-  // popup แปะที่ <body> เพื่อหนี overflow ของ modal
-  _activeDropdown: null,   // tracks the open popup so toggle can close it
+  // --- Shared dropdown: openDropdown(triggerId, {items, selected, searchable, allowEmpty, onPick}) ---
+  // The popup is appended to <body> to escape modal overflow.
+  _activeDropdown: null,   // the open popup, so toggle can close it
 
   openDropdown: function (triggerId, opts) {
-    // If a dropdown is already open, close it (toggle behaviour)
     var prev = this._activeDropdown;
     this._closeDropdown();
     if (prev && prev.triggerId === triggerId) return;   // toggle off
@@ -31,7 +30,7 @@ export default {
     var allowEmpty= opts && opts.allowEmpty;
     var placeholder = (opts && opts.placeholder) || '🔎 Search...';
 
-    // Position under trigger; allow modal-z by stacking high.
+    // Position under the trigger.
     var rect = trigger.getBoundingClientRect();
     var pop = document.createElement('div');
     pop.className = 'dd-popup';
@@ -79,7 +78,7 @@ export default {
           + '<span style="flex:1">' + labelHtml + '</span>'
           + '</div>' + divider;
       }).join('');
-      // Wire click on items (handler captures closure variables — can't use inline onclick reliably for arbitrary onPick)
+      // Click handlers capture closure variables; inline onclick can't carry an arbitrary onPick.
       Array.prototype.forEach.call(listEl.querySelectorAll('.dd-item'), function (el) {
         el.addEventListener('mousedown', function (e) {
           e.preventDefault();   // avoid blurring the search input mid-click
@@ -115,7 +114,7 @@ export default {
         self._closeDropdown();
       }
     }
-    // Defer to next tick so the current click that opened the popup doesn't immediately close it.
+    // Defer so the click that opened the popup doesn't immediately close it.
     setTimeout(function () { document.addEventListener('mousedown', onDocClick); }, 0);
 
     this._activeDropdown = {
@@ -135,7 +134,7 @@ export default {
     this._activeDropdown = null;
   },
 
-  // Action-Log filters (Phase 16.14) — use generic dropdown
+  // Action-Log filters (generic dropdown)
   _actionFilterTypeItems: [
     { value: 'create_user',          label: 'สร้าง User',          emoji: '➕' },
     { value: 'update_user',          label: 'แก้ไข User',          emoji: '✏️' },
@@ -189,7 +188,7 @@ export default {
     });
   },
 
-  // Overview page project picker (Phase 16.20) — uses generic dropdown
+  // Overview page project picker (generic dropdown)
   openOverviewProjectDropdown: function (ev) {
     if (ev) ev.stopPropagation();
     var self = this;
@@ -210,7 +209,7 @@ export default {
     });
   },
 
-  // ── Usage Analytics project filter (uses generic dropdown) ──
+  // Usage Analytics project filter (generic dropdown)
   toggleUsageProjectDropdown: function (ev) {
     if (ev) ev.stopPropagation();
     var self = this;
@@ -240,7 +239,7 @@ export default {
       users = users.filter(function (u) { return u.role !== 'admin' && u.role !== 'trainer'; });
       var projects = self._projectsList();
 
-      // custom dropdown — sync the trigger label with state.
+      // sync the trigger label with state.
       var labelEl = document.getElementById('usage-filter-label');
       if (labelEl) {
         if (self._usageProjectFilter) {
@@ -261,7 +260,7 @@ export default {
         users = users.filter(function (u) { return String(u.projectId) === String(selectedProjId); });
       }
 
-      // Banner with project-level context — only visible when filtered
+      // Project banner, only when filtered
       if (banner) {
         if (selectedProj) {
           var projTokens = users.reduce(function (s, u) {
@@ -309,21 +308,18 @@ export default {
         }
       }
 
-      // Meta caption next to the filter dropdown
       if (metaEl) {
         metaEl.textContent = selectedProjId
           ? tf('lbl.usersInProjectMeta', { n: users.length }, '· แสดง {n} user ใน project นี้')
           : tf('lbl.usersAllMeta', { shown: users.length, total: allUsersInSystem }, '· แสดง {shown}/{total} users ทั้งหมด');
       }
 
-      // Section title morphs based on filter
       if (listTitle) {
         listTitle.textContent = selectedProj
           ? tf('lbl.usageByUserInProject', { project: selectedProj.name }, 'การใช้งานรายผู้ใช้ใน {project}')
           : t('usage.perUser', 'การใช้งานรายผู้ใช้');
       }
 
-      // Aggregate totals
       var totalTokens = 0, totalCost = 0, totalRequests = 0;
       users.forEach(function (u) {
         totalTokens += u.history.reduce(function (s, h) { return s + (h.inputTokens || 0) + (h.outputTokens || 0); }, 0);
@@ -331,7 +327,6 @@ export default {
         totalRequests += u.history.length;
       });
 
-      // Summary cards
       if (grid) {
         grid.innerHTML =
           '<div class="mini-card"><div class="mini-card-label">📡 Total Requests</div>' +
@@ -389,8 +384,7 @@ export default {
             var skill  = escapeHtml(h.skillName || '—');
             var emoji  = escapeHtml(h.skillEmoji || '🤖');
             var prompt = escapeHtml(h.prompt || '—');
-            // whole row opens the full prompt+response modal — the
-            // truncated cell here is just a preview, not the audit trail.
+            // the whole row opens the full prompt+response modal; the truncated cell is only a preview.
             return '<tr style="cursor:pointer" title="' + escapeHtml(t('vt.clickToView', 'คลิกเพื่อดูข้อความเต็ม')) + '" onclick="admin.openViewTurn(' + idx + ',' + hIdx + ')">' +
               '<td>' + emoji + ' ' + skill + '</td>' +
               '<td class="val">' + (h.inputTokens || 0) + ' / ' + (h.outputTokens || 0) + '</td>' +
@@ -470,7 +464,7 @@ export default {
     if (arrow) arrow.textContent = isOpen ? '▸' : '▾';
   },
 
-  // ── Phase 21.10: Quota Requests (admin approve/deny) ─────────
+  // --- Quota Requests (admin approve/deny) ---
   renderQuotaRequests: function () {
     var self = this;
     var wrap = document.getElementById('qr-list-wrap');
@@ -537,7 +531,7 @@ export default {
       + '</div>';
   },
 
-  // Phase 21.13 — open custom approve/deny modal (replaces browser confirm/prompt)
+  // open the custom approve/deny modal
   resolveQuotaRequest: function (id, action) {
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     var row = (this._cachedQuota || []).find(function (x) { return String(x.request_id) === String(id); });

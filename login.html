@@ -14,13 +14,7 @@
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet" />
     <style>
-        /* ───────────────────────────────────────────────────────────
-           Pastel theme derived from the Petabyte logo palette:
-             --logo-light  #4691DA   bright azure (T + B front face)
-             --logo-mid    #2E6CB0   mid blue     (wordmark)
-             --logo-navy   #143A66   deep navy    (B depth/shadow)
-           Light, airy background; white frosted card; blue accents.
-           ─────────────────────────────────────────────────────────── */
+        /* Pastel theme from the Petabyte logo palette */
         :root {
             --logo-light: #4691da;
             --logo-mid:   #2e6cb0;
@@ -246,8 +240,7 @@
 
 <body>
     <div class="login-wrap">
-        <!-- Brand: full Petabyte logo (TB monogram + wordmark) on a white
-             rounded badge so it reads cleanly over the pastel background. -->
+        <!-- Brand: full Petabyte logo on a white badge so it reads over the pastel background. -->
         <div class="brand">
             <img class="brand-mascot" src="/assets/mascot.png?v=2" alt="PipekAI" />
             <div class="brand-name">PipekAI</div>
@@ -255,10 +248,7 @@
         </div>
 
         <div class="login-card">
-            <!-- Phase 16.26: single unified login form.
-                 The old role-tabs UI (User Login / Admin Login) was cosmetic —
-                 the server determines role from the user record, not from
-                 which tab the visitor clicked. Removed for clarity. -->
+            <!-- Single login form: the server decides the role from the user record. -->
 
             <!-- Error -->
             <div class="error-msg" id="error-msg"></div>

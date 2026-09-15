@@ -1,32 +1,17 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  abap-scan.test.js — the rules that decide what the model  ║
-// ║  is told about the user's code                             ║
-// ╚═══════════════════════════════════════════════════════════╝
-//
-// Phase 47. Every case here comes from a defect that shipped and went
-// unnoticed, because nothing in this project ever ran these functions with a
-// deliberate input. They are pure functions of a string — there was never a
-// reason they could not be checked, only no habit of doing it.
-//
-//   node --test server/test/
-//
-// The router is not cosmetic: picking the wrong skill means the model is
-// handed the wrong knowledge, and the answer is wrong in a way no error
-// message will ever report.
+// Tests for server/lib/abap-scan — the rules that decide what the model is told about the user's code.
+// Run: node --test server/test/
 
 const test = require('node:test');
 const assert = require('node:assert');
 const scan = require('../lib/abap-scan');
 
-// ── looksLikeAbapCode ─────────────────────────────────────
+// --- looksLikeAbapCode ---
 test('looksLikeAbapCode: real ABAP is code', () => {
     assert.equal(scan.looksLikeAbapCode('REPORT z.\nDATA x TYPE i.\nWRITE x.'), true);
 });
 
 test('looksLikeAbapCode: a wrapped English question is NOT code', () => {
-    // Three lines and the word "data" — but a person asking, not a paste.
-    // Treating it as code substitutes the question into the skill's
-    // <ABAP_code> block and runs a static scan plus a RAG lookup over prose.
+    // Three lines containing "data", but a question, not a paste.
     assert.equal(scan.looksLikeAbapCode(
         'How do I select the right\ndata type for a currency\nfield in a class?'), false);
 });
@@ -36,10 +21,8 @@ test('looksLikeAbapCode: short text is never code', () => {
     assert.equal(scan.looksLikeAbapCode(''), false);
 });
 
-// ── proseOf ───────────────────────────────────────────────
-// The bare-paste fast path fires when proseOf() comes back empty: no words
-// means no instruction to obey, so the code's shape may decide the skill.
-// An instruction that gets eaten here is an instruction silently ignored.
+// --- proseOf ---
+// The bare-paste fast path fires when proseOf() is empty, so an eaten instruction is silently ignored.
 test('proseOf: keeps an English instruction that starts with an ABAP keyword', () => {
     for (const ask of [
         'Create a unit test for this class.',
@@ -56,12 +39,7 @@ test('proseOf: keeps an English instruction that starts with an ABAP keyword', (
 });
 
 test('proseOf: keeps a SHORT instruction that names no giveaway word', () => {
-    // The first two attempts at this listed English words to reject. Both were
-    // incomplete, and the second still ate "Create a unit test." and "Delete
-    // unused variables." — the original defect — while passing its own test,
-    // because the fixture happened to say "for this class". A blocklist of a
-    // natural language cannot be finished; the rule now asks whether the line
-    // carries a mark only ABAP has.
+    // A blocklist of English words can't be complete; the rule must ask for a mark only ABAP has.
     for (const ask of [
         'Create a unit test.',
         'Delete unused variables.',
@@ -84,22 +62,19 @@ test('proseOf: keeps a SHORT instruction that names no giveaway word', () => {
 });
 
 test('looksLikeAbapCode: three English sentences are not a paste', () => {
-    // Three lines of instruction, each opening with an ABAP keyword, were being
-    // substituted into the skill's <ABAP_code> block and statically scanned.
+    // Each line opens with an ABAP keyword but none is a statement.
     assert.equal(scan.looksLikeAbapCode(
         'Delete unused variables.\nCheck for performance issues.\nWrite a short summary.'), false);
 });
 
 test('proseOf: comma-less Open SQL is still code', () => {
-    // Classic `SELECT a b c FROM t` — no commas, no underscores, no operators.
-    // It is the syntax this product exists to modernise, so it cannot be read
-    // as something the user typed.
+    // Classic `SELECT a b c FROM t` — no commas, underscores or operators.
     assert.equal(scan.proseOf(
         'REPORT z.\nSELECT carrid connid fldate bookid\n  FROM sbook\n  INTO TABLE gb.'), '');
 });
 
 test('hasSelectInsideLoop: a sentence beginning "Do" or "While" is not a loop', () => {
-    // Anchoring to the line start was one level too shallow.
+    // "Do"/"While" at line start is not a loop opener.
     assert.equal(scan.hasSelectInsideLoop(
         'Do you see the problem?\nSELECT * FROM mara INTO TABLE lt.'), false);
     assert.equal(scan.hasSelectInsideLoop(
@@ -107,8 +82,7 @@ test('hasSelectInsideLoop: a sentence beginning "Do" or "While" is not a loop', 
 });
 
 test('hasCommentedOutCode: a disabled statement may carry a trailing note', () => {
-    // Two terminator rules disagreed: isStatementLine allows a trailing " note,
-    // a second stricter test here rejected it. People annotate disabled code.
+    // People annotate disabled code with a trailing " note.
     assert.equal(scan.hasCommentedOutCode(
         '*DATA lv TYPE c. " old\n*PERFORM x. " disabled 2019\nWRITE 1.'), true);
 });
@@ -122,15 +96,13 @@ test('proseOf: a bare paste really is bare', () => {
 });
 
 test('proseOf: strips real statements even when they read like words', () => {
-    // "DATA x TYPE i." is a statement; it ends in a period and has no prose.
+    // A terminated statement with no prose words.
     assert.equal(scan.proseOf('SELECT * FROM mara INTO TABLE lt.'), '');
 });
 
 test('proseOf: a real multi-line paste leaves nothing behind', () => {
-    // The bare-paste fast path fires only when this is empty. Statement OPENERS
-    // — `SELECT carrid connid`, `CALL FUNCTION 'Z_X'` — finish on a later line
-    // and so carry no terminator; treating them as prose meant a genuinely bare
-    // paste never took the fast path and always paid for a router call.
+    // Statement openers (`SELECT carrid connid`, `CALL FUNCTION 'Z_X'`) finish on a later line
+    // and carry no terminator; they must not count as prose.
     const paste = [
         'REPORT ztest.',
         'SELECT carrid, connid',
@@ -153,7 +125,7 @@ test('firstProseLine: finds the question, not the code', () => {
     assert.equal(scan.firstProseLine('REPORT z.\nDATA x TYPE i.\nWRITE x.'), '');
 });
 
-// ── hasSelectInsideLoop ───────────────────────────────────
+// --- hasSelectInsideLoop ---
 test('hasSelectInsideLoop: finds a SELECT in a LOOP', () => {
     assert.equal(scan.hasSelectInsideLoop(
         'LOOP AT lt INTO wa.\n  SELECT SINGLE a FROM t INTO v WHERE k = wa-k.\nENDLOOP.'), true);
@@ -165,8 +137,7 @@ test('hasSelectInsideLoop: finds a SELECT in a DO block', () => {
 });
 
 test('hasSelectInsideLoop: the English word "do" is not a loop', () => {
-    // skillsForCode runs on the WHOLE message, prose included. "please do this"
-    // opened a loop that never closed, so every later SELECT looked nested.
+    // skillsForCode runs on the whole message, prose included.
     assert.equal(scan.hasSelectInsideLoop(
         'please do this fix\nREPORT z.\nSELECT * FROM mara INTO TABLE lt.'), false);
 });
@@ -181,25 +152,20 @@ test('hasSelectInsideLoop: a SELECT outside the loop is not inside it', () => {
         'LOOP AT lt INTO wa.\n  WRITE wa.\nENDLOOP.\nSELECT * FROM mara INTO TABLE lt2.'), false);
 });
 
-// ── hasCommentedOutCode ───────────────────────────────────
+// --- hasCommentedOutCode ---
 test('hasCommentedOutCode: finds genuinely disabled statements', () => {
     assert.equal(scan.hasCommentedOutCode(
         '*DATA lv_a TYPE c.\n*PERFORM check_it.\n*MOVE lv_a TO lv_b.\nWRITE 1.'), true);
 });
 
 test('hasCommentedOutCode: a bare *& header with no prose words is NOT dead code', () => {
-    // The first fix leaned on prose markers, and this header has none —
-    // "Report ZTEST", "Data 01.01.2020", "Function: prints" all read as
-    // statements. Caught by hand-checking after the suite was already green,
-    // which is exactly the case the suite has to own from now on.
+    // Header lines like "Report ZTEST" read as statements but carry no prose marker.
     assert.equal(scan.hasCommentedOutCode(
         '*& Report ZTEST\n*& Data 01.01.2020\n*& Function: prints\nREPORT z.\nWRITE 1.'), false);
 });
 
 test('hasCommentedOutCode: a standard ABAP header block is NOT dead code', () => {
-    // Every ABAP program opens like this. Counting it as dead code routed a
-    // perfectly clean file to delete_commented_code with confidence 1.0 and no
-    // LLM call at all.
+    // Every ABAP program opens like this.
     assert.equal(scan.hasCommentedOutCode(
         '*&---------------------------------------------------------------------*\n'
       + '*& Report ZTEST\n'
@@ -215,10 +181,7 @@ test('hasCommentedOutCode: prose comments are not dead code', () => {
 });
 
 test('hasCommentedOutCode: one disabled line is not enough', () => {
-    // The threshold is two, not three. Three was needed only because the old
-    // test was loose enough that header blocks reached it; with "must strip to
-    // a terminated statement, must not be a *& header" it was hiding real
-    // two-line blocks — including the one in this project's own test program.
+    // The threshold is two lines.
     assert.equal(scan.hasCommentedOutCode('*DATA a TYPE c.\nWRITE 1.'), false);
 });
 
@@ -227,7 +190,7 @@ test('hasCommentedOutCode: two disabled lines are dead code', () => {
         '*DATA lv_legacy_flag TYPE c.\n*PERFORM check_something USING lv_legacy_flag.\nWRITE 1.'), true);
 });
 
-// ── hasCommentedParamsInCall ──────────────────────────────
+// --- hasCommentedParamsInCall ---
 test('hasCommentedParamsInCall: finds disabled parameters in a call', () => {
     assert.equal(scan.hasCommentedParamsInCall(
         "CALL FUNCTION 'Z_TEST'\n  EXPORTING\n    a = 1\n*   TABLES\n*     it_data =\n  IMPORTING\n    r = v."), true);
@@ -239,9 +202,7 @@ test('hasCommentedParamsInCall: a clean call has none', () => {
 });
 
 test('hasCommentedParamsInCall: a one-line call ends at its own period', () => {
-    // The CALL branch `continue`d before the end-of-statement check, so inCall
-    // stayed true forever and the next ordinary comment containing "=" was
-    // reported as a disabled parameter that does not exist.
+    // inCall must close at the one-line call's own period.
     assert.equal(scan.hasCommentedParamsInCall(
         "CALL FUNCTION 'Z_FOO'.\n* lv_total = 0 old value\nDATA lv TYPE i."), false);
 });
@@ -250,7 +211,7 @@ test('hasCommentedParamsInCall: comments before any call are ignored', () => {
     assert.equal(scan.hasCommentedParamsInCall('* it_data = something\nDATA x TYPE i.'), false);
 });
 
-// ── the rule table ────────────────────────────────────────
+// --- the rule table ---
 const idsFor = t => scan.matchingSkillIds(t);
 
 test('like_check: fires on an obsolete LIKE declaration', () => {
@@ -258,17 +219,14 @@ test('like_check: fires on an obsolete LIKE declaration', () => {
 });
 
 test('like_check: a SQL LIKE on another line is not a LIKE declaration', () => {
-    // `[^.]*` matches newlines — a dot inside a character class is literal —
-    // so an unterminated DATA chain swallowed a LIKE three lines away.
+    // `[^.]*` matches newlines, so an unterminated DATA chain can swallow a distant LIKE.
     assert.ok(!idsFor(
         'DATA: lv_a TYPE i,\n      lv_b TYPE c\nSELECT matnr FROM mara WHERE matnr LIKE lv_b.'
     ).includes('like_check'));
 });
 
 test('obsolete_check: fires on TABLES with and without a colon', () => {
-    // checkAbapSyntax calls `TABLES mara.` an error while the router rule
-    // ignored it — two detectors in one file disagreeing about the single most
-    // cited obsolete statement in this product's prompts.
+    // checkAbapSyntax and the router rule must agree on TABLES.
     assert.ok(idsFor('REPORT z.\nTABLES: mara.\nWRITE 1.').includes('obsolete_check'));
     assert.ok(idsFor('REPORT z.\nTABLES mara.\nWRITE 1.').includes('obsolete_check'));
 });
@@ -306,7 +264,7 @@ test('matchingSkillIds: the test program matches every rule it should', () => {
     }
 });
 
-// ── codeShapeSkillId ──────────────────────────────────────
+// --- codeShapeSkillId ---
 test('codeShapeSkillId: one rule firing gives a confident pick', () => {
     assert.equal(scan.codeShapeSkillId('REPORT z.\nDATA ztime LIKE sy-timlo.\nWRITE 1.'), 'like_check');
 });
@@ -319,7 +277,7 @@ test('codeShapeSkillId: a clean file gives no pick', () => {
     assert.equal(scan.codeShapeSkillId('REPORT z.\nDATA gv TYPE i.\nWRITE gv.'), null);
 });
 
-// ── checkAbapSyntax ───────────────────────────────────────
+// --- checkAbapSyntax ---
 const sev = (r, s) => (r.issues || []).filter(i => i.severity === s);
 
 test('checkAbapSyntax: reports TABLES as an error', () => {
@@ -329,9 +287,7 @@ test('checkAbapSyntax: reports TABLES as an error', () => {
 });
 
 test('checkAbapSyntax: catches SELECT...ENDSELECT across lines', () => {
-    // The rule was applied per line, so the one pattern that spans lines — and
-    // the only `error` besides TABLES — could never match. The pre-analysis
-    // block then told the model the file had no errors.
+    // The one pattern that spans lines cannot be applied per line.
     const r = scan.checkAbapSyntax(
         'REPORT z.\nSELECT * FROM mara INTO wa.\nWRITE wa-matnr.\nENDSELECT.');
     assert.ok(JSON.stringify(r.issues).includes('ENDSELECT'),
@@ -345,9 +301,7 @@ test('checkAbapSyntax: catches CLEAR followed by REFRESH', () => {
 });
 
 test('checkAbapSyntax: ignores commented-out code', () => {
-    // buildPreAnalysis hands these to the model as "detected by a static scan,
-    // line numbers are exact, treat them as given" — so the model was told to
-    // go and fix lines that do not execute.
+    // Findings are handed to the model as exact; comment lines must not produce any.
     const r = scan.checkAbapSyntax(
         "REPORT z.\n* MOVE lv_a TO lv_b.\n* SELECT * FROM mara.\nWRITE 1.");
     const onComments = (r.issues || []).filter(i => /^\s*[*"]/.test(i.code || ''));
@@ -355,10 +309,7 @@ test('checkAbapSyntax: ignores commented-out code', () => {
 });
 
 test('checkAbapSyntax: the loop error names the loop, not a correct SELECT above it', () => {
-    // A regex finds the LEFTMOST match, so /SELECT[\s\S]*?ENDSELECT/ opened at
-    // the first SELECT in the file. With a correct `SELECT SINGLE ... .` above
-    // the real loop, the error was pinned to the correct statement — and the
-    // model is told these line numbers are exact and the finding is given.
+    // The leftmost SELECT...ENDSELECT match must not open at an earlier, correct SELECT.
     const r = scan.checkAbapSyntax([
         'REPORT ztest.',
         'SELECT SINGLE matnr FROM mara INTO lv_m WHERE matnr = 1.',
@@ -386,9 +337,7 @@ test('checkAbapSyntax: a lone SELECT SINGLE is not a loop', () => {
 });
 
 test('checkAbapSyntax: TABLES inside CALL FUNCTION is not the obsolete statement', () => {
-    // Broadening the pattern to TABLES[\s:] caught the parameter section of
-    // every CALL FUNCTION — current syntax — and told the model a clean call
-    // contained an obsolete declaration.
+    // TABLES as a CALL FUNCTION parameter section is current syntax.
     const call = "CALL FUNCTION 'Z_READ'\n  EXPORTING\n    iv = 1\n  TABLES\n    it = lt.";
     assert.equal(scan.checkAbapSyntax(call).valid, true);
     assert.ok(!idsFor(call).includes('obsolete_check'));
@@ -402,11 +351,29 @@ test('checkAbapSyntax: a clean program is valid', () => {
 });
 
 test('checkAbapSyntax: AND RETURN advice names the right replacement', () => {
-    // AND RETURN is an addition to CALL TRANSACTION / LEAVE TO TRANSACTION.
-    // CALL METHOD replaces a different obsolete form entirely, and this text
-    // is fed to the model as an established finding.
+    // AND RETURN belongs to CALL/LEAVE TO TRANSACTION; CALL METHOD is unrelated.
     const r = scan.checkAbapSyntax("REPORT z.\nLEAVE TO TRANSACTION 'SE38' AND RETURN.\nWRITE 1.");
     const msg = JSON.stringify(r.issues);
     assert.ok(msg.includes('AND RETURN'), 'AND RETURN was not reported');
     assert.ok(!msg.includes('CALL METHOD'), 'still recommends CALL METHOD, which is unrelated');
+});
+
+// --- MOVE ... TO: the rule must stay linear in the line length ---
+test('checkAbapSyntax: MOVE...TO rule still fires on the obsolete form', () => {
+    const r = scan.checkAbapSyntax('MOVE lv_a TO lv_b.');
+    assert.ok(r.issues.some(i => /MOVE\.\.\.TO/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: MOVE...TO rule does not fire on assignments or MOVE-CORRESPONDING', () => {
+    const r = scan.checkAbapSyntax('lv_b = lv_a.\nDATA lv_move TYPE i.\nMOVE-CORRESPONDING ls_a TO ls_b.');
+    assert.ok(!r.issues.some(i => /MOVE\.\.\.TO/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: a pathological MOVE line finishes in well under a second', () => {
+    const line = 'MOVE ' + ' '.repeat(6000) + 'x';
+    const t0 = Date.now();
+    scan.checkAbapSyntax(line);
+    const ms = Date.now() - t0;
+    assert.ok(ms < 500, `took ${ms}ms`);
+});
+test('checkAbapSyntax: a 33 000-character CLEAR operand does not throw', () => {
+    assert.doesNotThrow(() => scan.checkAbapSyntax('CLEAR ' + 'a'.repeat(33000) + '.\nREFRESH x.'));
 });

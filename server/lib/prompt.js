@@ -1,20 +1,6 @@
 // @ts-check
-// ╔═══════════════════════════════════════════════════════════╗
-// ║  prompt.js — the instructions every answer is built from   ║
-// ╚═══════════════════════════════════════════════════════════╝
-//
-// Phase 46: lifted out of server.js. These assemble the system prompt from
-// pieces: the rules shared by every skill, the {code} substitution, the org's
-// own standards, and the knowledge blocks of the other skills the pasted code
-// matched.
-//
-// Kept free of pool and OpenAI client on purpose — the callers fetch (and
-// cache) the org standards and the skill catalog, then hand the RESULT here.
-// That is what makes the wording testable: a test can assert what the prompt
-// says without a database or a network call.
-//
-// supportingKnowledgeBlock takes a skills object ({ getSkill, knowledgeBlockOf })
-// rather than requiring the registry directly, so a test can pass a fake.
+// prompt.js — assembles the system prompt: shared rules, {code} substitution, org standards,
+// and the knowledge blocks of supporting skills. No pool or OpenAI client: callers pass results in.
 
 const { looksLikeAbapCode } = require('./abap-scan');
 
@@ -76,9 +62,7 @@ not a concern here; being asked the same thing twice is.
 - Change only what the fix requires. Do not rename variables, renumber, or reformat lines your correction does not touch. If a line's only difference from the original is naming or layout, leave it exactly as it was — cosmetic edits bury the real changes among noise and give the reader more to verify for nothing.
 - Separate what comes from documents (cite the filename) from what is your general knowledge. Do not blend the two silently.`;
 
-// Phase 36: {code} skills assumed EVERY message is code. A conversational
-// follow-up ("remove the MARA reference from your code") got substituted
-// into <ABAP_code> and the skill dutifully replied "no code provided".
+// {code} skills must not treat a conversational follow-up as code.
 
 function applyCodePlaceholder(systemPrompt, question) {
     if (!systemPrompt.includes('{code}')) {
@@ -86,19 +70,11 @@ function applyCodePlaceholder(systemPrompt, question) {
     }
     if (looksLikeAbapCode(question)) {
         return {
-            // A function, not a string. String.replace treats $&, $', $` and $1
-            // in the REPLACEMENT as substitution escapes, so pasted ABAP
-            // containing them was silently rewritten before the model saw it —
-            // WRITE: 'total $& here'. arrived as WRITE: 'total {code} here'.
-            // and $' spliced the rest of the prompt into the user's source.
-            // replaceAll because a skill may carry more than one placeholder;
-            // replace() filled the first and left the others literal.
+            // A function, not a string: String.replace treats $&, $', $1 in the replacement as escapes.
+            // replaceAll because a skill may carry more than one placeholder.
             systemPrompt: systemPrompt.replaceAll('{code}', () => question),
-            // Phase 41: was "…and apply the corrections." This rides in the USER
-            // turn, which outranks the system prompt — so it was ordering the
-            // model to apply everything while the shared rules were telling it
-            // some findings must only be reported. Neutral wording now; the
-            // rules alone decide what gets applied.
+            // Neutral wording — the user turn outranks the system prompt, so it must
+            // not order the model to apply what the rules say is report-only.
             userPrompt:   'Please review the ABAP code provided above and respond according to your instructions.',
         };
     }
@@ -123,19 +99,12 @@ Do not run a general "development standards" search — you already have it. Sea
 }
 
 
-// Bound the appended knowledge by SIZE, not by how many skills produced it.
-// A count cap of 6 looked reasonable and silently dropped the seventh — which
-// on the test file was COMMENT_IN_FUNCTION_SYNTAX, one of the two checks this
-// whole change exists to stop losing. All 8 skills' knowledge together is
-// ~10.7k chars, so this fits the catalog as it stands and still refuses to grow
-// without limit if it doubles.
+// Cap by SIZE, not count: a count cap silently dropped checks. All 8 skills together are ~10.7k chars.
 const MAX_SUPPORTING_SKILLS = 8;
 const MAX_SUPPORTING_CHARS  = 14000;
 
 /** The other skills' knowledge, appended to the primary skill's instructions.
- *  Only the knowledge block travels: each skill also carries its own "answer in
- *  this format" section, and several of those in one prompt contradict each
- *  other. The primary skill has already set the format. */
+ *  Only the knowledge block travels — the primary skill already set the answer format. */
 function supportingKnowledgeBlock(ids, skills) {
     const parts = [];
     const dropped = [];

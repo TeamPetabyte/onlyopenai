@@ -1,16 +1,11 @@
-/**
- * ai-client.js — PetabyteAi Frontend AI Client
- * Reads real-time SSE stream from backend — each word appears as OpenAI generates it.
- * Auto-falls back to MockAI if server is offline or has no API key.
- */
+// ai-client.js — frontend AI client: streams /api/chat over SSE,
+// falls back to MockAI when the server is offline or has no API key.
 
 const AIClient = {
-    // Resolved from window.AppConfig (js/config.js) — falls back if not loaded
     BACKEND_URL: (typeof window !== 'undefined' && window.AppConfig && window.AppConfig.API_BASE) || 'http://localhost:3001',
     _mode: null,
     _modelName: null,
-    // Active AbortController for the in-flight /api/chat request.
-    // Exposed via cancel() so the UI can stop generation mid-stream.
+    // in-flight /api/chat request; cancel() aborts it
     _abortCtrl: null,
 
     /** Check backend health once, cache result */
@@ -32,13 +27,13 @@ const AIClient = {
     },
 
     /**
-     * Run AI skill — drop-in replacement for MockAI.run()
+     * Run an AI skill (drop-in for MockAI.run).
      * @param {string}   skillId
      * @param {string}   prompt
      * @param {string}   systemPrompt
-     * @param {Function} onChunk(text)  — called with each text chunk as it arrives
+     * @param {Function} onChunk(text)
      * @param {Function} onDone(result) — { inputTokens, outputTokens, cost, durationMs }
-     * @param {object}   rates          — { inputRate, outputRate }
+     * @param {object}   rates — { inputRate, outputRate }
      */
     async run(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError, opts) {
         const mode = await this.checkBackend();
@@ -55,17 +50,8 @@ const AIClient = {
         const inputRate = (rates && rates.inputRate) || 0.50;
         const outputRate = (rates && rates.outputRate) || 1.50;
 
-        // Compose a user-triggerable abort (AIClient.cancel) with a two-stage
-        // watchdog (Phase 31). The old fixed 90s deadline killed perfectly
-        // healthy requests: gpt-5.6 at high/xhigh effort can THINK silently
-        // for several minutes before the first token. Now:
-        //   stage 1 — 90s until the first byte arrives (catches "server can't
-        //             reach api.openai.com at all");
-        //   stage 2 — after bytes start flowing, a 60s IDLE watchdog that
-        //             resets on every read. The server emits an SSE heartbeat
-        //             every 15s while the model thinks, so a healthy-but-
-        //             thinking stream never trips it, while a genuinely dead
-        //             connection still fails within a minute.
+        // Two-stage watchdog: 90s to the first byte, then a 60s idle timer reset on every read.
+        // The server heartbeats every 15s while the model thinks, so only a dead connection trips it.
         const userCtrl  = new AbortController();
         this._abortCtrl = userCtrl;
         let watchdogId = setTimeout(() => userCtrl.abort('timeout'), 90000);
@@ -75,19 +61,14 @@ const AIClient = {
         };
 
         try {
-            // Phase 39: auth = HttpOnly cookie (auto-attached by the fetch
-            // patch); authHeaders() adds Content-Type + X-CSRF-Token.
+            // Cookie auth; authHeaders() adds Content-Type + X-CSRF-Token.
             const headers = (typeof Auth !== 'undefined' && Auth.authHeaders)
                 ? Auth.authHeaders()
                 : { 'Content-Type': 'application/json' };
             const body = { skillId, prompt, systemPrompt, inputRate, outputRate };
-            // Phase 34: model + reasoning effort chosen in the composer. The
-            // server validates against its allowlist and falls back to the env
-            // default when absent, so these are safe to always include.
+            // Server validates model/effort against its allowlist and falls back to its default.
             if (opts.model)  body.model  = opts.model;
             if (opts.effort) body.effort = opts.effort;
-            // Phase 12: thread messages into an existing chat session (or
-            // let the server create one on first send when sessionId is null).
             if (sessionId) body.sessionId = sessionId;
             const res = await fetch(`${this.BACKEND_URL}/api/chat`, {
                 method: 'POST',
@@ -96,12 +77,7 @@ const AIClient = {
                 signal: userCtrl.signal
             });
 
-            // Phase 21.10 — Concept B credit gates. Server returns
-            // 402 (project pool empty) or 429 (daily cap exceeded) BEFORE
-            // streaming starts, with a JSON body containing { error, message, ... }.
-            // Handle these by calling onError (if provided) so the UI can show
-            // a distinct block message + "request more quota" path, instead of
-            // trying to read the JSON as SSE chunks.
+            // 402 (pool empty) / 429 (daily cap) arrive as JSON before any SSE; route them to onError.
             if (!res.ok) {
                 let info = null;
                 try { info = await res.json(); } catch (_) { info = { error: 'http_' + res.status }; }
@@ -110,7 +86,7 @@ const AIClient = {
                 } else {
                     console.warn('[AIClient] chat blocked:', res.status, info);
                 }
-                // Surface an empty done so caller can reset its UI (button etc.).
+                // empty done so the caller can reset its UI
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
                     durationMs: Date.now() - startTime,
@@ -120,7 +96,6 @@ const AIClient = {
                 return;
             }
 
-            // Read SSE line-by-line
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -129,8 +104,7 @@ const AIClient = {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                // Phase 31: any bytes (real chunks OR ': ping' heartbeats)
-                // prove the stream is alive — push the idle deadline out.
+                // any bytes (chunks or ': ping' heartbeats) prove the stream is alive
                 resetWatchdog();
 
                 buffer += decoder.decode(value, { stream: true });
@@ -143,23 +117,16 @@ const AIClient = {
                     try { event = JSON.parse(line.slice(6)); } catch (e) { continue; }
 
                     if (event.type === 'chunk') {
-                        // Real OpenAI token — send directly to UI (no extra delay)
                         onChunk(event.text);
 
                     } else if (event.type === 'tool_call' || event.type === 'tool_result') {
-                        // Phase 35.2: tool activity (RAG document search etc.) —
-                        // forwarded so the chat UI can render a live badge.
+                        // tool activity (RAG search etc.) for the live badge
                         if (typeof opts.onTool === 'function') {
                             try { opts.onTool(event); } catch (_) { /* badge is cosmetic — never kill the stream */ }
                         }
 
                     } else if (event.type === 'routed') {
-                        // Phase 40: which Skill prompt the server's router matched
-                        // (or that it matched none), plus HOW it was chosen. The
-                        // server has emitted this since Phase 18, but nothing here
-                        // read it — so the chat showed a 🔍 badge when it searched
-                        // documents and NOTHING when it applied a skill, which read
-                        // as "the skill prompts never run".
+                        // which skill prompt the router matched (or none) and how
                         if (typeof opts.onRouted === 'function') {
                             try { opts.onRouted(event); } catch (_) { /* badge is cosmetic — never kill the stream */ }
                         }
@@ -171,19 +138,18 @@ const AIClient = {
                             outputTokens: event.outputTokens,
                             cost: event.cost,
                             durationMs: Date.now() - startTime,
-                            sessionId: event.sessionId,   // Phase 12: so client can pin the new thread id
+                            sessionId: event.sessionId,   // lets the client pin the new thread id
                             stopped: !!event.stopped,
                         });
 
                     } else if (event.type === 'use_mock') {
-                        // Server DELIBERATELY asked for mock (e.g. no API key configured).
+                        // server deliberately asked for mock (e.g. no API key)
                         this._mode = 'mock';
                         console.warn('[AIClient] Server requested MockAI:', event.reason);
                         await MockAI.run(skillId, prompt, onChunk, onDone);
                         return;
                     } else if (event.type === 'error') {
-                        // REAL backend/OpenAI failure (e.g. cannot reach api.openai.com).
-                        // Show it instead of faking an answer with MockAI.
+                        // real backend failure — show it rather than faking a MockAI answer
                         console.error('[AIClient] Backend error:', event.error);
                         if (typeof onError === 'function') {
                             onError({ status: 'stream_error', error: event.error, message: event.error });
@@ -199,9 +165,7 @@ const AIClient = {
                 }
             }
 
-            // Stream closed without a `done` event — treat as a benign
-            // close (e.g. user cancelled). Still surface an onDone so the
-            // caller can reset UI state.
+            // closed without a done event (e.g. cancelled) — still surface onDone so the UI resets
             if (!sawDone) {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
@@ -213,7 +177,7 @@ const AIClient = {
 
         } catch (err) {
             const abortReason = userCtrl.signal && userCtrl.signal.reason;
-            // User pressed Stop — benign, stay silent.
+            // user pressed Stop — benign
             if (abortReason === 'user_cancel') {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
@@ -223,10 +187,7 @@ const AIClient = {
                 });
                 return;
             }
-            // Otherwise it's a REAL failure — the 90s safety timeout fired (server
-            // never answered, usually because it can't reach api.openai.com) or a
-            // network/stream error. Surface it instead of silently faking a MockAI
-            // reply, so the user actually sees WHY nothing came back.
+            // real failure (watchdog fired or network error) — surface it so the user sees why
             const isTimeout = abortReason === 'timeout'
                 || err.name === 'AbortError' || (userCtrl.signal && userCtrl.signal.aborted);
             const msg = isTimeout

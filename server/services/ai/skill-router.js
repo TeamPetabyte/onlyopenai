@@ -10,16 +10,13 @@ function isSkillPlaceholder(content) {
 }
 
 
-// ── SKILL ROUTER — เลือก system prompt จาก catalog (tbl_prompt) ──
+// ลำดับตัดสิน: paste เปล่าตัดสินจากโค้ด (ไม่เรียก LLM) → gpt-4o-mini เลือกจาก catalog → ต่ำ/ใช้ไม่ได้
+// ตกไป code-shape แล้ว catch-all; ไม่มี skill เฉพาะเมื่อไม่ใช่เรื่อง ABAP จริง ๆ. source ติดไปกับ event
 
-// ลำดับตัดสิน: paste เปล่า ๆ ตัดสินจากโค้ด (ไม่เรียก LLM) → gpt-4o-mini เลือกจาก catalog (เห็นหัว+ท้าย
-// ของข้อความ + 2 turn ล่าสุด) → ต่ำ/ใช้ไม่ได้ตกไป code-shape แล้ว catch-all — จะไม่มี skill ก็ต่อเมื่อ
-// ไม่ใช่เรื่อง ABAP จริง ๆ; source (llm/code-shape/catch-all) ติดไปกับ event ให้ UI บอกที่มา
-
-// กติกา code-shape อยู่ lib/abap-scan — สองตัวนี้แค่เช็คกับ catalog ว่า skill มีจริงและไม่ใช่ placeholder
-// ใช้เฉพาะที่ไม่มีเจตนา user ให้ตีความผิด — ไม่ override pick มั่นใจของ LLM
+// กติกา code-shape อยู่ lib/abap-scan; สองตัวนี้แค่เช็คว่า skill มีใน catalog และไม่ใช่ placeholder.
+// ไม่ override pick ที่มั่นใจของ LLM
 function pickSkillFromCodeShape(text) {
-    // filter ก่อนแล้วค่อยเช็คเหลือหนึ่ง — v1.11.4 สลับลำดับแล้วเคสมี placeholder แตก (v1.11.6 แก้กลับ)
+    // filter placeholders first, then require exactly one survivor — the order matters
     const hits = abapScan.ROUTER_CODE_RULES
         .filter(r => { try { return r.test(text); } catch (_) { return false; } })
         .map(r => r.id)
@@ -36,8 +33,7 @@ function skillsForCode(text) {
     });
 }
 
-// supportingKnowledgeBlock moved to lib/prompt.js. The registry is
-// passed in rather than reached for, so the builder is testable without a DB.
+// supportingKnowledgeBlock lives in lib/prompt.js; the registry is passed in so it is testable without a DB.
 const MAX_SUPPORTING_SKILLS   = promptLib.MAX_SUPPORTING_SKILLS;
 const supportingKnowledgeBlock = (ids) => promptLib.supportingKnowledgeBlock(ids, skillPrompts);
 
@@ -46,9 +42,7 @@ const ROUTER_TAIL_CHARS     = 1500;
 const ROUTER_MIN_CONFIDENCE = 0.5;
 const ROUTER_HISTORY_TURNS  = 2;
 
-/** Head + tail window of the message. The middle of a long program is the
- *  least diagnostic part; the top (declarations) and the bottom (the logic,
- *  and often the instruction typed after the paste) are what matter. */
+/** Head + tail window of the message: declarations at the top and the logic/instruction at the bottom matter most. */
 function routerWindow(text) {
     const t = String(text || '');
     const cap = ROUTER_HEAD_CHARS + ROUTER_TAIL_CHARS;
@@ -71,8 +65,7 @@ function _skillResult(skill, { confidence, reason, source }) {
 async function pickSkillFromCatalog(userMessage, oai, history) {
     const catalog = skillPrompts.buildRouterCatalog();
     if (catalog.length === 0) {
-        // No usable catalog (file missing, parse error, or every entry still a
-        // placeholder) — caller falls through to the base SAP/ABAP prompt.
+        // no usable catalog — caller falls through to the base SAP/ABAP prompt
         return _noSkill('catalog empty', 0, false);
     }
 
@@ -88,8 +81,7 @@ async function pickSkillFromCatalog(userMessage, oai, history) {
         }
     }
 
-    // Render the catalog as a list for the LLM. We include id + label +
-    // description; the LLM must echo back the id exactly.
+    // the LLM must echo back the id exactly
     const catalogText = catalog.map(s =>
         `- id: "${s.id}"\n    label: ${s.label}\n    description: ${s.description}`
     ).join('\n');
@@ -111,15 +103,14 @@ ${hasCatchAll ? `  - If the message IS about ABAP/SAP development but no focused
 
 Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one short sentence>"}`;
 
-    // a follow-up ("แก้ตรงนี้ให้หน่อย") carries no signal of its own —
-    // without the previous turns the router could only ever answer "none" to it.
+    // a follow-up ("แก้ตรงนี้ให้หน่อย") has no signal of its own without the previous turns
     const recent = (history || []).slice(-ROUTER_HISTORY_TURNS)
         .map(m => `[${m.role}] ${String(m.content || '').slice(0, 800)}`)
         .join('\n');
 
     try {
         const client = oai || openai;
-        // ไม่มี userId ตรงนี้เลยไม่ใช้ fallback หรู ๆ — throw ให้ /api/chat จับ; response_format บังคับ JSON กัน parse พัง
+        // no userId here, so errors throw to /api/chat; response_format forces JSON
         const messages = [{ role: 'system', content: sys }];
         if (recent) {
             messages.push({ role: 'user', content:
@@ -135,8 +126,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
             messages,
         };
         const resp = await client.chat.completions.create(routerArgs).catch(async (e) => {
-            // Auto-fallback for the router specifically: chat works only if
-            // the router survives, so trade attribution for availability.
+            // chat works only if the router survives, so trade attribution for availability
             if ((e?.status === 401) && client !== openai && openai) {
                 console.warn('[router] catalog: 401 from project key — retrying with global');
                 return await openai.chat.completions.create(routerArgs);
@@ -149,7 +139,7 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
         const conf   = Number(parsed.confidence || 0);
         const reason = String(parsed.reason || '');
 
-        // ── Validate the LLM's pick ───────────────────────────────
+        // validate the LLM's pick
         let skill = null;
         if (id !== 'none') {
             const cand = skillPrompts.getSkill(id);

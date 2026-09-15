@@ -1,9 +1,6 @@
 // prompt.test.js — how the system prompt is assembled.
-//
-// The case that matters most here is A1: applyCodePlaceholder was rewriting the
-// user's own source before the model ever saw it, because String.replace treats
-// $&, $', $` and $1 in the REPLACEMENT as substitution escapes. Nothing errored;
-// the model simply reviewed code that was not what the user pasted.
+// String.replace treats $&, $', $` and $1 in the replacement as substitution escapes;
+// applyCodePlaceholder must not let pasted code be rewritten by them.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -59,14 +56,12 @@ test('applyCodePlaceholder: a question is not treated as a paste', () => {
 
 test('applyCodePlaceholder: a paste gets the neutral user turn', () => {
     // A user-role instruction outranks the system prompt, so this wording must
-    // not tell the model to apply everything — the shared rules decide what may
-    // be applied and what must only be reported.
+    // not tell the model to apply everything.
     const r = prompt.applyCodePlaceholder(SKILL, PASTE);
     assert.ok(/respond according to your instructions/.test(r.userPrompt));
     assert.ok(!/apply the corrections/i.test(r.userPrompt));
 });
 
-// ── orgStandardsBlock ─────────────────────────────────────
 test('orgStandardsBlock: nothing to say when there are no standards', () => {
     assert.equal(prompt.orgStandardsBlock(null), '');
     assert.equal(prompt.orgStandardsBlock({ text: '' }), '');
@@ -78,7 +73,6 @@ test('orgStandardsBlock: carries the text and cites the files', () => {
     assert.ok(b.includes('keystone.doc · bc402.pdf'));
 });
 
-// ── supportingKnowledgeBlock ──────────────────────────────
 // The registry is injected, so this needs no database.
 const fakeSkills = (map) => ({
     getSkill: id => (map[id] ? { id, label: map[id].label || id, content: map[id].content } : null),
@@ -121,7 +115,6 @@ test('supportingKnowledgeBlock: stays within the character budget', () => {
     assert.ok(b.length < prompt.MAX_SUPPORTING_CHARS + 1000, `block was ${b.length} chars`);
 });
 
-// ── the shared appendix ───────────────────────────────────
 test('PROMPT_COMMON_APPENDIX: carries every section the product depends on', () => {
     const a = prompt.PROMPT_COMMON_APPENDIX;
     for (const heading of [
@@ -139,8 +132,6 @@ test('PROMPT_COMMON_APPENDIX: carries every section the product depends on', () 
 });
 
 test('PROMPT_COMMON_APPENDIX: still says *### goes in column 1', () => {
-    // An indented *### is not a comment in ABAP — it is a syntax error in the
-    // file the user downloads. Verified against abaplint, so the wording that
-    // produces it matters.
+    // An indented *### is not a comment in ABAP; it is a syntax error in the downloaded file.
     assert.ok(/column 1/.test(prompt.PROMPT_COMMON_APPENDIX));
 });

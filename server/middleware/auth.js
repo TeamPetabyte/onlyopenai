@@ -2,8 +2,7 @@
 
 module.exports = function createAuthMiddleware({ sessionStore }) {
 const { getSession, _extractToken, CSRF_HEADER } = sessionStore;
-// CSRF double-submit บน method ที่เปลี่ยน state — cookie เป็น SameSite=Strict อยู่แล้ว นี่คือชั้นเสริม
-// login ยกเว้น (ยังไม่มี session ให้เทียบ)
+// CSRF double-submit on state-changing methods (extra layer over SameSite=Strict); login exempt — no session yet
 const CSRF_EXEMPT_PATHS = new Set([
     '/api/auth/login',     // no session yet
     '/api/health',         // public probe
@@ -32,8 +31,7 @@ async function csrfGuard(req, res, next) {
         res.status(500).json({ ok: false, error: 'CSRF check failed' });
     }
 }
-// app.use(csrfGuard) is registered later — AFTER cors() + body parser —
-// so CORS headers ride along on the 403 reply.
+// registered after cors() + body parser so the 403 carries CORS headers
 
 // must_change_password=true → ทำได้แค่เปลี่ยนรหัสตัวเอง/logout ที่เหลือ 423
 const PW_CHANGE_ALLOWED = [
@@ -50,8 +48,7 @@ async function requireAdmin(req, res, next) {
     try {
         const sess = await getSession(token);
         if (!sess) return res.status(401).json({ ok: false, error: 'Session expired' });
-        // trainer is a superadmin — people/money admin surfaces
-        // accept both roles. Training surfaces use requireTrainer instead.
+        // trainer is a superadmin: people/money surfaces accept both roles; training surfaces use requireTrainer
         if (sess.role !== 'admin' && sess.role !== 'trainer') {
             return res.status(403).json({ ok: false, error: 'Admin access required' });
         }

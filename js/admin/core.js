@@ -1,11 +1,10 @@
-// core.js — state + init + navigate + fetch users/projects
-// (ไม่ใช้ helper กลาง)
+// core.js — admin state, init, navigate and the DB fetches for users/projects.
 
 export default {
   currentView: 'overview',
   _selectedProject: null,
 
-  // allow-list ของ view ที่ hash เปิดได้ — 'skills'/'sync' คงไว้ให้ bookmark เก่า แม้ซ่อนใน sidebar
+  // views a hash may open; 'skills'/'sync' stay for old bookmarks though hidden in the sidebar
   _validViews: ['overview', 'users', 'projects', 'activity', 'login-history',
                 'usage', 'balance', 'sync', 'skills', 'lab', 'evals'],
 
@@ -19,18 +18,16 @@ export default {
   init: function () {
     Auth.initDefaults();
     var self = this;
-    // เวอร์ชันที่ sidebar — source of truth คือ AppConfig.VERSION
     var verEl = document.getElementById('app-version');
     if (verEl) verEl.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
-    // Load projects from DB first so project dropdowns / lookups work everywhere
+    // projects first so dropdowns/lookups work everywhere
     this.fetchProjectsFromDB().then(function () {
-      // refresh แล้วกลับ view เดิมจาก hash; ไม่รู้จักตกที่ overview
+      // return to the view in the hash; unknown → overview
       var startView = self._viewFromHash() || 'overview';
       self.navigate(startView);
       self.refreshProjectSelects();
     });
-    // respond to back/forward button + manual hash edits so the
-    // sidebar highlight + visible view stay in sync with the URL.
+    // back/forward and manual hash edits keep sidebar + view in sync with the URL
     window.addEventListener('hashchange', function () {
       var v = self._viewFromHash();
       if (v && v !== self.currentView) self.navigate(v);
@@ -39,8 +36,7 @@ export default {
     if (hbtn) hbtn.addEventListener('click', function () {
       document.getElementById('sidebar').classList.toggle('open');
     });
-    // when the language switches, re-apply static labels and
-    // re-render the current view so JS-built strings (cards, tables) update too.
+    // on language switch re-apply labels and re-render so JS-built strings update too
     window.addEventListener('i18n:change', function () {
       if (typeof I18N !== 'undefined') I18N.apply();
       try { self.navigate(self.currentView); } catch (_) {}
@@ -53,8 +49,7 @@ export default {
       var _s = (typeof Auth !== 'undefined') && Auth.getSession();
       if (!_s || _s.role !== 'trainer') view = 'overview';
     }
-    // v1.7.3: leaving the Evals view? stop the run-progress poller so it
-    // doesn't keep fetching in the background from another tab.
+    // leaving Evals: stop the run-progress poller
     if (view !== 'evals' && this._evalPollTimer) {
       clearTimeout(this._evalPollTimer);
       this._evalPollTimer = null;
@@ -64,8 +59,7 @@ export default {
     // 'login-history' เป็น nav เสมือน — ใช้ DOM ของ view-activity ตัวเดียวกัน
     var viewKey = (view === 'login-history') ? 'activity' : view;
     var target = document.getElementById('view-' + viewKey);
-    // Highlight by the clicked sidebar id, not the underlying view, so the
-    // user sees "Login History" stay active when they pick that entry.
+    // highlight the clicked sidebar id, not the underlying view
     var nav = document.getElementById('nav-' + view);
     if (target) target.classList.remove('hidden');
     if (nav) nav.classList.add('active');
@@ -92,8 +86,7 @@ export default {
     if (view === 'login-history') {
       if (titleEl) titleEl.textContent = TTn('page.loginHistory.title', 'Login History');
       if (subEl)   subEl.textContent   = TTn('page.loginHistory.sub', 'ประวัติการเข้า/ออกระบบของผู้ใช้ทั้งหมด');
-      // The .audit-tabs class hard-codes `display: flex` without a `.hidden`
-      // override, so toggling a class won't hide the bar. Use inline style.
+      // .audit-tabs hard-codes display:flex, so a class toggle can't hide it — use inline style
       if (tabsEl)   tabsEl.style.display   = 'none';
       if (clearBtn) clearBtn.style.display = 'none';
     } else if (view === 'activity') {
@@ -114,13 +107,12 @@ export default {
         if (!t || t === 'audit') t = 'chat';
         self.switchActivityTab(t);
       },
-      // Login History: only the audit pane should be visible. switchActivityTab
-      // also hides chat + action panes so the user sees just the login table.
+      // Login History: only the audit pane is visible
       'login-history': function () { self.switchActivityTab('audit'); },
       usage: function () { self.renderCredits(); },       // alias → Credits page (tabs inside)
       balance: function () { self.renderBalance(); },
-      sync:    function () { self.renderSync(); },        // Phase 17.4
-      skills:  function () { self.renderSkills(); },      // Phase 18
+      sync:    function () { self.renderSync(); },
+      skills:  function () { self.renderSkills(); },
       lab:     function () { self.renderLab(); },         // Prompt Lab
       evals:   function () { self.renderEvals(); },       // Eval harness
     };
@@ -129,7 +121,7 @@ export default {
   },
 
   _cachedDBUsers: [],     // cache for id lookup in action functions
-  _cachedDBProjects: [],  // cache so sync helpers (renderUsers' project select etc.) see DB data
+  _cachedDBProjects: [],  // DB projects for the sync helpers
 
   // อ่าน projects จาก cache DB ก่อน แล้วค่อย localStorage — กัน tab อื่น logout แล้วเห็นของเก่า
   _projectsList: function () {
@@ -140,8 +132,7 @@ export default {
     catch (_) { return []; }
   },
 
-  // project list from DB. Mirror cached list to localStorage so
-  // any legacy code path (Auth.getProjects) sees up-to-date values until removed.
+  // Projects from DB, mirrored to localStorage so legacy Auth.getProjects() callers see fresh data.
   fetchProjectsFromDB: function () {
     var self = this;
     return fetch(BASE + '/api/projects', { headers: Auth.authHeaders() })
@@ -156,19 +147,17 @@ export default {
             inputRate:   parseFloat(p.input_rate)   || 0.5,
             outputRate:  parseFloat(p.output_rate)  || 1.5,
             creditLimit: parseFloat(p.credit_limit) || 0,
-            // balance = คงเหลือ, lifetimeAmount = ยอดเติมสะสม (ไม่ลด); totalTopUp คง alias ไว้ให้ renderer เก่า
+            // balance = คงเหลือ, lifetimeAmount = ยอดเติมสะสม (ไม่ลด); totalTopUp เป็น alias ให้ renderer เก่า
             balance:        parseFloat(p.balance)          || 0,
             lifetimeAmount: parseFloat(p.lifetime_amount)  || 0,
             totalTopUp:     parseFloat(p.balance)          || 0,   // legacy alias
-            // server now redacts the secret. We only know if it
-            // exists (`has_api_key`) and a short preview for display.
+            // server redacts the key; only has_api_key + a short preview
             hasApiKey:    !!p.has_api_key,
             apiKeyPreview: p.api_key_preview || null,
             createdAt:   p.created_at,
           };
         });
         self._cachedDBProjects = projects;
-        // Mirror to localStorage so legacy Auth.getProjects() callers stay in sync
         try { Auth.saveProjects(projects); } catch (_) { /* ignore */ }
         return projects;
       })
@@ -184,7 +173,7 @@ export default {
         var usersData = results[0].ok ? results[0].users : [];
         var historyData = results[1].ok ? results[1].history : [];
         return usersData.map(function (u) {
-          // Normalize DB snake_case → camelCase so render functions work correctly
+          // DB snake_case → camelCase
           var userHistory = historyData
             .filter(function (h) { return h.user_id === u.id; })
             .map(function (h) {
@@ -197,7 +186,7 @@ export default {
                 response: h.response || '',
                 inputTokens:  parseInt(h.input_tokens  || h.inputTokens  || 0),
                 outputTokens: parseInt(h.output_tokens || h.outputTokens || 0),
-                // track cached + reasoning sub-totals for cost transparency
+                // cached + reasoning sub-totals for cost transparency
                 cachedTokens:    parseInt(h.cached_tokens    || h.input_cached_tokens     || h.cachedTokens    || 0),
                 reasoningTokens: parseInt(h.reasoning_tokens || h.output_reasoning_tokens || h.reasoningTokens || 0),
                 cost: parseFloat(h.cost || 0),
@@ -223,7 +212,7 @@ export default {
             balance: parseFloat(u.balance),
             projectId: u.project_id,
             createdAt: u.created_at,
-            // Phase 11 B3: per-user daily spending cap (null = no cap)
+            // per-user daily spending cap (null = no cap)
             dailyCap: (u.daily_cap === null || u.daily_cap === undefined)
                 ? null : parseFloat(u.daily_cap),
             history: userHistory,
@@ -233,7 +222,7 @@ export default {
       .catch(function () { return []; });
   },
 
-  // Sync fallback (for action functions that need id before async completes)
+  // sync fallback for action functions that need an id before the async fetch completes
   getUsersWithHistory: function () {
     if (this._cachedDBUsers && this._cachedDBUsers.length > 0) return this._cachedDBUsers;
     return Auth.getUsers().map(function (u) {

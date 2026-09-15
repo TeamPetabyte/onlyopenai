@@ -71,10 +71,8 @@ INSERT INTO projects (name, description, input_rate, output_rate) VALUES
     ('SAP QA & Testing', 'โปรเจค QA และ Testing',        0.40, 1.20)
 ON CONFLICT DO NOTHING;
 
--- ── Seed: Default Users (bcrypt hash ของ admin123/user123/user456/user789) ──
-INSERT INTO users (username, password, display_name, role, plan, balance, project_id) VALUES
-    ('admin', '$2b$10$K9KYIqxL58W0sX6wf5Rq/eQROdFg5mfxnuWD2surPnDXEgaDjpWGS', 'System Admin',         'admin', 'enterprise', 0,   NULL),
-    ('user',  '$2b$10$Gcd4b5XwIgHIXyVdMrTlee34pdDrWHuLkIe/zb38k1HVc/YKOh5W.', 'สมชาย ABAP Developer', 'user',  'pro',        100, 1),
-    ('user2', '$2b$10$uvkoM8pNc/r2.bxXelIRJ.cuJX1Dm0agQFG53gyaBfGf1J5AMxeYq', 'วิชัย SAP Consultant',  'user',  'starter',    250, 2),
-    ('user3', '$2b$10$/PUfx8CZmuptmLJx8HGCHe13fi.lLisuIoQH/XNQxP.UHRCNwstma', 'นิภา QA Engineer',      'user',  'starter',    500, 3)
-ON CONFLICT (username) DO NOTHING;
+-- ── Seed: Default Users ──
+-- Removed 2026-09-04 (PTB-FND-001): this legacy file used to carry bcrypt hashes
+-- of documented default passwords. Accounts are created with `node reset-admin.js`
+-- (random password, printed once) or the admin UI. The live schema is
+-- server/migrations/ — this file is a historical reference.

@@ -2,7 +2,7 @@
 import { escapeHtml, flash, formatDateStd, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── SYNC STATUS ── /api/sync-status → health header + ตารางต่อ project
+  // /api/sync-status → health header + per-project table
   renderSync: function () {
     var self = this;
     var healthEl = document.getElementById('sync-health');
@@ -129,8 +129,7 @@ export default {
       + 'border-radius:10px;overflow:hidden">' + headerStrip + body + '</div>';
   },
 
-  // in-app modal replaces window.confirm() — keeps look & feel
-  // consistent across destructive/long-running operations.
+  // in-app modal instead of window.confirm()
   syncNow: function () {
     var err = document.getElementById('sn-error');
     if (err) err.textContent = '';

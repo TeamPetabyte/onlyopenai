@@ -11,9 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet" />
-    <!-- Phase 19.8: dark-mode bootstrap. Read the saved preference and apply
-         it BEFORE the first paint so there's no white→dark flash. Same
-         localStorage key as admin so the choice carries across pages. -->
+    <!-- Apply the saved theme before first paint (no white→dark flash); same localStorage key as admin. -->
     <script>
         (function () {
             try {
@@ -26,9 +24,7 @@
     <!-- Chat UX polish: markdown + syntax highlight theme -->
     <link rel="stylesheet" href="css/vendor/highlight-github.min.css" />
     <style>
-        /* Phase 19.2: Petabyte blue palette (matches the logo gradient).
-           Centralised here so all the polish below references the same vars
-           — cheaper to retune later. */
+        /* Petabyte blue palette (matches the logo gradient) */
         :root {
             --pb-blue-1:        #5a4fcf;             /* logo top — indigo violet */
             --pb-blue-2:        #4a7bd6;             /* logo middle */
@@ -49,14 +45,8 @@
             --pb-border:        rgba(15, 23, 42, 0.08);
             --pb-border-strong: rgba(15, 23, 42, 0.14);
 
-            /* Phase 19.3: legacy aliases.
-               Earlier code in this file references --text-1/--text-2/--text-3,
-               --surface-1/--surface-2/--surface-4, --accent, --accent-hover,
-               --success-hover, --border-default, --border-subtle —
-               these were undefined (would fall back to `unset` and inherit
-               body color) until now. Map them to the --pb-* palette so the
-               whole page renders with consistent colours. New code should
-               keep using the --pb-* names directly. */
+            /* Legacy aliases (--text-*, --surface-*, --accent*, --border-*) → --pb-* palette.
+               New code should use --pb-* directly. */
             --text-1:           var(--pb-text-1);
             --text-2:           var(--pb-text-2);
             --text-3:           var(--pb-text-3);
@@ -76,14 +66,8 @@
             --border-strong:    var(--pb-border-strong);
         }
 
-        /* ──────────────────────────────────────────────────────────
-           Phase 19.8: dark-mode palette override.
-           Toggle via data-theme="dark" on <html>. Only the tokens
-           change — every rule below that references var(--pb-*)
-           automatically re-themes. Hardcoded `#fff` / `#1a1a1a`
-           spots that still exist (modals, chat bubbles, code blocks)
-           get specific overrides further down where they live.
-           ────────────────────────────────────────────────────────── */
+        /* Dark-mode palette — data-theme="dark" on <html>. Only the tokens change;
+           remaining hardcoded #fff / #1a1a1a spots get overrides where they live. */
         :root[data-theme="dark"] {
             --pb-text-1:        #f1f3f9;
             --pb-text-2:        #c1c6d2;
@@ -103,8 +87,7 @@
             --surface-4:        #232c3c;
         }
 
-        /* Spot fixes for places that hardcoded #fff / white / #1a1a1a.
-           Listed in DOM order to keep diff-friendly. */
+        /* Spot fixes for hardcoded #fff / white / #1a1a1a, in DOM order. */
         :root[data-theme="dark"] .topbar { background: var(--pb-surface-1); }
         :root[data-theme="dark"] .main   { background: var(--pb-surface-0); }
         :root[data-theme="dark"] .chat-area { background: var(--pb-surface-0); }
@@ -113,8 +96,6 @@
             color: var(--pb-text-1);
             border-color: var(--pb-border);
         }
-        /* .input-area, .chat-input, .file-btn, .attached-file now use
-           --pb-* tokens directly — no per-theme overrides needed. */
         :root[data-theme="dark"] .modal,
         :root[data-theme="dark"] .confirm-box {
             background: var(--pb-surface-1);
@@ -156,14 +137,8 @@
             color: var(--pb-text-1);
         }
         :root[data-theme="dark"] .skill-title { color: var(--pb-text-1); }
-        /* .dropdown-menu / .dropdown-item / .user-avatar now use tokens —
-           no per-theme overrides needed. */
-        /* ─── Code blocks in DARK theme ──────────────────────────────
-           The vendor highlight-github.min.css is a LIGHT theme (light bg +
-           dark token colors). In dark mode we (a) give <pre> a dark surface
-           that blends with the app, (b) make the <code>/.hljs background
-           transparent so the pre shows through, and (c) re-color the hljs
-           tokens with a readable on-dark palette (GitHub-dark hues). */
+        /* ─── Code blocks in dark theme: the vendor highlight-github.min.css is a light theme,
+           so give <pre> a dark surface, make .hljs transparent and recolor the tokens ─── */
         :root[data-theme="dark"] .chat-msg.assistant .msg-bubble pre {
             background: #0d1320 !important;
             border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -220,7 +195,7 @@
             color: var(--pb-text-1);
         }
 
-        /* Theme toggle button (Phase 19.8) — sits below balance card */
+        /* Theme toggle button — below balance card */
         .theme-toggle-row {
             display: flex;
             gap: 8px;
@@ -277,7 +252,7 @@
             overflow: hidden;
         }
 
-        /* ─── Sidebar (Phase 19.2 polish) ─── */
+        /* ─── Sidebar ─── */
         .sidebar {
             width: 232px;
             min-width: 232px;
@@ -365,8 +340,7 @@
             margin-bottom: 4px;
         }
 
-        /* Session search — lives right under the "Chat History" label
-           so it's always visible when scrolling the list. */
+        /* Session search — under the "Chat History" label so it stays visible while scrolling */
         .history-search-wrap {
             position: relative;
             margin: 0 6px 6px;
@@ -464,9 +438,7 @@
             background: rgba(15, 23, 42, 0.06);
         }
 
-        /* Phase 19.5 a11y: visible focus ring when keyboard-tabbing through
-           the chat history. Without :focus-visible the rows looked identical
-           focused vs unfocused. */
+        /* Visible focus ring when keyboard-tabbing through the history */
         .session-item:focus { outline: none; }
         .session-item:focus-visible {
             outline: 2px solid var(--pb-accent);
@@ -502,8 +474,7 @@
             line-height: 1.4;
         }
 
-        /* Inline rename input — visually inherits the title's look so
-           the swap feels like you're editing the label in place. */
+        /* Inline rename input — inherits the title's look so it feels edited in place */
         .session-title-input {
             flex: 1;
             min-width: 0;
@@ -524,8 +495,7 @@
             box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18);
         }
 
-        /* While editing, hide the action buttons so they don't steal focus
-           and keep the row visually "dedicated" to the input. */
+        /* Hide the action buttons while editing so they do not steal focus */
         .session-item.is-editing {
             cursor: default;
             background: rgba(0, 0, 0, 0.04);
@@ -569,11 +539,8 @@
             background: rgba(229, 62, 62, 0.08);
         }
 
-        /* Phase 19.7: favorite (star) button.
-           - Idle: outline star, dim color (only shows on row hover).
-           - Pinned: filled gold star — always visible (overrides the
-             session-actions hover-gate by setting opacity:1 inline-style).
-             We do that via .is-favorite class on the parent .session-item. */
+        /* Favorite (star) button: dim outline on row hover; filled gold and always
+           visible when the parent .session-item has .is-favorite */
         .session-act-btn.session-fav { color: var(--pb-text-3); font-size: 1rem; }
         .session-act-btn.session-fav:hover {
             color: #f5b800;
@@ -612,9 +579,7 @@
             font-size: 0.85rem;
         }
 
-        /* Phase 19.8: history list empty state — welcoming, with a CTA
-           so first-time users know what to do (start a chat). The flat
-           italic "ยังไม่มีประวัติ" looked broken. */
+        /* History empty state with a CTA */
         .history-empty {
             display: flex;
             flex-direction: column;
@@ -671,8 +636,7 @@
             margin-top: 6px;
         }
 
-        /* Phase 28: cap-usage card — the per-user daily-cap progress, now the
-           prominent accent-tinted card (was the project-credit card's spot). */
+        /* Cap-usage card — the prominent accent-tinted card */
         .cap-usage-card {
             background: linear-gradient(135deg, var(--pb-accent-soft) 0%, #ffffff 100%);
             border: 1px solid var(--pb-accent-line);
@@ -747,9 +711,7 @@
             font-size: 1.6rem;
             pointer-events: none;
         }
-        /* Phase 28: compact variant — plain surface, no icon, smaller type.
-           Applied alongside .balance-card now that cap-usage owns the
-           prominent accent-tinted treatment. */
+        /* Compact variant — plain surface, no icon, smaller type */
         .balance-card.balance-card-compact {
             background: var(--pb-surface-2);
             border-color: var(--pb-border);
@@ -787,12 +749,8 @@
             text-overflow: ellipsis;
         }
 
-        /* Phase 19.8: low-balance warning row inside the balance card.
-           Two states:
-             .balance-warn.warn     → orange (running low, < threshold)
-             .balance-warn.critical → red   (out / will block sends)
-           Hidden by default; updateBalanceDisplay() toggles visibility +
-           class based on the current State.balance. */
+        /* Low-balance warning row: .warn = orange (running low), .critical = red (will block sends).
+           Hidden by default; updateBalanceDisplay() toggles it. */
         .balance-warn {
             margin-top: 8px;
             padding: 6px 8px;
@@ -919,8 +877,7 @@
             flex-shrink: 0;
         }
 
-        /* User-menu dropdown — Phase 19.8.1: tokenised so dark mode picks
-           up dark surface + readable text automatically. */
+        /* User-menu dropdown — tokenised for dark mode */
         .dropdown-menu {
             position: absolute;
             top: calc(100% + 6px);
@@ -1012,9 +969,7 @@
             line-height: 1;
         }
 
-        /* PipekAI mascot on the welcome screen — fades in, then floats gently.
-           opacity (fade) and transform (float) are split across two keyframes
-           so they don't fight over the same property. */
+        /* Welcome-screen mascot: opacity and transform live in separate keyframes so they do not fight */
         .chat-empty-mascot {
             width: 176px;
             max-width: 58%;
@@ -1075,14 +1030,10 @@
             max-width: 82%;
         }
 
-        /* Phase 33 (v1.7.0): AI answers are documents (tables, code, long
-           analyses) — give them nearly the full column. User bubbles keep
-           the chat-like 82%. */
+        /* AI answers are documents (tables, code) — nearly the full column; user bubbles keep 82% */
         .chat-msg.assistant { max-width: 95%; }
-        /* .chat-msg is a column flexbox — without this cap a child bubble
-           grows to its content's intrinsic width (a 1400px table pushed the
-           bubble right through the chat area). Cap it so .md-table-wrap is
-           the one that scrolls. */
+        /* .chat-msg is a column flexbox; without this cap a wide table grows the bubble
+           past the chat area. Cap it so .md-table-wrap is what scrolls. */
         .chat-msg .msg-bubble { max-width: 100%; min-width: 0; box-sizing: border-box; }
 
         .chat-msg.user {
@@ -1155,10 +1106,7 @@
             border-left: 3px solid #ccc; padding: 0.2em 0 0.2em 0.8em;
             color: var(--text-3); margin: 0.4em 0;
         }
-        /* Phase 33 (v1.7.0): tables live inside a horizontally-scrollable
-           wrapper (added by MD.postProcess) so wide AI tables keep natural
-           column widths instead of being crushed until Thai text wraps
-           letter-by-letter. */
+        /* Tables sit in a horizontally-scrollable wrapper (MD.postProcess) so columns keep natural widths */
         .chat-msg.assistant .msg-bubble .md-table-wrap {
             overflow-x: auto; max-width: 100%; margin: 0.5em 0;
             border-radius: 8px;
@@ -1173,9 +1121,7 @@
         .chat-msg.assistant .msg-bubble td {
             border: 1px solid #ddd; padding: 5px 9px;
         }
-        /* Headers never wrap vertically; cells wrap Thai at word boundaries
-           (word-break:normal) instead of mid-letter (bubble default is
-           break-word, which shatters spaceless Thai in narrow cells). */
+        /* Headers never wrap; cells wrap Thai at word boundaries (break-word would shatter spaceless Thai) */
         .chat-msg.assistant .msg-bubble th { white-space: nowrap; }
         .chat-msg.assistant .msg-bubble td {
             min-width: 110px; max-width: 340px;
@@ -1252,7 +1198,7 @@
             color: var(--text-3);
         }
 
-        /* Phase 35.2 — RAG document-search badge (pinned above the answer) */
+        /* RAG document-search badge (pinned above the answer) */
         .rag-badge {
             font-size: 0.74rem;
             color: var(--text-3);
@@ -1269,9 +1215,7 @@
         .rag-badge-head { font-weight: 600; }
         .rag-badge-file { opacity: .85; margin-top: 2px; }
 
-        /* Phase 40 — skill badge: which Skill prompt the router applied.
-           Same shape as the RAG badge, different hue, so the two read as a
-           pair of "what the assistant did before answering" notes. */
+        /* Skill badge: which Skill prompt the router applied. Same shape as the RAG badge, different hue. */
         .skill-badge {
             font-size: 0.74rem;
             color: var(--text-3);
@@ -1285,7 +1229,7 @@
         }
         .skill-badge-src { opacity: .75; }
 
-        /* Phase 21.10 — block bubble (Concept B: cap hit or pool empty) */
+        /* Block bubble (cap hit or pool empty) */
         .msg-bubble.block-bubble {
             background: linear-gradient(135deg, rgba(220,38,38,.06), rgba(245,158,11,.04));
             border: 1px solid rgba(220, 38, 38, .25);
@@ -1326,7 +1270,7 @@
         .block-action-btn:hover  { background: var(--accent-hover, #1d4ed8); }
         .block-action-btn:active { transform: translateY(1px); }
 
-        /* Phase 21.10 — 80% quota warning banner above chat input */
+        /* 80% quota warning banner above chat input */
         .quota-warn-banner {
             display: none;          /* shown by JS when ratio >= 0.8 */
             background: rgba(245, 158, 11, .12);
@@ -1395,8 +1339,7 @@
             }
         }
 
-        /* Input area — Phase 19.8: all surfaces/borders go through tokens
-           so dark mode picks up the right colors without spot-fixes. */
+        /* Input area — all surfaces/borders go through tokens */
         .input-area {
             padding: 10px 24px 16px;
             border-top: 1px solid var(--pb-border);
@@ -1433,7 +1376,7 @@
             color: var(--pb-accent);
         }
 
-        /* Phase 34: model + reasoning-effort pickers in the composer toolbar */
+        /* Model + reasoning-effort pickers in the composer toolbar */
         .composer-select {
             appearance: none;
             -webkit-appearance: none;
@@ -1493,7 +1436,7 @@
         .input-row:focus-within {
             border-color: var(--pb-accent);
             box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10), 0 2px 6px rgba(15, 23, 42, 0.06);
-            /* keep surface — was hardcoded #fff which broke dark mode */
+            /* surface token so dark mode works */
             background: var(--pb-surface-1);
         }
 
@@ -1546,8 +1489,8 @@
             filter: none;
         }
 
-        /* Stop Generation — while streaming, the send button flips to a
-           red stop square. Keep the same pill so layout doesn't shift. */
+        /* Stop Generation — while streaming the send button becomes a red stop square
+           in the same pill so layout does not shift */
         .send-btn.is-stop {
             background: #dc2626;
             cursor: pointer;
@@ -1573,14 +1516,7 @@
             display: flex;
         }
 
-        /* ─────────────────────────────────────────────────────────
-           Phase 19.6: chat-delete confirm modal — Claude-style.
-           Compact, left-aligned, no oversized icon, no colored target
-           pill. Title + helper text on the left, buttons in the
-           bottom-right (Cancel outlined / Delete filled red).
-           Backdrop uses a tiny blur so the page reads as "behind" the
-           dialog rather than just dimmed.
-           ───────────────────────────────────────────────────────── */
+        /* ─── Chat-delete confirm modal (Claude-style: compact, left-aligned, actions bottom-right) ─── */
         .confirm-overlay {
             display: none;
             position: fixed;
@@ -1685,8 +1621,7 @@
             cursor: not-allowed;
             box-shadow: none;
         }
-        /* Inline session-title chip inside the description — keeps the
-           dialog left-aligned without the old red pill. */
+        /* Inline session-title chip inside the description */
         .confirm-target-inline {
             font-weight: 600;
             color: var(--pb-text-1);
@@ -1697,12 +1632,6 @@
             word-break: break-word;
             max-width: 100%;
         }
-
-        /* Phase 19.3: skill-picker classes removed. Phase 19.1 hid the
-           skill name in the header and disabled clicking, so the picker
-           overlay was unreachable. Trigger (.skill-title pointer-events
-           none), overlay HTML, openSkillPicker(), and these CSS rules
-           have all been pruned to cut dead code. */
 
         .skill-emoji {
             font-size: 1.15rem;
@@ -1882,14 +1811,8 @@
             background: #22c55e;
         }
 
-        /* Phase 19.3: mobile / tablet layout. The desktop layout has a
-           fixed 232px sidebar + body overflow:hidden, which on phones
-           ate roughly half the viewport. Below 760px we:
-             - hide the sidebar by default (toggle with the hamburger),
-             - turn it into a slide-in drawer over the chat,
-             - shrink the topbar + input paddings.
-           A backdrop appears behind the open drawer so tapping outside
-           closes it. JS toggling is wired via .sidebar-open on <body>.   */
+        /* Mobile / tablet (<760px): the sidebar becomes a slide-in drawer over the chat
+           with a backdrop; JS toggles .sidebar-open on <body>. */
         .mobile-menu-btn {
             display: none;
             background: transparent;
@@ -1900,10 +1823,8 @@
             margin-right: 4px;
         }
 
-        /* Phase 33.1 (v1.7.1): desktop sidebar collapse — floating circular
-           handle straddling the sidebar/chat boundary (Notion-style), level
-           with the CHAT HISTORY header. Anchored to .main (position:relative)
-           so it stays put when the sidebar slides away. */
+        /* Desktop sidebar collapse handle — floats on the sidebar/chat boundary,
+           anchored to .main (position:relative) so it stays put when the sidebar slides away */
         .sidebar-collapse-btn {
             position: absolute; left: -14px; top: 106px; z-index: 40;
             width: 28px; height: 28px; padding: 0;
@@ -1924,8 +1845,7 @@
         .sidebar-collapse-btn:active { transform: scale(0.95); }
         .sidebar-collapse-btn svg { transition: transform 0.2s ease; }
         body.sidebar-collapsed .sidebar-collapse-btn svg { transform: scaleX(-1); }
-        /* When collapsed the sidebar is gone — tuck the handle fully inside
-           the viewport instead of hanging half off-screen. */
+        /* When collapsed, keep the handle fully inside the viewport */
         body.sidebar-collapsed .sidebar-collapse-btn { left: 8px; }
         @media (max-width: 760px) { .sidebar-collapse-btn { display: none; } }
         .sidebar-backdrop {
@@ -1942,10 +1862,8 @@
             opacity: 1;
         }
 
-        /* Phase 33 (v1.7.0): desktop sidebar collapse — slide the 232px
-           history panel away so wide AI tables get the room. Mobile (≤760px)
-           keeps its own drawer mechanics untouched. State persists via
-           localStorage('pipek_sidebar_collapsed'). */
+        /* Desktop sidebar collapse — slides the history panel away; mobile keeps its drawer.
+           Persisted in localStorage('pipek_sidebar_collapsed'). */
         @media (min-width: 761px) {
             .sidebar { transition: margin-left 0.25s ease; }
             body.sidebar-collapsed .sidebar { margin-left: -232px; }
@@ -2001,9 +1919,7 @@
 <body>
 
     <aside class="sidebar">
-        <!-- Sidebar shows the CUSTOMER's project name only. No company logo here
-             on purpose — this header belongs to the client's project, so a
-             PipekAI/Petabyte logo next to it would read wrong. -->
+        <!-- Customer's project name only — no company logo; this header belongs to the client's project. -->
         <div class="sidebar-brand">
             <div class="brand-project" id="brand-project">PipekAI</div>
         </div>
@@ -2026,7 +1942,7 @@
             <button type="button" id="history-search-clear" class="history-search-clear" onclick="clearSearch()" data-i18n-title="u.search.clear" data-i18n-aria="u.search.clear" title="Clear" aria-label="Clear" style="display:none">×</button>
         </div>
         <div class="history-list" id="history-list">
-            <!-- Phase 19.8: nicer first-load empty state -->
+            <!-- first-load empty state -->
             <div class="history-empty">
                 <div class="he-icon">💬</div>
                 <div class="he-title" data-i18n="u.history.emptyTitle">No chat history yet</div>
@@ -2036,10 +1952,7 @@
         </div>
 
         <div class="sidebar-bottom">
-            <!-- Phase 28: per-user daily cap usage — the number a user checks
-                 most often day-to-day, so it now takes the prominent slot
-                 (accent card + progress bar). Project credit (the shared
-                 pool) moves to a smaller card below it. -->
+            <!-- Per-user daily cap usage takes the prominent slot; project credit (shared pool) is the smaller card below. -->
             <div class="cap-usage-card" id="cap-usage-card">
                 <div class="cap-usage-label" data-i18n="u.cap.todayUsage">Today's Usage</div>
                 <div class="cap-usage-row">
@@ -2054,10 +1967,10 @@
                 <div class="balance-label" data-i18n="u.balance.projectCredit">Project Credit</div>
                 <div class="balance-amount" id="sidebar-balance">฿—</div>
                 <div class="balance-project" id="sidebar-project-label">—</div>
-                <!-- Phase 19.8: low-balance warning row (hidden by default) -->
+                <!-- low-balance warning row (hidden by default) -->
                 <div class="balance-warn" id="balance-warn" style="display:none"></div>
             </div>
-            <!-- Phase 19.8: theme toggle (light ↔ dark) -->
+            <!-- theme toggle (light ↔ dark) -->
             <div class="theme-toggle-row">
                 <button type="button" class="theme-toggle-btn" id="theme-toggle-btn"
                         onclick="toggleTheme()"
@@ -2075,7 +1988,7 @@
                     <span id="theme-toggle-label" data-i18n="theme.dark">Dark Mode</span>
                 </button>
             </div>
-            <!-- Phase 27: language toggle (EN ⇄ TH) -->
+            <!-- language toggle (EN ⇄ TH) -->
             <div class="theme-toggle-row">
                 <button type="button" class="theme-toggle-btn" id="lang-toggle-btn"
                         onclick="I18N.toggle()" aria-label="Toggle language">
@@ -2090,12 +2003,12 @@
         </div>
     </aside>
 
-    <!-- Phase 19.3: drawer backdrop (mobile only — hidden via CSS on desktop) -->
+    <!-- drawer backdrop (mobile only — hidden via CSS on desktop) -->
     <div class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
 
     <div class="main">
         <div class="topbar">
-            <!-- Phase 19.3: hamburger toggles sidebar drawer on mobile -->
+            <!-- hamburger toggles the sidebar drawer on mobile -->
             <button class="mobile-menu-btn" onclick="toggleSidebar()" data-i18n-aria="u.menu.openAria" aria-label="Open menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                     <line x1="3" y1="6" x2="21" y2="6"/>
@@ -2103,9 +2016,7 @@
                     <line x1="3" y1="18" x2="21" y2="18"/>
                 </svg>
             </button>
-            <!-- Phase 33 (v1.7.0): desktop collapse — hide the history panel to
-                 give wide AI tables the full width. Hidden on mobile (uses the
-                 hamburger drawer instead). -->
+            <!-- desktop collapse — hides the history panel; hidden on mobile (hamburger drawer instead) -->
             <button class="sidebar-collapse-btn" id="sidebar-collapse-btn"
                     onclick="toggleSidebarCollapsed()"
                     data-i18n-title="chat.toggleSidebar" title="ซ่อน/แสดงประวัติแชท">
@@ -2140,7 +2051,7 @@
         </div>
 
         <div class="input-area">
-            <!-- Phase 21.10: quota warning banner (shown when used ≥ 80% of cap) -->
+            <!-- quota warning banner (shown at ≥ 80% of cap) -->
             <div id="quota-warn-banner" class="quota-warn-banner">
                 <span>⚠</span>
                 <span id="quota-warn-text" style="flex:1" data-i18n="u.quota.nearLimit">You're close to today's quota limit</span>
@@ -2156,7 +2067,7 @@
                     </svg>
                     <span data-i18n="u.file.chooseFiles">Choose Files</span>
                 </button>
-                <!-- Phase 34: model + reasoning-effort pickers -->
+                <!-- model + reasoning-effort pickers -->
                 <select id="model-select" class="composer-select" onchange="onModelChange(this.value)"
                     aria-label="Model">
                     <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
@@ -2166,9 +2077,7 @@
                 </select>
                 <select id="effort-select" class="composer-select" onchange="onEffortChange(this.value)"
                     aria-label="Reasoning effort" title="Reasoning effort">
-                    <!-- Phase 43: three levels. `max` measured worse than `xhigh`
-                         on every axis — dearer, slower, and a shorter answer —
-                         and `none` was never evaluated. Fewer, clearer choices. -->
+                    <!-- three levels only: `max` measured worse than `xhigh` on cost, speed and answer length -->
                     <option value="low">Effort: low</option>
                     <option value="medium" selected>Effort: medium</option>
                     <option value="high">Effort: high</option>
@@ -2191,8 +2100,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Skill picker overlay removed in Phase 19.3 (dead code) -->
 
     <!-- Usage Modal -->
     <div class="overlay" id="usage-modal" onclick="overlayClick(event,'usage-modal')">
@@ -2224,6 +2131,8 @@
     <div class="overlay" id="password-modal" onclick="overlayClick(event,'password-modal')">
         <div class="modal">
             <div class="modal-title" data-i18n="u.pw.title">Change Password</div>
+            <div class="form-group"><label class="form-label" data-i18n="u.pw.currentLabel">Current Password</label><input class="form-input"
+                    type="password" id="current-password" autocomplete="current-password" data-i18n-ph="u.pw.currentPh" placeholder="Enter current password..." /></div>
             <div class="form-group"><label class="form-label" data-i18n="u.pw.newLabel">New Password</label><input class="form-input"
                     type="password" id="new-password" data-i18n-ph="u.pw.newPh" placeholder="Enter new password..." /></div>
             <div class="form-group"><label class="form-label" data-i18n="u.pw.confirmLabel">Confirm Password</label><input class="form-input"
@@ -2233,10 +2142,7 @@
         </div>
     </div>
 
-    <!-- Phase 19.6: chat-delete dialog — Claude-style layout
-         (title + 1-sentence helper + right-aligned actions). The session
-         title is inlined as a chip inside the description so we don't
-         need a separate red pill row. -->
+    <!-- Chat-delete dialog: title + one-line helper + right-aligned actions; the session title is inlined as a chip -->
     <div class="confirm-overlay" id="confirm-delete-chat"
         onclick="cancelDeleteChat(event)"
         role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title">
@@ -2255,9 +2161,7 @@
 
     <div class="toast-container" id="toast-container"></div>
 
-    <!-- Phase 27: default to English on this page until the user toggles
-         (must be set before i18n.js loads/reads it). admin.html leaves this
-         unset so it keeps defaulting to Thai. -->
+    <!-- Default to English until the user toggles; must be set before i18n.js reads it -->
     <script>window.I18N_DEFAULT_LANG = 'en';</script>
     <!-- Chat UX polish: markdown rendering + XSS sanitization + syntax highlight -->
     <script src="js/vendor/marked.min.js"></script>

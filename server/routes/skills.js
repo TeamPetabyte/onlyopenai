@@ -51,8 +51,7 @@ router.post('/api/skills/reload', requireTrainer, async (req, res) => {
     }
 });
 
-// GET /api/skills/:id — full record incl. content (admin edit modal needs it;
-// the list endpoint deliberately strips content to keep the payload small).
+// GET /api/skills/:id — full record incl. content (the list strips it)
 router.get('/api/skills/:id', requireTrainer, (req, res) => {
     try {
         const s = skillPrompts.getSkill(req.params.id);

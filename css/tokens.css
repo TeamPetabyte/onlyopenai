@@ -1,7 +1,4 @@
-/* =====================================================
-   AgentHub — Unified Design Tokens (Phase 1)
-   Dark premium theme with indigo accent
-   ===================================================== */
+/* Design tokens: dark theme by default, light theme under [data-theme="light"]. */
 
 :root {
     /* ── Surfaces ───────────────────────────────────────── */
@@ -25,10 +22,7 @@
     --text-4: #4a4b52;             /* disabled */
     --text-on-accent: #ffffff;
 
-    /* ── Accent (Blue — Phase 16.15) ──────────────────────
-       Switched from indigo (#6366f1) to blue (#3b82f6) so the whole UI
-       reads as "black + blue" / "white + blue". All legacy --purple and
-       rgba(167,139,250,*) refs alias here automatically. */
+    /* ── Accent (legacy --purple aliases map here) ─────── */
     --accent: #3b82f6;                          /* blue-500 */
     --accent-hover: #60a5fa;                    /* blue-400, lighter for hover on dark bg */
     --accent-active: #2563eb;                   /* blue-600, pressed state */
@@ -152,10 +146,7 @@
     --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
-/* ── Light theme (Phase 16.15 / 16.18) ──────────────────
-   "White + blue" — page bg is a soft cool grey (eye-friendly, not
-   blinding white). Cards/modals step up in lightness to read as
-   elevated above the page. */
+/* ── Light theme ────────────────────────────────────────── */
 :root[data-theme="light"] {
     --surface-0: #e3e7ef;                       /* page background — soft cool grey, dialed down */
     --surface-1: #f0f3f8;                       /* cards / panels — off-white, sits above page */
@@ -168,10 +159,7 @@
     --border-default: rgba(15, 23, 42, 0.10);
     --border-strong: rgba(15, 23, 42, 0.18);
 
-    /* Phase 16.16: tighter text scale for light mode — the previous
-       slate-500/600 felt washed out on the cool near-white background.
-       Bumped each tier one shade darker so even text-4 (muted) stays
-       readable on #f5f7fb. */
+    /* One shade darker than the dark scale so muted text stays readable on near-white. */
     --text-1: #0b0c10;       /* slate-950   — primary */
     --text-2: #1e293b;       /* slate-800   — secondary, near-black */
     --text-3: #475569;       /* slate-600   — muted but still readable */

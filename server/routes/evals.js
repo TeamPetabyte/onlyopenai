@@ -50,8 +50,7 @@ async function judgeEvalAnswer({ userId, question, expected, candidate, judgeMod
     return { parsed, raw: r.answer, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
 }
 
-// The background loop for one run. Never throws — every failure lands in
-// tbl_eval_run.error / tbl_eval_result.error so the UI can show it.
+// Background loop for one run. Never throws — failures land in tbl_eval_run/result.error.
 async function executeEvalRun(runId, { userId, skillContent, model, effort, judgeModel, judgeEffort, cases }) {
     let done = 0, pass = 0, inTok = 0, outTok = 0;
     try {
@@ -154,8 +153,7 @@ router.post('/api/evals', requireTrainer, expensiveRateLimiter, async (req, res)
              cs.rows.length, req.session.userId]);
         const runId = ins.rows[0].run_id;
 
-        // Slot already claimed above; the runner's finally will release it.
-        // Fire-and-forget: the loop reports its own progress/errors to the DB.
+        // slot claimed above; the runner's finally releases it. Fire-and-forget.
         executeEvalRun(runId, {
             userId: req.session.userId,
             skillContent: skill.content,
@@ -177,8 +175,7 @@ router.post('/api/evals', requireTrainer, expensiveRateLimiter, async (req, res)
     }
 });
 
-// GET /api/evals?skill=<id>&limit=20 — run history (newest first) for the
-// report page: score trend + the table of past sittings.
+// GET /api/evals?skill=<id>&limit=20 — run history, newest first
 router.get('/api/evals', requireTrainer, async (req, res) => {
     const skillId = String(req.query.skill || '').trim();
     const limit   = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
@@ -199,8 +196,7 @@ router.get('/api/evals', requireTrainer, async (req, res) => {
     }
 });
 
-// GET /api/evals/:runId — one run + all its per-case results (poll target
-// while running; full report once done).
+// GET /api/evals/:runId — one run + its per-case results
 router.get('/api/evals/:runId', requireTrainer, async (req, res) => {
     const runId = parseInt(req.params.runId, 10);
     if (!Number.isInteger(runId)) return res.status(400).json({ ok: false, error: 'bad runId' });
@@ -223,8 +219,7 @@ router.get('/api/evals/:runId', requireTrainer, async (req, res) => {
     }
 });
 
-// POST /api/evals/:runId/cancel — flag a running exam to stop after the
-// current case (each case is atomic; we never kill mid-request).
+// POST /api/evals/:runId/cancel — stop after the current case (each case is atomic)
 router.post('/api/evals/:runId/cancel', requireTrainer, async (req, res) => {
     const runId = parseInt(req.params.runId, 10);
     if (!Number.isInteger(runId)) return res.status(400).json({ ok: false, error: 'bad runId' });

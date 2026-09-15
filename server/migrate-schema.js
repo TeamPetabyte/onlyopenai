@@ -1,26 +1,6 @@
-// ╔═══════════════════════════════════════════════════════════╗
-// ║ Phase 11 — Schema migration runner                        ║
-// ╚═══════════════════════════════════════════════════════════╝
-// Reads server/migrations/*.sql in lexical order and applies any
-// that are not yet recorded in _meta.schema_migrations. Idempotent:
-// safe to run on every boot.
-//
-//   Module usage (from server.js):
-//       const { runMigrations } = require('./migrate-schema');
-//       await runMigrations(pool);
-//
-//   CLI usage:
-//       npm run migrate             # apply pending
-//       node migrate-schema.js --status   # dry-run status only
-//
-// Each migration records its SHA-256 in _meta.schema_migrations. If a file
-// is edited after it has been applied, the runner warns loudly but
-// does not re-run — in production, the safe fix is to add a NEW
-// migration file that patches forward rather than rewriting history.
-//
-// Existing phase5–9 migrations are already idempotent (DO $$ blocks
-// with IF NOT EXISTS), so re-running them against a DB that was
-// migrated manually in the past is a no-op.
+// Schema migration runner: applies server/migrations/*.sql in lexical order, recording each
+// file's SHA-256 in _meta.schema_migrations. Idempotent; runs on boot and via `npm run migrate [--status]`.
+// An already-applied file that was edited warns but is not re-run — add a new migration instead.
 
 'use strict';
 
@@ -31,15 +11,8 @@ const { Pool } = require('pg');
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
-// The bookkeeping table lives in a dedicated `_meta` schema, separate
-// from the `public` schema where business tables (tbl_*) live.
-// This keeps internal/audit tables namespaced so they don't pollute
-// the default `\dt` listing in psql.
-//
-// On an existing DB where the table was historically created in
-// `public`, the DO block below moves it to `_meta` on first boot,
-// transparently — no separate migration file needed because this is
-// the runner's own bootkeeping, not a schema change for the app.
+// Bookkeeping lives in a dedicated _meta schema, out of the public tbl_* listing.
+// The DO block moves a legacy public.schema_migrations there on first boot.
 const BOOTSTRAP_SQL = `
 CREATE SCHEMA IF NOT EXISTS _meta;
 
@@ -66,10 +39,7 @@ function sha256(buf) {
     return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-// Hashes must survive git's autocrlf: the same .sql checked out on Windows
-// (CRLF) vs Linux/Mac (LF) is byte-different but semantically identical,
-// which used to trigger false "MODIFIED since applied" warnings. Normalize
-// to LF before hashing so the hash follows content, not the checkout.
+// Normalize to LF before hashing so git autocrlf cannot change the hash.
 function normalizeEol(s) {
     return s.replace(/\r\n/g, '\n');
 }
@@ -78,8 +48,7 @@ function contentHash(body) {
     return sha256(normalizeEol(body));
 }
 
-// True when a recorded hash matches this content under either line-ending
-// style — i.e. the file content is unchanged and only EOL drift happened.
+// True when the recorded hash matches this content under either line-ending style.
 function matchesAnyEolVariant(recorded, body) {
     const lf = normalizeEol(body);
     return recorded === sha256(lf) ||
@@ -106,8 +75,7 @@ async function applyOne(client, filename) {
     const body = fs.readFileSync(full, 'utf8');
     const hash = contentHash(body);
     const t0   = Date.now();
-    // Our existing .sql files include their own BEGIN/COMMIT (DO $$ blocks
-    // etc.) so we run them as-is and record after.
+    // Migration files carry their own BEGIN/COMMIT; run as-is, record after.
     await client.query(body);
     const dur = Date.now() - t0;
     await client.query(
@@ -154,11 +122,8 @@ async function runMigrations(poolIn) {
                 console.log(`[migrate]   ✓ ${f} (${dur} ms)`);
                 stats.applied.push(f);
             } else if (prev !== hash) {
-                // Rows recorded before EOL-normalized hashing hold a hash of
-                // the raw bytes from whichever checkout ran the migration.
-                // If the recorded hash matches this content under either EOL
-                // style, the SQL is unchanged — converge the row to the
-                // normalized hash instead of crying wolf.
+                // Rows recorded before EOL-normalized hashing may differ only by line endings;
+                // converge them to the normalized hash instead of warning.
                 if (matchesAnyEolVariant(prev, body)) {
                     await client.query(
                         'UPDATE _meta.schema_migrations SET sha256=$1 WHERE filename=$2',
@@ -213,7 +178,6 @@ async function migrationStatus(poolIn) {
     return out;
 }
 
-// ── CLI entry ──────────────────────────────────────────────
 if (require.main === module) {
     require('dotenv').config();
     (async () => {

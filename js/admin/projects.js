@@ -2,7 +2,7 @@
 import { escapeHtml, jsArg, flash, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
-  // ── PROJECTS ──────────────────────────────────────────
+  // --- Projects ---
   renderProjects: function () {
     var self = this;
     var container = document.getElementById('project-list');
@@ -25,7 +25,6 @@ export default {
       return;
     }
 
-    // หน้า Projects: hero + chips + stat cards; แถวสมาชิกถูกถอด (ซ้ำกับหน้า Users/Credits)
     // coerce เป็น Number กัน "NaN" จาก cache โผล่ในการ์ด
     var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
     container.innerHTML = projects.map(function (p) {
@@ -45,7 +44,6 @@ export default {
       }, 0);
       var totalBal = members.reduce(function (s, u) { return s + nz(u.balance); }, 0);
 
-      // —— Stat card helper ——
       var statCard = function (icon, label, value, valueColor) {
         return '<div style="padding:14px 16px;background:var(--surface-2);'
           + 'border:1px solid var(--border-default);border-radius:10px">'
@@ -54,14 +52,12 @@ export default {
           + '</div>';
       };
 
-      // —— Hero header with project_id pill ——
       var hero =
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;'
         + 'gap:14px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid var(--border-subtle)">'
         +   '<div style="flex:1;min-width:240px">'
         +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
         +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
-        // Click-to-copy project_id pill (matches Overview redesign)
         +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
         +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
         +         'style="font-family:Geist Mono,monospace;font-size:.7rem;padding:3px 9px;'
@@ -94,7 +90,6 @@ export default {
                                   + '⛔ Limit/user <b>฿' + p.creditLimit + '</b></span>') : '')
         +     '</div>'
         +   '</div>'
-        // Icon-only Edit + Delete buttons
         +   '<div style="display:flex;gap:8px">'
         +     '<button class="btn-icon-action btn-icon-edit-large" title="' + escapeHtml(t('tt.editProject', 'แก้ไข Project')) + '" '
         +       'onclick="admin.openEditProject(\'' + jsArg(p.id) + '\')">'
@@ -111,7 +106,6 @@ export default {
         +   '</div>'
         + '</div>';
 
-      // —— Stats grid (last element on the card; no bottom margin) ——
       var statsGrid =
           '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'
         +   statCard('📡', 'Requests',           totalReq.toLocaleString(),     'var(--text-1)')
@@ -121,7 +115,7 @@ export default {
                      totalBal > 0 ? 'var(--success-hover, #34d399)' : 'var(--text-2)')
         + '</div>';
 
-      // members list intentionally not rendered here.
+      // members list intentionally not rendered here (duplicates Users/Credits)
       return '<div class="glass-card" style="margin-bottom:18px">'
         + hero
         + statsGrid
@@ -144,8 +138,7 @@ export default {
     var statusEl = document.getElementById('ep-api-key-status');
     if (keyEl) keyEl.value = '';
     if (statusEl) {
-      // server redacts the secret. We get just `hasApiKey` (boolean)
-      // and `apiKeyPreview` (e.g. "sk-svcac…XXXX") for display.
+      // server redacts the key; we only get hasApiKey + apiKeyPreview
       var realKey = !!p.hasApiKey;
       statusEl.innerHTML = realKey
         ? '<span style="color:#5cb85c">✓</span> ' + escapeHtml(t('lbl.hasApiKey', 'มี API key อยู่แล้ว'))
@@ -180,8 +173,7 @@ export default {
 
     if (!name) { errEl.textContent = '❌ ' + t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
     if (isNaN(inputRate) || isNaN(outputRate)) { errEl.textContent = '❌ ' + t('err.invalidRate', 'ค่า Rate ไม่ถูกต้อง'); return; }
-    // Light client-side sanity — backend caps length at 256 (real OpenAI
-    // service-account keys are ~167 chars, project keys similar)
+    // backend caps key length at 256
     if (apiKeyNew && apiKeyNew.length > 256) {
       errEl.textContent = '❌ ' + t('err.apiKeyTooLong', 'API key ยาวเกินกำหนด (max 256 chars)'); return;
     }
@@ -194,8 +186,7 @@ export default {
       name: name, description: desc,
       inputRate: inputRate, outputRate: outputRate, creditLimit: creditLit,
     };
-    // Only include apiKey if admin actually typed one — empty = keep existing
-    // (backend uses COALESCE($2, project_api_key) so omitted = unchanged)
+    // empty apiKey = keep existing (server COALESCEs), so send it only when typed
     if (apiKeyNew) body.apiKey = apiKeyNew;
 
     fetch(BASE + '/api/projects/' + encodeURIComponent(projectId), {
@@ -216,7 +207,7 @@ export default {
       .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
-  // ── REMOVE USER FROM PROJECT ── เดิมแก้แค่ localStorage ไม่แตะ DB — ตอนนี้ PUT จริง + await + re-render
+  // --- Remove user from project ---
   _pendingRemoveFromProject: null,
 
   removeFromProject: function (username) {
@@ -268,12 +259,12 @@ export default {
           if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
           return;
         }
-        // Mirror to localStorage
+        // mirror to localStorage
         try { Auth.setUserProject(p.username, null); } catch (_) {}
         self._pendingRemoveFromProject = null;
         hideModal('modal-confirm-remove-user-from-project');
         flash('✅ ' + tf('msg.ownerMoved', { username: p.username }, 'ย้าย @{username} ออกจาก project แล้ว'));
-        // Re-fetch users so project member lists are accurate
+        // re-fetch users so member lists are accurate
         self.fetchUsersFromDB().then(function (users) {
           self._cachedDBUsers = users;
           self.renderProjects();
@@ -285,16 +276,14 @@ export default {
       });
   },
 
-  // ── DELETE PROJECT ── มีประวัติแชท server จะปฏิเสธ — โชว์ error ใน modal ให้รู้ว่าต้องทำอะไรก่อน
+  // --- Delete project --- (server refuses when chat history exists; the error shows in the modal)
   _pendingDeleteProject: null,
 
   deleteProject: function (projectId) {
     var p = Auth.getProjectById(projectId);
     if (!p) { flash('❌ ' + t('err.projectNotFound', 'ไม่พบ project'), 'error'); return; }
 
-    // Count DB members for the summary — cache falls back gracefully.
     var members = (this._cachedDBUsers || []).filter(function (u) { return u.projectId === projectId; });
-    // Credits: the project list has credits in p.credits if available, else 0.
     var credits = (typeof p.credits === 'number' ? p.credits : 0);
 
     this._pendingDeleteProject = { id: projectId, name: p.name, memberCount: members.length };
@@ -305,7 +294,6 @@ export default {
     set('cdp-members', String(members.length));
     set('cdp-credits', formatTHB(credits));
 
-    // Tweak warning text if members > 0
     var warn = document.getElementById('cdp-warning');
     if (warn) {
       warn.innerHTML = members.length > 0
@@ -351,7 +339,7 @@ export default {
         self._pendingDeleteProject = null;
         hideModal('modal-confirm-delete-project');
         flash('✅ ' + tf('msg.projectDeleted', { name: p.name }, 'ลบ Project "{name}" แล้ว'));
-        // Real-time refresh: fetch projects + users (members now unassigned)
+        // refresh projects + users (members are now unassigned)
         Promise.all([self.fetchProjectsFromDB(), self.fetchUsersFromDB()])
           .then(function (results) {
             self._cachedDBUsers = results[1] || [];
@@ -365,7 +353,7 @@ export default {
       });
   },
 
-  // ── ADD PROJECT ── ฟอร์มถามแค่ชื่อ+คำอธิบาย — rate/limit ใช้ default แล้วค่อยแก้ทีหลัง
+  // --- Add project --- (ฟอร์มถามแค่ชื่อ+คำอธิบาย; rate/limit ใช้ default)
   openAddProject: function () {
     ['ap-name', 'ap-desc'].forEach(function (id) {
       var el = document.getElementById(id);
@@ -392,7 +380,7 @@ export default {
       .then(function (d) {
         if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         hideModal('modal-add-project');
-        // แถวลง DB เสมอ; ถ้า link OpenAI ล้ม (openai_project_id null) เตือน — ไม่ ✅ เงียบ
+        // แถวลง DB เสมอ; ถ้า link OpenAI ล้มให้เตือน ไม่ ✅ เงียบ
         if (d.openai && d.openai.synced === false) {
           flash('⚠ ' + tf('msg.projectCreatedOpenAiFail', { name: name, err: d.openai.error || 'unknown' }, 'สร้าง Project "{name}" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: {err} — ยังไม่มี OpenAI project id'), 'error');
         } else {
@@ -408,6 +396,6 @@ export default {
   },
 
   refreshProjectSelects: function () {
-    // เหลือเป็น stub — dropdown ดึงของสดตอนคลิกแล้ว; กันผู้เรียกเก่าพัง
+    // stub — dropdowns fetch live on click; kept so old callers don't break
   },
 };

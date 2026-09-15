@@ -1,4 +1,4 @@
-// login.js — ลอกอิน (ย้ายมาจาก login.html)
+// login.js — หน้า login
 
 
         // เวอร์ชันที่ footer — source of truth คือ AppConfig.VERSION
@@ -6,8 +6,6 @@
             const el = document.getElementById('app-version');
             if (el) el.textContent = (window.AppConfig && window.AppConfig.VERSION) || '';
         })();
-
-        // ไม่มี role tab — server ตัดสิน role จาก user record เอง
 
         // Redirect if already logged in
         (function () {
@@ -89,8 +87,6 @@
                 btn.textContent = 'Log in';
             }
         }
-
-        // ช่องเริ่มว่าง — ปล่อยให้ browser autocomplete เสนอเอง
 
 // ES module แล้ว — handler ที่ HTML (รวมที่ JS สร้าง) เรียก ต้องอยู่บน window
 Object.assign(window, {

@@ -10,7 +10,7 @@ const COMMON_PASSWORDS = new Set([
     'petabyte1', 'petabyte123', 'pipekai123', 'openai123',
 ]);
 
-/** Phase 7: stricter password policy. Returns null if OK, error string if bad. */
+/** Password policy. Returns null if OK, else an error string. */
 function validatePasswordStrength(pw, username) {
     if (!pw || typeof pw !== 'string') return 'password is required';
     const low = pw.toLowerCase();
