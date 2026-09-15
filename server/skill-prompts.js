@@ -124,7 +124,7 @@ async function _seedNewFromFile() {
         const s = fr.skills[i];
         const r = await _pool.query(
             `INSERT INTO tbl_prompt (id, label, description, content, openai_prompt_id, position, updated_by)
-             SELECT $1,$2,$3,$4,$5,$6,'seed'
+             SELECT $1::varchar,$2::varchar,$3::text,$4::text,$5::varchar,$6::int,'seed'
               WHERE NOT EXISTS (SELECT 1 FROM tbl_prompt WHERE id = $1)
                 AND NOT EXISTS (SELECT 1 FROM tbl_prompt_history WHERE prompt_id = $1)
              RETURNING id`,

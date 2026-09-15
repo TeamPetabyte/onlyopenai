@@ -280,6 +280,14 @@ test.describe('privilege boundaries', () => {
     let trainerId;
     test.before(async () => { trainerId = await srv.createStaff('rt_trainer', 'RouteTrainer#1', 3); });
 
+    test('the skill catalog was seeded into the database, new file skills included', async () => {
+        const trainer = await srv.login('rt_trainer', 'RouteTrainer#1');
+        const r = await srv.req('GET', '/api/skills', { auth: trainer.auth });
+        assert.equal(r.status, 200, r.text);
+        assert.equal(r.json.status.source, 'db', JSON.stringify(r.json.status));
+        assert.ok(r.json.skills.some(s => s.id === 'generate_alv_report'), 'generate_alv_report not seeded');
+    });
+
     test('an admin cannot reset a trainer password, demote them, or delete them', async () => {
         const pw = await srv.req('PUT', `/api/users/${trainerId}/password`, { auth: admin, body: { password: 'Taken0ver#1' } });
         assert.equal(pw.status, 403, pw.text);

@@ -166,10 +166,10 @@ router.put('/api/projects/:id', requireAdmin, validate(schemas.updateProject), a
         const before = prev.rows[0] || null;
 
         // สร้าง fragment แบบ dynamic ให้ 'clear' เขียน NULL ได้; key ใหม่เข้ารหัสก่อน
+        // every branch references $2 — pg refuses a query whose parameter is never used
         const apiKeyFrag =
-            apiKeyAction === 'set'   ? `project_api_key = $2`
-          : apiKeyAction === 'clear' ? `project_api_key = NULL`
-          : `project_api_key = project_api_key`;
+            apiKeyAction === 'keep' ? `project_api_key = COALESCE($2::text, project_api_key)`
+          : `project_api_key = $2::text`;   // 'set' writes the encrypted key, 'clear' writes NULL
         const apiKeyParam = apiKeyAction === 'set' ? cryptoStore.encrypt(apiKey) : null;
 
         const r = await pool.query(`UPDATE tbl_project SET
