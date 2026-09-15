@@ -3,6 +3,7 @@
 // Pure lookup: the default model is passed in rather than read from env, so this stays testable.
 
 const ALLOWED_MODELS = {
+    'gpt-6-astra':   { path: 'responses', label: 'GPT-6 Astra',   supportsEffort: true },
     'gpt-5.6-sol':   { path: 'responses', label: 'GPT-5.6 Sol',   supportsEffort: true },
     'gpt-5.6-terra': { path: 'responses', label: 'GPT-5.6 Terra', supportsEffort: true },
     'gpt-5.6-luna':  { path: 'responses', label: 'GPT-5.6 Luna',  supportsEffort: true },

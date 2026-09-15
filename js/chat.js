@@ -1095,18 +1095,18 @@
 
         function removeFile() { State.attachedFile = null; document.getElementById('attached-file-display').innerHTML = ''; }
 
-        // --- Model + effort pickers (effort มีเฉพาะตระกูล gpt-5.6) ---
+        // --- Model + effort pickers (effort มีเฉพาะตระกูล reasoning: gpt-5.6, gpt-6) ---
         function onModelChange(v) {
             State.selectedModel = v; State.save();
             const eff = document.getElementById('effort-select');
-            if (eff) eff.style.display = v.startsWith('gpt-5.6') ? '' : 'none';
+            if (eff) eff.style.display = /^gpt-(5\.6|6)/.test(v) ? '' : 'none';
         }
         function onEffortChange(v) { State.selectedEffort = v; State.save(); }
         function syncComposerControls() {
             const m = document.getElementById('model-select');
             const e = document.getElementById('effort-select');
             if (m) m.value = State.selectedModel;
-            if (e) { e.value = State.selectedEffort; e.style.display = State.selectedModel.startsWith('gpt-5.6') ? '' : 'none'; }
+            if (e) { e.value = State.selectedEffort; e.style.display = /^gpt-(5\.6|6)/.test(State.selectedModel) ? '' : 'none'; }
         }
 
         // ปุ่มเดียว: idle = send, กำลัง stream = stop

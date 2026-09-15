@@ -208,10 +208,10 @@ export default {
     if (box) box.focus();
   },
 
-  // Effort only applies to the gpt-5.6 reasoning family — hide it otherwise.
+  // Effort only applies to the reasoning families (gpt-5.6, gpt-6) — hide it otherwise.
   onLabModelChange: function (v) {
     var f = document.getElementById('lab-effort-field');
-    if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
+    if (f) f.style.display = /^gpt-(5\.6|6)/.test(v || '') ? '' : 'none';
   },
 
   // Show which system prompt is being tested (full content + length).
@@ -622,7 +622,7 @@ export default {
 
   onEvalModelChange: function (v) {
     var f = document.getElementById('ev-effort-field');
-    if (f) f.style.display = (v && v.indexOf('gpt-5.6') === 0) ? '' : 'none';
+    if (f) f.style.display = /^gpt-(5\.6|6)/.test(v || '') ? '' : 'none';
   },
 
   startEvalRun: function () {
