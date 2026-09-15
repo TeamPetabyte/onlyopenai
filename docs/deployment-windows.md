@@ -126,11 +126,11 @@ ingress:
 
 ## 🔄 อัปเดตเวอร์ชันใหม่ภายหลัง
 ```powershell
-cd C:\petabyte\onlyopenai
-git pull                         # หรือ copy ไฟล์ใหม่ทับ
-cd server; npm install --omit=dev
-nssm restart PetabyteAi          # migrate รันอัตโนมัติตอน boot
+cd C:\petabyte\onlyopenai-master; git fetch origin; git reset --hard origin/master; npm run build; C:\petabyte\nssm.exe restart PetabyteAi
 ```
+- `npm run build` ต้องมีทุกรอบ: `dist/` ไม่อยู่ใน git และ server จะข้าม build เก่าไปเสิร์ฟ source tree ซึ่งเบราว์เซอร์ cache ไว้ (หน้าเว็บจะโชว์เวอร์ชันเก่า)
+- เฉพาะเมื่อ release นั้นบอกว่า dependency เปลี่ยน ให้แทรก `cd server; npm install --omit=dev; cd ..;` ก่อน `npm run build` (root: `npm ci --include=dev;`)
+- migrate รันอัตโนมัติตอน boot
 
 ---
 
