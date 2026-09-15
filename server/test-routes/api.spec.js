@@ -288,7 +288,8 @@ test.describe('privilege boundaries', () => {
             body: { username: victim.username, password: victim.password, projectId: PROJECT } });
         const vid = c.json.id;
         const first = await srv.login(victim.username, victim.password);
-        await srv.req('PUT', `/api/users/${vid}/password`, { auth: first.auth, body: { password: 'RouteVictim#2' } });
+        await srv.req('PUT', `/api/users/${vid}/password`, { auth: first.auth,
+            body: { password: 'RouteVictim#2', currentPassword: victim.password } });
         const live = await srv.login(victim.username, 'RouteVictim#2');
         assert.equal((await srv.req('GET', '/api/quota-status', { auth: live.auth })).status, 200);
 
