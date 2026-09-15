@@ -228,7 +228,7 @@ export default {
     return Auth.getUsers().map(function (u) {
       var balance = parseFloat(localStorage.getItem('agenthub_balance_' + u.username) || u.balance || 0);
       var history = [];
-      try { history = JSON.parse(localStorage.getItem('agenthub_history_' + u.username) || '[]'); } catch (e) { }
+      try { history = JSON.parse(localStorage.getItem('agenthub_history_' + u.username) || '[]'); } catch { }
       return Object.assign({}, u, { balance: balance, history: history });
     });
   },

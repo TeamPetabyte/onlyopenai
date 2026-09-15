@@ -114,7 +114,7 @@ router.post('/api/skills/:id/test', requireTrainer, expensiveRateLimiter, async 
     if (!prompt) return res.status(400).json({ ok: false, error: 'prompt required' });
 
     // id "auto" = ใช้ router ตัวเดียวกับแชทจริง; log ใต้ skill ที่ตรวจพบ
-    let skill = null, routed = null;
+    let skill, routed = null;
     if (req.params.id === 'auto') {
         const pick = await pickSkillFromCatalog(prompt, openai);
         if (pick.skillId && pick.content) {

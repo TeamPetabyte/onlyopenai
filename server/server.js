@@ -260,7 +260,7 @@ const chatRateLimiter = rateLimit({
     max:      CHAT_RATE_LIMIT_PER_MIN,
     standardHeaders: true,
     legacyHeaders:   false,
-    keyGenerator: (req, res) => {
+    keyGenerator: (req) => {
         // v8: ipKeyGenerator(ip) ไม่ใช่ (req,res) — เรียกผิด key กลายเป็น [object Object] รวมทุกคนถังเดียว
         // key ตาม user ก่อน (หลัง requireAuth); token prefix เฉพาะ path ที่ยังไม่ auth; สุดท้าย IP
         if (req.session?.userId) return `u:${req.session.userId}`;
@@ -294,7 +294,7 @@ const expensiveRateLimiter = rateLimit({
     max:      EXPENSIVE_RATE_LIMIT_PER_MIN,
     standardHeaders: true,
     legacyHeaders:   false,
-    keyGenerator: (req, res) => {
+    keyGenerator: (req) => {
         // key รวม path ด้วย — instance เดียวถังเดียว ไม่งั้นห้า route แชร์ 30/min ก้อนเดียว
         const who = req.session?.userId ? `u:${req.session.userId}`
                   : _extractToken(req)   ? `t:${_extractToken(req).slice(0, 16)}`
@@ -313,7 +313,7 @@ const loginRateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true,    // only failed attempts count
-    keyGenerator: (req, res) => {
+    keyGenerator: (req) => {
         // String() — non-string shapes crash toLowerCase; clamp so huge input cannot grow keys
         const u = String(req.body?.username || '').toLowerCase().slice(0, 64);
         return `${ipKeyGenerator(req.ip)}:${u}`;
@@ -454,7 +454,7 @@ async function boot() {
     process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
     // unhandledRejection ห้ามฆ่า process — log ดัง ๆ แล้วอยู่ต่อ; ไม่ใช่ข้ออ้างให้ route เลิก try/catch
-    process.on('unhandledRejection', (reason, promise) => {
+    process.on('unhandledRejection', (reason) => {
         const msg = (reason && reason.message) || String(reason);
         console.error('[unhandledRejection]', msg);
         if (reason && reason.stack) console.error(reason.stack);

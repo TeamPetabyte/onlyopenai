@@ -195,7 +195,7 @@ router.get('/api/chat/sessions/:id/export', requireAuth, async (req, res) => {
             md += `### ${who}  \n*${new Date(row.created_at).toISOString()}*\n\n${row.content}\n\n`;
         }
         // filename goes into Content-Disposition — alnum/_/- only
-        const fname = (sess.title || 'chat').replace(/[^\w\-]+/g, '_').slice(0, 60) || 'chat';
+        const fname = (sess.title || 'chat').replace(/[^\w-]+/g, '_').slice(0, 60) || 'chat';
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
         res.setHeader('Content-Disposition',
             `attachment; filename="${fname}.md"`);

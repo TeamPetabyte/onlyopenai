@@ -81,7 +81,7 @@
                     return;
                 }
                 window.location.href = (result.session.role === 'admin' || result.session.role === 'trainer') ? '/admin' : '/';
-            } catch (e) {
+            } catch {
                 showError('Something went wrong. Please try again.');
                 btn.disabled = false;
                 btn.textContent = 'Log in';

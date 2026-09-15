@@ -14,7 +14,6 @@ export default {
   },
 
   _renderProjectsHtml: function (projects, container) {
-    var self = this;
     var users = this.getUsersWithHistory();
 
     if (projects.length === 0) {

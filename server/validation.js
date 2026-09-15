@@ -9,7 +9,7 @@ const username   = z.string().trim().min(1).max(64);
 const password   = z.string().min(1).max(128);       // strength check is a separate helper
 const displayStr = z.string().trim().max(128);       // used for name/surname/displayName
 const longText   = z.string().max(1024);             // description etc.
-const projectId  = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_\-]+$/,
+const projectId  = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/,
     'projectId must be alphanumeric/_/-');
 // 'trainer' (superadmin) is deliberately not accepted; superadmins are provisioned by SQL only.
 const roleEnum   = z.enum(['admin', 'user']);
@@ -21,7 +21,6 @@ const amountPos  = z.coerce.number().finite()
     .gt(0, 'amount must be > 0').max(MAX_BALANCE, `amount must be <= ${MAX_BALANCE}`);
 const rate       = z.coerce.number().finite()
     .min(0, 'rate must be >= 0').max(10000, 'rate too large');
-const intId      = z.coerce.number().int().positive();
 
 const loginSchema = z.object({
     username: username,

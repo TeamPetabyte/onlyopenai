@@ -912,7 +912,7 @@ persistent table /dmo/travel
 lock master
 authorization master ( instance ) {
   create; update; delete;
-  action acceptTravel result [1] \\\$self;
+  action acceptTravel result [1] \\$self;
   validation validateCustomer on save { create; field CustomerID; }
 }
 \`\`\`

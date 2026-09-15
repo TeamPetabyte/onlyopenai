@@ -31,7 +31,7 @@ if (_OAI_PROXY) {
         const { HttpsProxyAgent } = require('https-proxy-agent');
         _oaiAgent = new HttpsProxyAgent(_OAI_PROXY);
         console.log(`🌐 OpenAI egress via proxy: ${_OAI_PROXY}`);
-    } catch (e) {
+    } catch {
         console.warn('[openai] HTTPS_PROXY is set but `https-proxy-agent` is not installed — run `npm i https-proxy-agent` in server/. Continuing WITHOUT proxy.');
     }
 }

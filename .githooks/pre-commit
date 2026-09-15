@@ -1,14 +1,8 @@
 #!/bin/sh
-# Runs the same checks CI runs. Needed because we are not pushing yet, so
-# GitHub Actions never fires — this hook is the only gate right now.
-# Bypass once with: git commit --no-verify
-
+# Same gate as CI, run before the commit exists. Bypass once with: git commit --no-verify
 set -e
-
 echo "[pre-commit] check: lint, global contract, require contract, typecheck, test"
 npm run --silent check
-
 echo "[pre-commit] build"
 npm run --silent build
-
 echo "[pre-commit] ok"

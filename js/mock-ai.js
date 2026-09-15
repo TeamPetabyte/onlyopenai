@@ -34,7 +34,7 @@ const MockAI = {
             if (typeof PRICING.calcCost === 'function') {
                 cost = PRICING.calcCost(inputTokens, outputTokens);
             }
-        } catch (e) { /* swallow — cost is informational only */ }
+        } catch { /* swallow — cost is informational only */ }
 
         await this._delay(500 + Math.random() * 700);
 

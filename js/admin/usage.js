@@ -101,7 +101,6 @@ export default {
           var first = listEl.querySelector('.dd-item');
           if (first) {
             var v = first.getAttribute('data-value');
-            var idx = parseInt(first.getAttribute('data-idx'), 10);
             self._closeDropdown();
             onPick(v, null);
           }

@@ -32,7 +32,6 @@ const CODE_WORD_RE = new RegExp(
     + 'EXCEPTIONS|TABLES|OCCURS|SINGLE|APPENDING|TRANSPORTING|BINARY|STANDARD|'
     + 'REF|BEGIN\\s+OF|END\\s+OF|ASSIGNING|COMPONENTS)\\b', 'i');
 
-const CODE_SHAPE_RE = new RegExp(CODE_MARK_RE.source + '|' + CODE_WORD_RE.source, 'i');
 
 // English function words that are never ABAP keywords — a closed class, and
 // only ever a veto applied after the unambiguous code marks.

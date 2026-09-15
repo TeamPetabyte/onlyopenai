@@ -19,7 +19,6 @@ export default {
       self._cachedDBUsers = dbUsers;
       self._cachedCredits = credits;   // shared with renderProjectDetail / Cap page
 
-      var totalRequests = credits.reduce(function (s, c) { return s + Number(c.lifetimeRequests || 0); }, 0);
       var totalTokens   = credits.reduce(function (s, c) { return s + Number(c.lifetimeTokens   || 0); }, 0);
       var totalSpendAll = credits.reduce(function (s, c) { return s + Number(c.lifetimeSpend    || 0); }, 0);
       var totalTopUpAll  = projects.reduce(function (s, p) { return s + (p.lifetimeAmount || 0); }, 0);
@@ -354,7 +353,6 @@ export default {
 
   // --- Project detail --- hero + budget + 3 mini stats + members
   renderProjectDetail: function (projectId) {
-    var self = this;
     // DB cache, not Auth.getProjectById (localStorage lacks balance/lifetimeAmount)
     var p = (this._cachedDBProjects || []).find(function (x) { return x.id === projectId; })
             || Auth.getProjectById(projectId);
@@ -373,8 +371,6 @@ export default {
     var costBilled = users.reduce(function (s, u) { return s + nz(u.lifetimeSpend); }, 0);
 
     var usedPct = totalTopUp > 0 ? Math.min(100, (costBilled / totalTopUp) * 100) : 0;
-    var poolPct = totalTopUp > 0 ? Math.min(100, (pool / totalTopUp) * 100) : 0;
-    var poolColor = pool > 0 ? 'var(--success-hover, #34d399)' : 'var(--danger-hover, #f87171)';
     var budget = { totalTopUp: totalTopUp, pool: pool, costBilled: costBilled };
 
     // hero: name, ID pill (click-to-copy), rate chips, CTA
@@ -492,7 +488,7 @@ export default {
         + '👥 ' + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>';
     } else {
       // แถวสมาชิก read-only — แก้ได้ที่หน้า Users/Cap เท่านั้น
-      var col = function (label, valueHtml, w) {
+      var cell = function (label, valueHtml, w) {
         return '<div style="text-align:right;min-width:' + (w || 84) + 'px">'
           + '<div style="font-size:.64rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em">' + label + '</div>'
           + '<div style="margin-top:2px">' + valueHtml + '</div>'
@@ -544,10 +540,10 @@ export default {
           +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(u.displayName || u.username) + '</div>'
           +   '<div style="font-size:.7rem;color:var(--text-3);margin-top:1px">@' + escapeHtml(u.username) + '</div>'
           + '</div>'
-          + col(TT('col.tokens','Tokens'), mono(tokens.toLocaleString(), 'var(--text-1)'))
-          + col(TT('col.spendCumulative','ใช้จ่ายสะสม'), mono('฿' + spend.toFixed(2), 'var(--text-2)'))
-          + col(TT('col.dailyCap','Daily Cap'), capHtml)
-          + col(TT('col.usedToday','ใช้วันนี้'), usedHtml, 110)
+          + cell(TT('col.tokens','Tokens'), mono(tokens.toLocaleString(), 'var(--text-1)'))
+          + cell(TT('col.spendCumulative','ใช้จ่ายสะสม'), mono('฿' + spend.toFixed(2), 'var(--text-2)'))
+          + cell(TT('col.dailyCap','Daily Cap'), capHtml)
+          + cell(TT('col.usedToday','ใช้วันนี้'), usedHtml, 110)
           + '</div>';
       }).join('');
       membersBody = '<div style="background:var(--surface-2);border:1px solid var(--border-default);'

@@ -10,7 +10,6 @@ const http        = require('http');
 const net         = require('net');
 const fs          = require('fs');
 const path        = require('path');
-const os          = require('os');
 
 const ROOT        = __dirname;
 const SERVER_DIR  = path.join(ROOT, 'server');
@@ -248,7 +247,7 @@ function startStaticServer(port) {
                 });
                 fs.createReadStream(filePath).pipe(res);
             });
-        } catch (e) {
+        } catch {
             res.writeHead(500); res.end('500 Internal');
         }
     });
@@ -311,7 +310,7 @@ function attachShutdown(children, staticServer) {
 
 (async function main() {
     banner();
-    const env = await preflight();
+    await preflight();
 
     log.step(`Starting backend (${ARG.dev ? 'dev/nodemon' : 'production'}) on :${ARG.portBackend}`);
     const backend = spawnBackend();

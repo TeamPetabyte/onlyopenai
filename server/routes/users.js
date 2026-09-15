@@ -92,11 +92,10 @@ router.get('/api/users/:id', requireAuth, async (req, res) => {
 
 // POST /api/users — create user
 router.post('/api/users', requireAdmin, validate(schemas.createUser), async (req, res) => {
-    const { username, password, displayName, role, balance, projectId } = req.body;
+    const { username, password, displayName, role, projectId } = req.body;
     // Strength check is still separate — schema only enforces length range
     const pwErr = validatePasswordStrength(password, username);
     if (pwErr) return res.status(400).json({ ok: false, error: pwErr });
-    const balanceNum = (balance === undefined) ? 0 : balance;
     // dailyCap: null/'' = no cap (bounded only by the project pool)
     const dailyCap = (req.body.dailyCap === undefined
                        || req.body.dailyCap === null

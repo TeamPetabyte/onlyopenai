@@ -495,7 +495,7 @@
             if (!blob) { showToast(t('u.sess.exportFailed'), 'error'); return; }
             const url = URL.createObjectURL(blob);
             const sess = State.sessions.find(s => s.id === sessionId);
-            const safe = (sess?.title || 'chat').replace(/[^\w\-]+/g, '_').slice(0, 60) || 'chat';
+            const safe = (sess?.title || 'chat').replace(/[^\w-]+/g, '_').slice(0, 60) || 'chat';
             const a = document.createElement('a');
             a.href = url; a.download = safe + '.md';
             document.body.appendChild(a); a.click(); a.remove();
@@ -1282,7 +1282,7 @@
                 });
                 const d = await r.json();
                 if (!d.ok) { showToast(t('u.pw.changeFailedPrefix') + (d.error || ''), 'error'); return; }
-            } catch (e) { showToast(t('u.err.somethingWrong'), 'error'); return; }
+            } catch { showToast(t('u.err.somethingWrong'), 'error'); return; }
             closeOverlay('password-modal');
             document.getElementById('current-password').value = '';
             document.getElementById('new-password').value = '';

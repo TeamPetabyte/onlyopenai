@@ -603,7 +603,6 @@ export default {
   onEvalSkillChange: function () {
     var el = document.getElementById('ev-skill');
     if (el && el.value) this._evalSkillId = el.value;
-    var self = this;
     // ⭐ ready-count for the selected skill (from the test-log stats).
     fetch(BASE + '/api/skill-test-logs?skill=' + encodeURIComponent(this._evalSkillId) + '&limit=1',
       { headers: Auth.authHeaders() })

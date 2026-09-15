@@ -258,7 +258,6 @@ function sortByDependency(tables, fksByTable) {
         // indexes (skip PK/UNIQUE ones)
         out.push('-- ── Indexes ────────────────────────────────────────────────');
         for (const t of ordered) {
-            const pkCols = new Set(pks.get(t));
             const uniqueIdxNames = new Set([...uniqs.get(t).keys()]);
             for (const row of idx.get(t)) {
                 // pg auto-creates an index for PK / UNIQUE; skip those

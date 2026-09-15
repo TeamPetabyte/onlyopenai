@@ -302,8 +302,6 @@ export default {
     document.body.appendChild(pop);
     trigger.classList.add('dd-open');
 
-    var checkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="flex-shrink:0;color:var(--accent)">'
-                 + '<polyline points="20 6 9 17 4 12"/></svg>';
 
     function renderList(searchTerm) {
       var listEl = document.getElementById('user-pf-list');
@@ -315,7 +313,7 @@ export default {
         listEl.innerHTML = '<div class="dd-empty">No match</div>';
         return;
       }
-      listEl.innerHTML = items.map(function (p, idx) {
+      listEl.innerHTML = items.map(function (p) {
         var sel = current.has(String(p.id));
         var divider = (p._all && items.length > 1) ? '<div class="dd-divider"></div>' : '';
         var emoji = p._all ? '' : '📂 ';
@@ -857,7 +855,7 @@ export default {
 
     var self = this;
     var displayName = firstname + ' ' + lastname;
-    var safeUsername = username.toLowerCase().replace(/[^a-z0-9._@+\-]/g, '_');
+    var safeUsername = username.toLowerCase().replace(/[^a-z0-9._@+-]/g, '_');
 
     // projectId เป็น VARCHAR — ห้าม parseInt; ใส่เฉพาะเมื่อมีค่า (schema ปฏิเสธ null); staff ไม่ส่งเลย
     var payload = { username: safeUsername, password: password, displayName: displayName };
@@ -959,7 +957,7 @@ export default {
     } else {
       inp.type = 'text';
       inp.select();
-      try { document.execCommand('copy'); flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); } catch (e) { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); }
+      try { document.execCommand('copy'); flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); } catch { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); }
     }
   },
 

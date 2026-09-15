@@ -26,7 +26,7 @@ const FILE_DISABLE = process.env.LOG_FILE_DISABLE === '1';
 // Ensure log dir exists — pino-roll assumes it.
 if (!FILE_DISABLE) {
     try { fs.mkdirSync(LOG_DIR, { recursive: true }); }
-    catch (e) { /* fall through; transport will surface the error */ }
+    catch { /* fall through; transport will surface the error */ }
 }
 
 // strip everything after '?' before a URL reaches a log line

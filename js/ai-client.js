@@ -19,7 +19,7 @@ const AIClient = {
             this._mode = data.mode;
             this._modelName = data.model;
             console.log(`[AIClient] ${data.message}`);
-        } catch (e) {
+        } catch {
             this._mode = 'mock';
             console.log('[AIClient] Server offline → MockAI');
         }
@@ -114,7 +114,7 @@ const AIClient = {
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     let event;
-                    try { event = JSON.parse(line.slice(6)); } catch (e) { continue; }
+                    try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
                     if (event.type === 'chunk') {
                         onChunk(event.text);

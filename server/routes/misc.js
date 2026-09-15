@@ -26,7 +26,7 @@ router.get('/api/health', (req, res) => {
 // /api/version — fingerprint ของ deploy; admin เท่านั้น เพราะสถานะ migration เป็นข้อมูล sensitive
 const _BOOT_TIME = Date.now();
 router.get('/api/version', requireAdmin, async (req, res) => {
-    let migrations = null;
+    let migrations;
     try {
         const s = await migrationStatus(pool);
         migrations = {
