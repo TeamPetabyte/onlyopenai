@@ -13,6 +13,7 @@
         "test:routes": "node --test test-routes/api.spec.js"
     },
     "dependencies": {
+        "@abaplint/core": "^2.120.28",
         "bcrypt": "^6.0.0",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",

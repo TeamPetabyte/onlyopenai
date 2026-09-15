@@ -22,7 +22,7 @@ const PHASE4_TOOLS = [
         type: 'function',
         function: {
             name: 'check_abap_syntax',
-            description: 'ตรวจสอบ syntax และ obsolete statements ใน ABAP code',
+            description: 'ตรวจ ABAP code ด้วย parser จริง (abaplint) ตาม target release ของ project: syntax, ตัวแปรที่ไม่ได้ประกาศ, type ที่ไม่รู้จัก, และ obsolete statements. เรียกกับโค้ดทั้งไฟล์ก่อนส่งคำตอบทุกครั้ง',
             parameters: {
                 type: 'object',
                 properties: {

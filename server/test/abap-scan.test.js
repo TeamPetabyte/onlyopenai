@@ -308,6 +308,10 @@ test('checkAbapSyntax: ignores commented-out code', () => {
     assert.deepEqual(onComments, [], 'reported findings on comment lines');
 });
 
+// These snippets test our own rules and leave variables undeclared on purpose; drop what abaplint says.
+const ownRules = (r) => (r.issues || []).filter(i => !/^abaplint/.test(i.message));
+const ownValid = (r) => !ownRules(r).some(i => i.severity === 'error');
+
 test('checkAbapSyntax: the loop error names the loop, not a correct SELECT above it', () => {
     // The leftmost SELECT...ENDSELECT match must not open at an earlier, correct SELECT.
     const r = scan.checkAbapSyntax([
@@ -318,7 +322,7 @@ test('checkAbapSyntax: the loop error names the loop, not a correct SELECT above
         '  WRITE wa-vbeln.',
         'ENDSELECT.',
     ].join('\n'));
-    const errs = (r.issues || []).filter(i => i.severity === 'error');
+    const errs = ownRules(r).filter(i => i.severity === 'error');
     assert.equal(errs.length, 1);
     assert.equal(errs[0].line, 4, 'error was pinned to the wrong line');
 });
@@ -329,19 +333,19 @@ test('checkAbapSyntax: reports every SELECT...ENDSELECT, not just the first', ()
         'SELECT * FROM a INTO w.', 'WRITE w.', 'ENDSELECT.',
         'SELECT * FROM b INTO w2.', 'WRITE w2.', 'ENDSELECT.',
     ].join('\n'));
-    assert.equal((r.issues || []).filter(i => i.severity === 'error').length, 2);
+    assert.equal(ownRules(r).filter(i => i.severity === 'error').length, 2);
 });
 
 test('checkAbapSyntax: a lone SELECT SINGLE is not a loop', () => {
-    assert.equal(scan.checkAbapSyntax('REPORT z.\nSELECT SINGLE a FROM t INTO v.\nWRITE v.').valid, true);
+    assert.equal(ownValid(scan.checkAbapSyntax('REPORT z.\nSELECT SINGLE a FROM t INTO v.\nWRITE v.')), true);
 });
 
 test('checkAbapSyntax: TABLES inside CALL FUNCTION is not the obsolete statement', () => {
     // TABLES as a CALL FUNCTION parameter section is current syntax.
     const call = "CALL FUNCTION 'Z_READ'\n  EXPORTING\n    iv = 1\n  TABLES\n    it = lt.";
-    assert.equal(scan.checkAbapSyntax(call).valid, true);
+    assert.equal(ownValid(scan.checkAbapSyntax(call)), true);
     assert.ok(!idsFor(call).includes('obsolete_check'));
-    assert.equal(scan.checkAbapSyntax("CALL FUNCTION 'Z'\n  TABLES it = lt.").valid, true);
+    assert.equal(ownValid(scan.checkAbapSyntax("CALL FUNCTION 'Z'\n  TABLES it = lt.")), true);
 });
 
 test('checkAbapSyntax: a clean program is valid', () => {
@@ -376,4 +380,23 @@ test('checkAbapSyntax: a pathological MOVE line finishes in well under a second'
 });
 test('checkAbapSyntax: a 33 000-character CLEAR operand does not throw', () => {
     assert.doesNotThrow(() => scan.checkAbapSyntax('CLEAR ' + 'a'.repeat(33000) + '.\nREFRESH x.'));
+});
+test('checkAbapSyntax: abaplint reports an undeclared variable as an error', () => {
+    const r = scan.checkAbapSyntax('REPORT ztest.\nDATA lv_x TYPE i.\nlv_y = 1.\nWRITE lv_x.');
+    assert.equal(r.valid, false);
+    assert.ok(r.issues.some(i => i.line === 3 && /abaplint check_syntax/.test(i.message) && /lv_y/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: a table or class the program did not define is assumed to exist', () => {
+    const r = scan.checkAbapSyntax('REPORT ztest.\nSELECT * FROM zmy_table INTO TABLE @DATA(lt_x).\nDATA(lo) = NEW zcl_anything( ).\nWRITE lines( lt_x ).', 'v750');
+    assert.ok(!r.issues.some(i => /abaplint/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: the cloud release rejects a classic report', () => {
+    const r = scan.checkAbapSyntax('REPORT ztest.\nWRITE 1.', 'cloud');
+    assert.ok(r.issues.some(i => /abaplint parser_error \[Cloud\]/.test(i.message)), JSON.stringify(r.issues));
+});
+test('checkAbapSyntax: an unknown release falls back to v750 instead of throwing', () => {
+    for (const rel of ['v999', undefined, 'constructor']) {
+        const r = scan.checkAbapSyntax('REPORT ztest.\nWRITE 1.', rel);
+        assert.equal(r.valid, true, `${rel}: ${JSON.stringify(r.issues)}`);
+    }
 });

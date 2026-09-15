@@ -210,7 +210,35 @@ function proseOf(text) {
 }
 
 
-function checkAbapSyntax(code) {
+// abaplint is the real parser; the project's target release picks the language version
+// (abaplint has no v731, v702 is the nearest older grammar). Only objects local to the
+// program must resolve — there is no DDIC here, so tables and global classes are assumed to exist.
+const ABAPLINT_VERSION = { v731: 'v702', v740sp08: 'v740sp08', v750: 'v750', cloud: 'Cloud' };
+function _abaplintIssues(code, release, lines) {
+    const version = Object.prototype.hasOwnProperty.call(ABAPLINT_VERSION, release)
+        ? ABAPLINT_VERSION[release] : ABAPLINT_VERSION.v750;
+    try {
+        const { Registry, MemoryFile, Config } = require('@abaplint/core');
+        const cfg = {
+            global: { files: '/src/**/*.*' },
+            syntax: { version, errorNamespace: '^(LCL_|LIF_|LTY_|TY_)' },
+            rules:  { parser_error: true, check_syntax: true, unknown_types: true, check_ddic: true },
+        };
+        const reg = new Registry(new Config(JSON.stringify(cfg)));
+        reg.addFile(new MemoryFile('zcheck.prog.abap', code));
+        reg.parse();
+        return reg.findIssues().map(i => {
+            const row = i.getStart().getRow();
+            return { line: row, severity: 'error',
+                     message: `abaplint ${i.getKey()} [${version}]: ${i.getMessage()}`,
+                     code: (lines[row - 1] || '').trim() };
+        });
+    } catch (e) {
+        return [{ line: 0, severity: 'info', message: 'abaplint unavailable: ' + e.message, code: '' }];
+    }
+}
+
+function checkAbapSyntax(code, release) {
     const issues = [];
     const lines  = String(code || '').split('\n');
 
@@ -284,6 +312,7 @@ function _findClearRefresh(live) {
         });
     });
 
+    issues.push(..._abaplintIssues(String(code || ''), release, lines));
     issues.sort((a, b) => a.line - b.line);
 
     return {

@@ -297,13 +297,13 @@ function scanQueryTerms(scan) {
 }
 
 /** Findings + the documents that speak to them, ready to drop into the prompt. */
-async function buildPreAnalysis(userMessage) {
+async function buildPreAnalysis(userMessage, release) {
     const text = String(userMessage || '');
     if (!looksLikeAbapCode(text)) return '';
 
     let block = '';
     try {
-        const scan = checkAbapSyntax(text);
+        const scan = checkAbapSyntax(text, release);
         if (scan.issueCount > 0) {
             block += '\n\n## Detected by a static scan of the code above (line numbers are exact)\n'
                   + 'These were found mechanically — treat them as given and spend your effort on the fix, not on locating them. This list is not exhaustive; keep looking for anything it cannot see.\n';
@@ -349,7 +349,7 @@ function ragResultEvent(result) {
     return { type: 'tool_result', name: 'search_knowledge', found: !!result?.found, files };
 }
 
-async function executeTool(name, args) {
+async function executeTool(name, args, ctx = {}) {
     // args carry the user's code — log argument names and sizes, never content
     const shape = (args && typeof args === 'object' && !Array.isArray(args))
         ? Object.entries(args).map(([k, v]) => `${k}:${typeof v === 'string' ? v.length + 'ch' : typeof v}`).join(',')
@@ -357,7 +357,7 @@ async function executeTool(name, args) {
     console.log(`[🔧 tool] ${name}(${shape})`);
     switch (name) {
         case 'find_bapi':            return findBapi(args.task, args.module);
-        case 'check_abap_syntax':    return checkAbapSyntax(args.code || '');
+        case 'check_abap_syntax':    return checkAbapSyntax(args.code || '', ctx.release);
         case 'get_transaction_info': return getTransactionInfo(args.tcode || '');
         case 'search_s4_migration':  return searchS4Migration(args.topic || '');
         case 'get_best_practice':    return getBestPractice(args.topic || '');
@@ -382,7 +382,7 @@ function toResponsesTools(tools) {
     }));
 }
 
-async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, history, tools, sendEvent, acc, isAborted, setStream }) {
+async function runResponsesTurn({ oai, userId, model, effort, instructions, userPrompt, history, tools, sendEvent, acc, isAborted, setStream, release }) {
     const MAX_TOOL_TURNS = 3;
     const MAX_LENGTH_CONTINUATIONS = 4;
     // Output cap per effort: reasoning shares the budget with text, and a low cap yields an empty bubble.
@@ -498,7 +498,7 @@ async function runResponsesTurn({ oai, userId, model, effort, instructions, user
         for (const c of calls) {
             let parsed = {};
             try { parsed = JSON.parse(c.args || '{}'); } catch (_) {}
-            const result = await executeTool(c.name, parsed);
+            const result = await executeTool(c.name, parsed, { release });
             if (c.name === 'search_knowledge') sendEvent(ragResultEvent(result));
             outputs.push({ type: 'function_call_output', call_id: c.call_id, output: JSON.stringify(result) });
         }

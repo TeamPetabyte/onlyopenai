@@ -217,11 +217,12 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         const relRow = await pool.query(
             `SELECT p.target_release FROM tbl_user u JOIN tbl_project p ON p.project_id = u.project_id
               WHERE u.user_id = $1`, [req.session.userId]);
-        finalSystemPrompt += targetReleaseBlock(relRow.rows[0]?.target_release);
+        const targetRelease = relRow.rows[0]?.target_release;
+        finalSystemPrompt += targetReleaseBlock(targetRelease);
         // ความรู้ skill รองต่อท้าย org standards — เอกสารองค์กรชนะเสมอ
         finalSystemPrompt += supportingKnowledgeBlock(supportingSkillIds);
         // static scan + matching documents up front, so the model spends its budget on judgement.
-        finalSystemPrompt += await buildPreAnalysis(prompt);
+        finalSystemPrompt += await buildPreAnalysis(prompt, targetRelease);
 
         // function tools เท่านั้น — file_search ใช้กับ Chat Completions ไม่ได้ (RAG ผ่าน search_knowledge)
         const chatTools = PHASE4_TOOLS.filter(t => t.type === 'function');
@@ -239,6 +240,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                 tools: chatTools, sendEvent, acc,
                 isAborted: () => clientAborted,
                 setStream: (s) => { currentOpenAIStream = s; },
+                release: targetRelease,
             });
             inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
             cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
@@ -367,7 +369,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                 let args = {};
                 try { args = JSON.parse(tc.function.arguments || '{}'); }
                 catch (_) { console.warn('[chat] bad tool arguments from model for', tc.function.name); }
-                const result = await executeTool(tc.function.name, args);
+                const result = await executeTool(tc.function.name, args, { release: targetRelease });
                 if (tc.function.name === 'search_knowledge') sendEvent(ragResultEvent(result));
                 messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
             }
