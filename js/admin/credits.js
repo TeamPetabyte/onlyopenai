@@ -160,7 +160,7 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.credits)) {
-          tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noDataFound', '⚠️ ไม่พบข้อมูล') + '</td></tr></tbody>';
+          tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noDataFound', 'ไม่พบข้อมูล') + '</td></tr></tbody>';
           return;
         }
         self._cachedCredits = d.credits;
@@ -252,8 +252,8 @@ export default {
   // Open the Daily Cap editor for a user.
   openEditCap: function (userId) {
     var row = (this._cachedCredits || []).find(function (x) { return x.userId === userId; });
-    if (!row) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
-    if (!row.projectId) { flash('❌ ' + t('err.userNoProject', 'user ยังไม่มี project'), 'error'); return; }
+    if (!row) { flash(t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
+    if (!row.projectId) { flash(t('err.userNoProject', 'user ยังไม่มี project'), 'error'); return; }
     document.getElementById('ec-user-id').value = userId;
     document.getElementById('ec-user-display').textContent = (row.displayName || row.username) + '  @' + row.username;
     document.getElementById('ec-project-name').textContent = row.projectName || '—';
@@ -281,7 +281,7 @@ export default {
     } else {
       dailyCap = Number(capRaw);
       if (!isFinite(dailyCap) || dailyCap < 0) {
-        errEl.textContent = '❌ ' + t('err.dailyCapInvalid', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 (หรือเลือก "ไม่จำกัด")');
+        errEl.textContent = t('err.dailyCapInvalid', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 (หรือเลือก "ไม่จำกัด")');
         return;
       }
     }
@@ -295,15 +295,15 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ ' + (d.error || 'failed'); btn.disabled = false; return; }
+        if (!d.ok) { errEl.textContent = (d.error || 'failed'); btn.disabled = false; return; }
         hideModal('modal-edit-credit');
         flash(dailyCap === null
-          ? '✅ ' + t('msg.dailyCapRemoved', 'ลบ Daily Cap แล้ว (ไม่จำกัด)')
-          : '✅ ' + tf('msg.dailyCapSet', { cap: dailyCap }, 'ตั้ง Daily Cap = ฿{cap}/วัน เรียบร้อย'));
+          ? t('msg.dailyCapRemoved', 'ลบ Daily Cap แล้ว (ไม่จำกัด)')
+          : tf('msg.dailyCapSet', { cap: dailyCap }, 'ตั้ง Daily Cap = ฿{cap}/วัน เรียบร้อย'), 'success');
         self.renderCreditManagement();
       })
       .catch(function (e) {
-        errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         btn.disabled = false;
       });
   },

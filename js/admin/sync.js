@@ -16,7 +16,7 @@ export default {
       .then(function (d) {
         if (!d.ok) {
           healthEl.innerHTML = '<div style="padding:24px;color:#e25563">' +
-            '⚠ ' + escapeHtml(d.error || 'failed to load') + '</div>';
+            '' + escapeHtml(d.error || 'failed to load') + '</div>';
           return;
         }
         self._renderSyncHealth(d);
@@ -34,11 +34,11 @@ export default {
     var statusKey = d.running ? 'running' : (s.last_status || 'idle');
     // Status pill colour
     var colors = {
-      running:  { bg: 'rgba(74,123,214,0.10)',  bd: 'rgba(74,123,214,0.35)',  fg: '#5a8def', label: '🔄 Running' },
-      ok:       { bg: 'rgba(55,179,74,0.10)',    bd: 'rgba(55,179,74,0.35)',   fg: '#3fa64d', label: '🟢 OK' },
-      partial:  { bg: 'rgba(240,160,64,0.10)',   bd: 'rgba(240,160,64,0.35)',  fg: '#e6a14a', label: '🟡 Partial' },
-      error:    { bg: 'rgba(220,53,69,0.10)',    bd: 'rgba(220,53,69,0.35)',   fg: '#e25563', label: '🔴 Error' },
-      idle:     { bg: 'var(--surface-3)',        bd: 'var(--border-default)', fg: 'var(--text-3)', label: '⚪ Not run yet' },
+      running:  { bg: 'rgba(74,123,214,0.10)',  bd: 'rgba(74,123,214,0.35)',  fg: '#5a8def', label: 'Running' },
+      ok:       { bg: 'rgba(55,179,74,0.10)',    bd: 'rgba(55,179,74,0.35)',   fg: '#3fa64d', label: 'OK' },
+      partial:  { bg: 'rgba(240,160,64,0.10)',   bd: 'rgba(240,160,64,0.35)',  fg: '#e6a14a', label: 'Partial' },
+      error:    { bg: 'rgba(220,53,69,0.10)',    bd: 'rgba(220,53,69,0.35)',   fg: '#e25563', label: 'Error' },
+      idle:     { bg: 'var(--surface-3)',        bd: 'var(--border-default)', fg: 'var(--text-3)', label: 'Not run yet' },
     };
     var c = colors[statusKey] || colors.idle;
 
@@ -61,7 +61,7 @@ export default {
       { label: 'Last Duration',     value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.last_duration_ms != null ? s.last_duration_ms + ' ms' : '—') + '</span>' },
       { label: 'Rows This Run',     value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.last_rows_inserted || 0) + '</span>' },
       { label: 'Rows Total',        value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.rows_synced_total || 0).toLocaleString() + '</span>' },
-      { label: 'Admin Key',         value: d.adminKeyConfigured ? '<span style="color:#3fa64d">✓ configured</span>' : '<span style="color:#e25563">✗ missing</span>' },
+      { label: 'Admin Key',         value: d.adminKeyConfigured ? '<span style="color:#3fa64d">configured</span>' : '<span style="color:#e25563">missing</span>' },
     ];
 
     el.innerHTML =
@@ -117,7 +117,7 @@ export default {
         + (idx > 0 ? 'border-top:1px solid var(--border-subtle);' : '') + '">'
         + '<div>'
         +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem">'
-        +     '📂 ' + escapeHtml(r.project_name || '—') + pidPill + '</div>'
+        +     escapeHtml(r.project_name || '—') + pidPill + '</div>'
         + '</div>'
         + '<div style="font-size:.82rem;color:var(--text-2);font-family:var(--font-mono)">' + synced + '</div>'
         + '<div style="text-align:right;font-family:var(--font-mono);color:var(--text-1);font-weight:600">' + tokens.toLocaleString() + '</div>'
@@ -153,15 +153,15 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         hideModal('modal-confirm-sync-now');
-        if (!d.ok) { flash('❌ ' + t('msg.syncFailedPrefix', 'Sync failed: ') + (d.error || 'unknown'), 'error'); }
+        if (!d.ok) { flash(t('msg.syncFailedPrefix', 'Sync failed: ') + (d.error || 'unknown'), 'error', 'success'); }
         else if (d.skipped) { flash('⏭ ' + d.reason); }
         else {
-          flash('✅ ' + tf('msg.syncDone', { rows: d.rowsInserted || 0, ms: d.durationMs || 0 }, 'Sync เสร็จ · {rows} rows · {ms} ms'));
+          flash(tf('msg.syncDone', { rows: d.rowsInserted || 0, ms: d.durationMs || 0 }, 'Sync เสร็จ · {rows} rows · {ms} ms'), 'success', 'success');
         }
         self.renderSync();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('m.syncNow.btn', 'เริ่ม sync'); }
         self.renderSync();
       });

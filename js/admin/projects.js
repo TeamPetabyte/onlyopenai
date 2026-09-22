@@ -18,7 +18,7 @@ export default {
 
     if (projects.length === 0) {
       container.innerHTML = '<div class="glass-card" style="text-align:center;padding:48px 24px">'
-        + '<div style="font-size:2.5rem;margin-bottom:12px">📂</div>'
+        + '<div style="font-size:2.5rem;margin-bottom:12px"><svg class="ic sm" aria-hidden="true"><use href="#i-folder"/></svg></div>'
         + '<div style="color:var(--text-3);font-size:0.9rem">' + t('empty.noProjectsHtml', 'ยังไม่มี Project<br>กดปุ่ม <strong style="color:var(--text-3)">+ Add Project</strong> เพื่อสร้างใหม่') + '</div>'
         + '</div>';
       return;
@@ -56,16 +56,16 @@ export default {
         + 'gap:14px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid var(--border-subtle)">'
         +   '<div style="flex:1;min-width:240px">'
         +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-        +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
+        +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">' + escapeHtml(p.name) + '</div>'
         +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
-        +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
+        +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'Copied: ' + jsArg(p.id) + '\'))" '
         +         'style="font-family:var(--font-mono);font-size:.7rem;padding:3px 9px;'
         +         'background:var(--accent-soft-bg);color:var(--accent);'
         +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer">'
         +         escapeHtml(p.id) + '</span>'
         +       '<span style="font-size:.68rem;color:var(--text-2);padding:3px 10px;'
         +         'background:var(--surface-3);border:1px solid var(--border-default);'
-        +         'border-radius:20px">👥 ' + members.length + ' member' + (members.length === 1 ? '' : 's') + '</span>'
+        +         'border-radius:20px">' + members.length + ' member' + (members.length === 1 ? '' : 's') + '</span>'
         +     '</div>'
         +     '<div style="font-size:.84rem;color:var(--text-3);line-height:1.5;margin-bottom:10px">'
         +       (p.desc ? escapeHtml(p.desc) : '<span style="font-style:italic;opacity:.6">' + escapeHtml(t('lbl.noDescription', 'No description')) + '</span>')
@@ -73,20 +73,20 @@ export default {
         +     '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
         +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-        +         '📥 In <b>฿' + p.inputRate + '</b>/1K</span>'
+        +         'In <b>฿' + p.inputRate + '</b>/1K</span>'
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
         +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-        +         '📤 Out <b>฿' + p.outputRate + '</b>/1K</span>'
+        +         'Out <b>฿' + p.outputRate + '</b>/1K</span>'
         // chip Budget แยกเป็น lifetime (สะสม ไม่ลด) กับ balance ปัจจุบัน — lifetime คือตัวชี้วัด tier
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
         +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.lifetimeTopupHint', 'ยอดสะสมที่ลูกค้าเคยเติม (ไม่ลดลง)')) + '">'
-        +         '💰 Lifetime <b>฿' + (p.lifetimeAmount || 0).toFixed(2) + '</b></span>'
+        +         'Lifetime <b>฿' + (p.lifetimeAmount || 0).toFixed(2) + '</b></span>'
         +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
         +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.usableNowHint', 'ยอดคงเหลือใช้ได้ตอนนี้')) + '">'
-        +         '🏦 Balance <b>฿' + (p.balance || 0).toFixed(2) + '</b></span>'
+        +         'Balance <b>฿' + (p.balance || 0).toFixed(2) + '</b></span>'
         +       (p.creditLimit ? ('<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
                                   + 'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-                                  + '⛔ Limit/user <b>฿' + p.creditLimit + '</b></span>') : '')
+                                  + 'Limit/user <b>฿' + p.creditLimit + '</b></span>') : '')
         +     '</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:8px">'
@@ -107,10 +107,10 @@ export default {
 
       var statsGrid =
           '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'
-        +   statCard('📡', 'Requests',           totalReq.toLocaleString(),     'var(--text-1)')
-        +   statCard('🔢', 'Tokens',             totalTok.toLocaleString(),     'var(--text-1)')
-        +   statCard('💸', 'Cost Billed',        formatTHB(totalCost),          'var(--text-2)')
-        +   statCard('🪙', 'Credit Outstanding', formatTHB(totalBal),
+        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', 'Requests',           totalReq.toLocaleString(),     'var(--text-1)')
+        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-cpu"/></svg>', 'Tokens',             totalTok.toLocaleString(),     'var(--text-1)')
+        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', 'Cost Billed',        formatTHB(totalCost),          'var(--text-2)')
+        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', 'Credit Outstanding', formatTHB(totalBal),
                      totalBal > 0 ? 'var(--success-hover, #34d399)' : 'var(--text-2)')
         + '</div>';
 
@@ -148,7 +148,7 @@ export default {
             + escapeHtml(p.id) + '\')" style="margin-left:8px;padding:2px 8px;'
             + 'font-size:.7rem;background:transparent;color:#d04545;'
             + 'border:1px solid rgba(208,69,69,0.3);border-radius:4px;cursor:pointer">'
-            + '🗑️ Clear</button>'
+            + 'Clear</button>'
         : '<span style="color:#d09a3e">⚠</span> ' + escapeHtml(t('lbl.noApiKeyWarn', 'ยังไม่มี API key — chat router จะ fallback ไปใช้ global key'));
       statusEl.style.background = realKey
         ? 'rgba(92,184,92,0.08)' : 'rgba(208,154,62,0.10)';
@@ -171,14 +171,14 @@ export default {
     var apiKeyNew = apiKeyEl ? apiKeyEl.value.trim() : '';
     var errEl = document.getElementById('ep-error');
 
-    if (!name) { errEl.textContent = '❌ ' + t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
-    if (isNaN(inputRate) || isNaN(outputRate)) { errEl.textContent = '❌ ' + t('err.invalidRate', 'ค่า Rate ไม่ถูกต้อง'); return; }
+    if (!name) { errEl.textContent = t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
+    if (isNaN(inputRate) || isNaN(outputRate)) { errEl.textContent = t('err.invalidRate', 'ค่า Rate ไม่ถูกต้อง'); return; }
     // backend caps key length at 256
     if (apiKeyNew && apiKeyNew.length > 256) {
-      errEl.textContent = '❌ ' + t('err.apiKeyTooLong', 'API key ยาวเกินกำหนด (max 256 chars)'); return;
+      errEl.textContent = t('err.apiKeyTooLong', 'API key ยาวเกินกำหนด (max 256 chars)'); return;
     }
     if (apiKeyNew && !/^sk-/.test(apiKeyNew)) {
-      errEl.textContent = '⚠ ' + t('warn.apiKeyFormat', 'API key ปกติขึ้นต้นด้วย "sk-" — กรุณาตรวจสอบ'); return;
+      errEl.textContent = t('warn.apiKeyFormat', 'API key ปกติขึ้นต้นด้วย "sk-" — กรุณาตรวจสอบ'); return;
     }
 
     var self = this;
@@ -197,15 +197,15 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         hideModal('modal-edit-project');
-        flash('✅ ' + tf('msg.projectUpdated', { name: name }, 'อัปเดต Project "{name}" เรียบร้อย (saved to DB)'));
+        flash(tf('msg.projectUpdated', { name: name }, 'อัปเดต Project "{name}" เรียบร้อย (saved to DB)'), 'success', 'success');
         self.fetchProjectsFromDB().then(function () {
           self.renderProjects();
           self.refreshProjectSelects();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
+      .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
   // --- Remove user from project ---
@@ -214,7 +214,7 @@ export default {
   removeFromProject: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
+    if (!u || !u.id) { flash(t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
     var proj = u.projectId ? Auth.getProjectById(u.projectId) : null;
 
     this._pendingRemoveFromProject = { username: u.username, id: u.id };
@@ -256,7 +256,7 @@ export default {
       .then(function (res) {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
-          if (err) err.textContent = '❌ ' + msg;
+          if (err) err.textContent = msg;
           if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
           return;
         }
@@ -264,7 +264,7 @@ export default {
         try { Auth.setUserProject(p.username, null); } catch (_) {}
         self._pendingRemoveFromProject = null;
         hideModal('modal-confirm-remove-user-from-project');
-        flash('✅ ' + tf('msg.ownerMoved', { username: p.username }, 'ย้าย @{username} ออกจาก project แล้ว'));
+        flash(tf('msg.ownerMoved', { username: p.username }, 'ย้าย @{username} ออกจาก project แล้ว'), 'success', 'success');
         // re-fetch users so member lists are accurate
         self.fetchUsersFromDB().then(function (users) {
           self._cachedDBUsers = users;
@@ -272,7 +272,7 @@ export default {
         });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('m.removeUser.confirm', 'ยืนยันย้ายออก'); }
       });
   },
@@ -282,7 +282,7 @@ export default {
 
   deleteProject: function (projectId) {
     var p = Auth.getProjectById(projectId);
-    if (!p) { flash('❌ ' + t('err.projectNotFound', 'ไม่พบ project'), 'error'); return; }
+    if (!p) { flash(t('err.projectNotFound', 'ไม่พบ project'), 'error'); return; }
 
     var members = (this._cachedDBUsers || []).filter(function (u) { return u.projectId === projectId; });
     var credits = (typeof p.credits === 'number' ? p.credits : 0);
@@ -298,7 +298,7 @@ export default {
     var warn = document.getElementById('cdp-warning');
     if (warn) {
       warn.innerHTML = members.length > 0
-        ? '⚠ ' + tf('confirm.removeMembersWarn', { n: members.length }, 'มีสมาชิก {n} คนใน project นี้ — ทุกคนจะถูกย้ายออก (ไม่ได้ถูกลบ)<br>Balance ของ project จะถูกล้าง')
+        ? tf('confirm.removeMembersWarn', { n: members.length }, 'มีสมาชิก {n} คนใน project นี้ — ทุกคนจะถูกย้ายออก (ไม่ได้ถูกลบ)<br>Balance ของ project จะถูกล้าง')
         : t('confirm.deleteProjectPlain', 'Project จะถูก soft-delete — Balance ของ project จะถูกล้าง');
     }
 
@@ -332,14 +332,14 @@ export default {
       .then(function (res) {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
-          if (err) err.textContent = '❌ ' + msg;
+          if (err) err.textContent = msg;
           if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
           return;
         }
         try { Auth.deleteProject(p.id); } catch (_) {}
         self._pendingDeleteProject = null;
         hideModal('modal-confirm-delete-project');
-        flash('✅ ' + tf('msg.projectDeleted', { name: p.name }, 'ลบ Project "{name}" แล้ว'));
+        flash(tf('msg.projectDeleted', { name: p.name }, 'ลบ Project "{name}" แล้ว'), 'success', 'success');
         // refresh projects + users (members are now unassigned)
         Promise.all([self.fetchProjectsFromDB(), self.fetchUsersFromDB()])
           .then(function (results) {
@@ -349,7 +349,7 @@ export default {
           });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
       });
   },
@@ -369,7 +369,7 @@ export default {
     var desc = document.getElementById('ap-desc').value.trim();
     var errEl = document.getElementById('ap-error');
 
-    if (!name) { errEl.textContent = '❌ ' + t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
+    if (!name) { errEl.textContent = t('err.enterProjectName', 'กรุณาใส่ชื่อ Project'); return; }
 
     var self = this;
     fetch(BASE + '/api/projects', {
@@ -379,21 +379,21 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         hideModal('modal-add-project');
-        // แถวลง DB เสมอ; ถ้า link OpenAI ล้มให้เตือน ไม่ ✅ เงียบ
+        // แถวลง DB เสมอ; ถ้า link OpenAI ล้มให้เตือน ไม่ เงียบ
         if (d.openai && d.openai.synced === false) {
-          flash('⚠ ' + tf('msg.projectCreatedOpenAiFail', { name: name, err: d.openai.error || 'unknown' }, 'สร้าง Project "{name}" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: {err} — ยังไม่มี OpenAI project id'), 'error');
+          flash(tf('msg.projectCreatedOpenAiFail', { name: name, err: d.openai.error || 'unknown' }, 'สร้าง Project "{name}" ใน DB แล้ว แต่เชื่อม OpenAI ไม่สำเร็จ: {err} — ยังไม่มี OpenAI project id'), 'error', 'success');
         } else {
-          flash('✅ ' + tf('msg.projectCreated', { name: name }, 'สร้าง Project "{name}" เรียบร้อย')
-            + (d.openai && d.openai.project_id ? ' · OpenAI: ' + d.openai.project_id : ''));
+          flash(tf('msg.projectCreated', { name: name }, 'สร้าง Project "{name}" เรียบร้อย', 'success')
+            + (d.openai && d.openai.project_id ? ' · OpenAI: ' + d.openai.project_id : ''), 'success');
         }
         self.fetchProjectsFromDB().then(function () {
           self.renderProjects();
           self.refreshProjectSelects();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
+      .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 
   refreshProjectSelects: function () {

@@ -40,12 +40,12 @@ export default {
       };
       var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
       document.getElementById('overview-mini').innerHTML =
-          miniCard('👥', TT('dash.users','Users'),           dbUsers.length.toLocaleString(),  projects.length + ' projects')
-        + miniCard('🔢', TT('dash.totalTokens','Total Tokens'), totalTokens.toLocaleString(),  TT('dash.tokensSub','สะสมทุก user'))
-        + miniCard('💸', TT('dash.totalSpend','Total Spend'), formatMoney(totalSpendAll),       TT('dash.spendSub','ใช้จ่ายสะสมทุก user'))
+          miniCard('<svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>', TT('dash.users','Users'),           dbUsers.length.toLocaleString(),  projects.length + ' projects')
+        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-cpu"/></svg>', TT('dash.totalTokens','Total Tokens'), totalTokens.toLocaleString(),  TT('dash.tokensSub','สะสมทุก user'))
+        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', TT('dash.totalSpend','Total Spend'), formatMoney(totalSpendAll),       TT('dash.spendSub','ใช้จ่ายสะสมทุก user'))
         // lifetime top-up never decreases; balance is what is redeemable now
-        + miniCard('💰', TT('dash.lifetimeTopup','Lifetime Top-up'), formatMoney(totalTopUpAll), TT('dash.topupSub','ยอดสะสมที่ลูกค้าเคยเติม'))
-        + miniCard('🏦', TT('dash.projectBalance','Project Balance'), formatMoney(totalBalanceAll), TT('dash.balanceSub','ยอดคงเหลือกองกลางตอนนี้'));
+        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('dash.lifetimeTopup','Lifetime Top-up'), formatMoney(totalTopUpAll), TT('dash.topupSub','ยอดสะสมที่ลูกค้าเคยเติม'))
+        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('dash.projectBalance','Project Balance'), formatMoney(totalBalanceAll), TT('dash.balanceSub','ยอดคงเหลือกองกลางตอนนี้'));
 
       var saved = self._selectedProject || (projects[0] && projects[0].id) || null;
       // project picker เป็น dropdown custom — hidden input คงค่าให้ selectProject
@@ -54,7 +54,7 @@ export default {
         selectHtml = '<div style="color:var(--text-3);font-size:0.85rem;padding:12px 0">' + t('empty.noProjectShort', 'ยังไม่มี Project') + '</div>';
       } else {
         var savedProj = projects.find(function (x) { return String(x.id) === String(saved); });
-        var label = savedProj ? ('📂 ' + savedProj.name) : t('dd.selectProject', '— เลือก Project —');
+        var label = savedProj ? (savedProj.name) : t('dd.selectProject', '— เลือก Project —');
         selectHtml =
             '<input type="hidden" id="project-selector" value="' + escapeHtml(String(saved || '')) + '" />'
           + '<button type="button" class="dd-trigger" id="overview-project-trigger" '
@@ -245,7 +245,7 @@ export default {
           return;
         }
         if (d.rows.length === 0) {
-          wrap.innerHTML = '<div class="tx-empty">📭 ไม่มี transaction ในช่วงนี้</div>';
+          wrap.innerHTML = '<div class="tx-empty">ไม่มี transaction ในช่วงนี้</div>';
           return;
         }
         self._txLastData = d;
@@ -380,8 +380,8 @@ export default {
       + 'border-radius:14px 14px 0 0;border-bottom:none">'
       +   '<div style="flex:1;min-width:240px">'
       +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
-      +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
-      +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
+      +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">' + escapeHtml(p.name) + '</div>'
+      +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'Copied: ' + jsArg(p.id) + '\'))" '
       +         'style="font-family:var(--font-mono);font-size:.72rem;padding:3px 9px;'
       +         'background:var(--accent-soft-bg);color:var(--accent);'
       +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer;'
@@ -393,10 +393,10 @@ export default {
       +     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
       +       '<span style="font-size:.72rem;padding:4px 10px;background:var(--surface-3);'
       +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-      +         '📥 In  <b>฿' + p.inputRate + '</b>/1K</span>'
+      +         'In  <b>฿' + p.inputRate + '</b>/1K</span>'
       +       '<span style="font-size:.72rem;padding:4px 10px;background:var(--surface-3);'
       +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-      +         '📤 Out  <b>฿' + p.outputRate + '</b>/1K</span>'
+      +         'Out  <b>฿' + p.outputRate + '</b>/1K</span>'
       +     '</div>'
       +   '</div>'
       +   '<button class="btn-action btn-primary-sm" style="padding:10px 22px;font-size:.88rem;font-weight:700"'
@@ -415,7 +415,7 @@ export default {
       leftHtml = '<span style="font-size:1.25rem;font-weight:700;color:var(--text-3)">💤 '
                + TT('proj.noCredit','ยังไม่มีเครดิต') + '</span>';
       barPct = 0; barColor = 'var(--text-3)'; poolNumColor = 'var(--text-3)';
-      footHtml = '💡 ' + TT('proj.topupHint','กด "+ เติมเงิน Project" เพื่อเริ่มใช้งาน');
+      footHtml = TT('proj.topupHint','กด "+ เติมเงิน Project" เพื่อเริ่มใช้งาน');
     } else if (isEmpty) {
       // funded before but spent everything — clear "depleted" warning
       leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:var(--font-mono)">0%</span>'
@@ -466,9 +466,9 @@ export default {
         '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:14px;'
       + 'background:var(--surface-2);border:1px solid var(--border-default);'
       + 'border-radius:0 0 14px 14px;border-top:1px dashed var(--border-subtle)">'
-      +   statCard('💰', TT('proj.lifetimeTopup','Lifetime Top-up'), formatTHB(budget.totalTopUp), 'var(--text-1)',
+      +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('proj.lifetimeTopup','Lifetime Top-up'), formatTHB(budget.totalTopUp), 'var(--text-1)',
                    TT('proj.topupSub','ยอดเติมสะสม'))
-      +   statCard('💸', TT('proj.spendCumulative','ใช้จ่ายสะสม'), formatTHB(budget.costBilled), 'var(--text-2)',
+      +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', TT('proj.spendCumulative','ใช้จ่ายสะสม'), formatTHB(budget.costBilled), 'var(--text-2)',
                    budget.totalTopUp > 0 ? usedPct.toFixed(1) + '% ' + TT('proj.ofTopup','ของยอดเติม') : '—')
       + '</div>';
 
@@ -485,7 +485,7 @@ export default {
     if (users.length === 0) {
       membersBody = '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.82rem;'
         + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-        + '👥 ' + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>';
+        + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>';
     } else {
       // แถวสมาชิก read-only — แก้ได้ที่หน้า Users/Cap เท่านั้น
       var cell = function (label, valueHtml, w) {
@@ -559,7 +559,7 @@ export default {
     var pid = projectId || (projects[0] && projects[0].id) || '';
     document.getElementById('tu-proj-id').value = pid;
     var p = projects.find(function (x) { return String(x.id) === String(pid); });
-    document.getElementById('tu-proj-label').textContent = p ? ('📂 ' + p.name) : t('dd.selectProject', '— Select Project —');
+    document.getElementById('tu-proj-label').textContent = p ? (p.name) : t('dd.selectProject', '— Select Project —');
 
     document.getElementById('tu-amount').value = '';
     var noteEl = document.getElementById('tu-note'); if (noteEl) noteEl.value = '';
@@ -572,14 +572,14 @@ export default {
     var projects = (this._cachedDBProjects || []).slice()
       .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     this.openDropdown('tu-proj-trigger', {
-      items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
+      items: projects.map(function (p) { return { value: p.id, label: p.name }; }),
       selected: document.getElementById('tu-proj-id').value || '',
       searchable: true,
-      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      placeholder: t('dd.searchProject', 'ค้นหา project...'),
       onPick: function (value, item) {
         document.getElementById('tu-proj-id').value = value || '';
         document.getElementById('tu-proj-label').textContent =
-          item ? ('📂 ' + item.label) : t('dd.selectProject', '— Select Project —');
+          item ? (item.label) : t('dd.selectProject', '— Select Project —');
       },
     });
   },
@@ -590,7 +590,7 @@ export default {
     var noteEl = document.getElementById('tu-note');
     var note   = noteEl ? noteEl.value.trim() : '';
     var errEl  = document.getElementById('tu-error');
-    if (isNaN(amount) || amount <= 0) { errEl.textContent = '❌ ' + t('err.invalidAmount', 'กรุณาใส่จำนวนเงินที่ถูกต้อง'); return; }
+    if (isNaN(amount) || amount <= 0) { errEl.textContent = t('err.invalidAmount', 'กรุณาใส่จำนวนเงินที่ถูกต้อง'); return; }
     var self = this;
     // optional note → tbl_topup_project.note
     var body = { amount: amount };
@@ -602,11 +602,11 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ ' + t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = t('err.dbRejected', 'DB ปฏิเสธ: ') + (d.error || 'unknown'); return; }
         // Mirror to localStorage for legacy code paths
         Auth.topupProject(projectId, amount);
         hideModal('modal-topup');
-        flash('✅ ' + tf('msg.topupSuccess', { amt: formatTHB(amount), total: formatTHB(parseFloat(d.newBalance)) }, 'เติมเงิน {amt} เข้า project แล้ว (DB total {total})'));
+        flash(tf('msg.topupSuccess', { amt: formatTHB(amount), total: formatTHB(parseFloat(d.newBalance)) }, 'เติมเงิน {amt} เข้า project แล้ว (DB total {total})'), 'success', 'success');
         // Refresh from DB across all relevant views
         self.fetchProjectsFromDB().then(function () {
           if (self.currentView === 'projects')      self.renderProjectDetail(projectId);
@@ -615,6 +615,6 @@ export default {
           else                                      self.renderOverview();
         });
       })
-      .catch(function (e) { errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
+      .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; });
   },
 };

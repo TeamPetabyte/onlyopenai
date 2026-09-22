@@ -34,9 +34,9 @@ export default {
     var hasError = status && status.error;
 
     var statusPill = hasError
-      ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(220,53,69,0.10);color:#e25563;border:1px solid rgba(220,53,69,0.35);font-size:.82rem;font-weight:600">🔴 Load error</span>'
+      ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(220,53,69,0.10);color:#e25563;border:1px solid rgba(220,53,69,0.35);font-size:.82rem;font-weight:600">Load error</span>'
       : configuredCount === totalCount
-        ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.35);font-size:.82rem;font-weight:600">🟢 All configured</span>'
+        ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.35);font-size:.82rem;font-weight:600">All configured</span>'
         : '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.82rem;font-weight:600">🟡 ' + configuredCount + '/' + totalCount + ' configured</span>';
 
     var blocks = [
@@ -69,14 +69,14 @@ export default {
     if (!el) return;
     if (!skills || skills.length === 0) {
       el.innerHTML = '<div class="glass-card" style="padding:32px;text-align:center;color:var(--text-3)">'
-        + t('empty.noSkillsYetHtml', '🧩 ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b>') + '</div>';
+        + t('empty.noSkillsYetHtml', 'ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b>') + '</div>';
       return;
     }
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     var cards = skills.map(function (s) {
       var statusBadge = s.isPlaceholder
-        ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">⚠ Placeholder</span>'
-        : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.30);font-size:.7rem;font-weight:600">✓ Configured</span>';
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">Placeholder</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.30);font-size:.7rem;font-weight:600">Configured</span>';
       var openaiPill = s.openaiPromptId
         ? '<span style="font-family:var(--font-mono);font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
         : '<span style="color:var(--text-3);font-size:.72rem;font-style:italic">no openai ref</span>';
@@ -102,7 +102,7 @@ export default {
         + '</div>'
         + '<details style="margin-top:10px">'
         +   '<summary style="cursor:pointer;font-size:.74rem;color:var(--text-3);font-weight:600;user-select:none">'
-        +     '📄 Content preview (' + s.contentLength + ' chars)</summary>'
+        +     'Content preview (' + s.contentLength + ' chars)</summary>'
         +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
         +     escapeHtml(s.contentPreview) + '</pre>'
         + '</details>'
@@ -118,15 +118,15 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ ' + t('msg.reloadFailedPrefix', 'Reload failed: ') + (d.error || 'unknown'), 'error'); return; }
+        if (!d.ok) { flash(t('msg.reloadFailedPrefix', 'Reload failed: ') + (d.error || 'unknown'), 'error', 'success'); return; }
         if (d.status && d.status.error) {
-          flash('⚠ ' + t('msg.reloadedWithErrorPrefix', 'Reloaded แต่มี error: ') + d.status.error, 'error');
+          flash(t('msg.reloadedWithErrorPrefix', 'Reloaded แต่มี error: ') + d.status.error, 'error', 'success');
         } else {
-          flash('✅ ' + tf('msg.reloadSuccess', { count: (d.status && d.status.count) || 0 }, 'Reload เรียบร้อย · {count} skills'));
+          flash(tf('msg.reloadSuccess', { count: (d.status && d.status.count) || 0 }, 'Reload เรียบร้อย · {count} skills'), 'success', 'success');
         }
         self.renderSkills();
       })
-      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
+      .catch(function (e) { flash(t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
   // add / edit / delete skill prompts from the UI
@@ -149,8 +149,8 @@ export default {
 
   // --- Prompt Lab: test a prompt without touching the budget gate or real chat history ---
 
-  // Entry point from the Skill Prompts cards: 🧪 opens the lab on that skill,
-  // 📋 additionally scrolls down to the history block.
+  // Entry point from the Skill Prompts cards: opens the lab on that skill,
+  // additionally scrolls down to the history block.
   openPromptLab: function (skillId, showHistory) {
     if (skillId) this._labSkillId = skillId;
     this.navigate('lab');
@@ -173,7 +173,7 @@ export default {
         if (!el) return;
         // Auto is the default: the chat router picks the prompt.
         var want = self._labSkillId || 'auto';
-        el.innerHTML = '<option value="auto">' + escapeHtml(t('lab.autoSkill', '🤖 Auto — AI เลือก prompt เอง')) + '</option>'
+        el.innerHTML = '<option value="auto">' + escapeHtml(t('lab.autoSkill', 'Auto — AI เลือก prompt เอง')) + '</option>'
           + sel.map(function (s) {
           return '<option value="' + escapeHtml(s.id) + '">' + escapeHtml(s.label || s.id) + '</option>';
         }).join('');
@@ -528,7 +528,7 @@ export default {
         + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
         + escapeHtml(text || '') + '</pre>';
     };
-    // ⭐ promote/demote into the exam set; the backend enforces verdict + golden reference, this only hints.
+    // promote/demote into the exam set; the backend enforces verdict + golden reference, this only hints.
     var canStar = log.verdict === 'correct' || (log.corrected_answer || '').trim();
     var starBtn = log.verdict
       ? '<button type="button" class="btn-action" style="padding:4px 12px;font-size:.75rem'
@@ -556,7 +556,7 @@ export default {
     det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   },
 
-  // ⭐ toggle: backend validates, then re-render the detail and the list.
+  // toggle: backend validates, then re-render the detail and the list.
   toggleEvalCase: function (logId, on) {
     var self = this;
     fetch(BASE + '/api/skill-test-logs/' + logId + '/eval-case', {
@@ -603,7 +603,7 @@ export default {
   onEvalSkillChange: function () {
     var el = document.getElementById('ev-skill');
     if (el && el.value) this._evalSkillId = el.value;
-    // ⭐ ready-count for the selected skill (from the test-log stats).
+    // ready-count for the selected skill (from the test-log stats).
     fetch(BASE + '/api/skill-test-logs?skill=' + encodeURIComponent(this._evalSkillId) + '&limit=1',
       { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
@@ -858,7 +858,7 @@ export default {
   },
 
   openAddSkill: function () {
-    document.getElementById('es-title').textContent = t('modal.addSkill.title', '➕ เพิ่ม Skill ใหม่');
+    document.getElementById('es-title').textContent = t('modal.addSkill.title', 'เพิ่ม Skill ใหม่');
     document.getElementById('es-mode').value = 'add';
     document.getElementById('es-id').readOnly = false;
     this._fillSkillModal({});
@@ -873,8 +873,8 @@ export default {
     fetch(BASE + '/api/skills/' + encodeURIComponent(id), { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ ' + t('msg.loadSkillFailedPrefix', 'โหลด skill ไม่สำเร็จ: ') + (d.error || 'unknown'), 'error'); return; }
-        document.getElementById('es-title').textContent = t('modal.editSkill.title', '✏️ แก้ไข Skill');
+        if (!d.ok) { flash(t('msg.loadSkillFailedPrefix', 'โหลด skill ไม่สำเร็จ: ') + (d.error || 'unknown'), 'error', 'success'); return; }
+        document.getElementById('es-title').textContent = t('modal.editSkill.title', 'แก้ไข Skill');
         document.getElementById('es-mode').value = 'edit';
         document.getElementById('es-id').readOnly = true;  // id is the key — fixed on edit
         self._fillSkillModal(d.skill);
@@ -882,7 +882,7 @@ export default {
         var ec = document.getElementById('es-content');
         if (ec && !ec._cc) { ec._cc = true; ec.addEventListener('input', self._updateSkillCharCount); }
       })
-      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
+      .catch(function (e) { flash(t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 
   submitEditSkill: function () {
@@ -912,7 +912,7 @@ export default {
       .then(function (d) {
         if (!d.ok) { errEl.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); return; }
         hideModal('modal-edit-skill');
-        flash(d.created ? '✅ ' + t('msg.skillAdded', 'เพิ่ม skill เรียบร้อย (มีผลทันที)') : '✅ ' + t('msg.skillSaved', 'บันทึก skill เรียบร้อย (มีผลทันที)'));
+        flash(d.created ? t('msg.skillAdded', 'เพิ่ม skill เรียบร้อย (มีผลทันที)') : t('msg.skillSaved', 'บันทึก skill เรียบร้อย (มีผลทันที)'), 'success');
         self.renderSkills();
       })
       .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
@@ -927,10 +927,10 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { flash('❌ ' + t('msg.deleteSkillFailedPrefix', 'ลบไม่สำเร็จ: ') + (d.error || 'unknown'), 'error'); return; }
-        flash(tf('msg.skillDeleted', { id: id }, '🗑 ลบ skill "{id}" เรียบร้อย'));
+        if (!d.ok) { flash(t('msg.deleteSkillFailedPrefix', 'ลบไม่สำเร็จ: ') + (d.error || 'unknown'), 'error', 'success'); return; }
+        flash(tf('msg.skillDeleted', { id: id }, 'ลบ skill "{id}" เรียบร้อย'), 'success');
         self.renderSkills();
       })
-      .catch(function (e) { flash('❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
+      .catch(function (e) { flash(t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message, 'error'); });
   },
 };

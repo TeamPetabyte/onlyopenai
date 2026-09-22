@@ -18,7 +18,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!Auth.check(['admin', 'trainer'])) return;
   var session = Auth.getSession();
   var el = document.getElementById('admin-display-name');
-  if (el) el.textContent = session.displayName || session.username;
+  var who = session.displayName || session.username || 'Admin';
+  if (el) el.textContent = who;
+  var av = document.getElementById('admin-avatar');
+  if (av) av.textContent = who.charAt(0).toUpperCase();
   // Training tabs are trainer-only. Hiding is UX; the real gate is requireTrainer on the backend.
   var badge = document.getElementById('admin-role-badge');
   if (badge && session.role === 'trainer') {
@@ -28,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function () {
     badge.style.borderColor = 'rgba(55,179,74,0.35)';
   }
   if (session.role !== 'trainer') {
-    ['nav-skills', 'nav-lab', 'nav-evals'].forEach(function (id) {
+    ['nav-group-trainer', 'nav-skills', 'nav-lab', 'nav-evals'].forEach(function (id) {
       var n = document.getElementById(id);
       if (n) n.style.display = 'none';
     });

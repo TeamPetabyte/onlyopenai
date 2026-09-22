@@ -28,7 +28,7 @@ export default {
     var onPick    = (opts && opts.onPick) || function () {};
     var searchable= !!(opts && opts.searchable);
     var allowEmpty= opts && opts.allowEmpty;
-    var placeholder = (opts && opts.placeholder) || '🔎 Search...';
+    var placeholder = (opts && opts.placeholder) || 'Search...';
 
     // Position under the trigger.
     var rect = trigger.getBoundingClientRect();
@@ -135,20 +135,20 @@ export default {
 
   // Action-Log filters (generic dropdown)
   _actionFilterTypeItems: [
-    { value: 'create_user',          label: 'สร้าง User',          emoji: '➕' },
-    { value: 'update_user',          label: 'แก้ไข User',          emoji: '✏️' },
-    { value: 'delete_user',          label: 'ลบ User',              emoji: '🗑️' },
-    { value: 'update_balance',       label: 'แก้ยอดเงิน',          emoji: '💰' },
-    { value: 'admin_reset_password', label: 'รีเซ็ตรหัสผ่าน',     emoji: '🔑' },
-    { value: 'change_own_password',  label: 'เปลี่ยนรหัสตัวเอง', emoji: '🔑' },
-    { value: 'create_project',       label: 'สร้าง Project',       emoji: '📁' },
-    { value: 'update_project',       label: 'แก้ไข Project',       emoji: '📝' },
-    { value: 'delete_project',       label: 'ลบ Project',           emoji: '🗂️' },
-    { value: 'topup_project',        label: 'เติมเงิน Project',   emoji: '💸' },
+    { value: 'create_user',          label: 'สร้าง User' },
+    { value: 'update_user',          label: 'แก้ไข User' },
+    { value: 'delete_user',          label: 'ลบ User' },
+    { value: 'update_balance',       label: 'แก้ยอดเงิน' },
+    { value: 'admin_reset_password', label: 'รีเซ็ตรหัสผ่าน' },
+    { value: 'change_own_password',  label: 'เปลี่ยนรหัสตัวเอง' },
+    { value: 'create_project',       label: 'สร้าง Project' },
+    { value: 'update_project',       label: 'แก้ไข Project' },
+    { value: 'delete_project',       label: 'ลบ Project' },
+    { value: 'topup_project',        label: 'เติมเงิน Project' },
   ],
   _actionFilterTargetItems: [
-    { value: 'user',    label: 'User',    emoji: '👤' },
-    { value: 'project', label: 'Project', emoji: '📁' },
+    { value: 'user',    label: 'User' },
+    { value: 'project', label: 'Project' },
   ],
 
   openActionFilterTypeDropdown: function (ev) {
@@ -160,12 +160,12 @@ export default {
       }),
       selected: document.getElementById('action-log-filter-type').value || '',
       searchable: true,
-      placeholder: t('dd.searchAction', '🔎 ค้นหา action...'),
-      allowEmpty: { label: t('filter.allAction', '🔎 ทุก Action') },
+      placeholder: t('dd.searchAction', 'ค้นหา action...'),
+      allowEmpty: { label: t('filter.allAction', 'ทุก Action') },
       onPick: function (value, item) {
         document.getElementById('action-log-filter-type').value = value || '';
         document.getElementById('action-log-filter-type-label').textContent =
-          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : t('filter.allAction', '🔎 ทุก Action');
+          item && !item._all ? ((item.emoji ? item.emoji + ' ' : '') + item.label) : t('filter.allAction', 'ทุก Action');
         self.renderActionLog();
       },
     });
@@ -194,15 +194,15 @@ export default {
     var projects = (this._cachedDBProjects || []).slice()
       .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     this.openDropdown('overview-project-trigger', {
-      items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
+      items: projects.map(function (p) { return { value: p.id, label: p.name }; }),
       selected: this._selectedProject || (projects[0] && projects[0].id) || '',
       searchable: true,
-      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      placeholder: t('dd.searchProject', 'ค้นหา project...'),
       onPick: function (value, item) {
         var hidden = document.getElementById('project-selector');
         if (hidden) hidden.value = value || '';
         var label = document.getElementById('overview-project-label');
-        if (label) label.textContent = item ? ('📂 ' + item.label) : t('dd.selectProject', '— เลือก Project —');
+        if (label) label.textContent = item ? (item.label) : t('dd.selectProject', '— เลือก Project —');
         self.selectProject(value);
       },
     });
@@ -215,10 +215,10 @@ export default {
     var projects = (this._cachedDBProjects || []).slice()
       .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     this.openDropdown('usage-filter-trigger', {
-      items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
+      items: projects.map(function (p) { return { value: p.id, label: p.name }; }),
       selected:    this._usageProjectFilter || '',
       searchable:  true,
-      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      placeholder: t('dd.searchProject', 'ค้นหา project...'),
       allowEmpty:  { label: t('filter.allProject', '— ทุก Project —') },
       onPick: function (value) { self.setUsageProjectFilter(value || ''); },
     });
@@ -243,7 +243,7 @@ export default {
       if (labelEl) {
         if (self._usageProjectFilter) {
           var p = projects.find(function (x) { return String(x.id) === String(self._usageProjectFilter); });
-          labelEl.textContent = p ? '📂 ' + p.name : t('filter.allProject', '— ทุก Project —');
+          labelEl.textContent = p ? p.name : t('filter.allProject', '— ทุก Project —');
         } else {
           labelEl.textContent = t('filter.allProject', '— ทุก Project —');
         }
@@ -274,30 +274,30 @@ export default {
             +   'background:linear-gradient(135deg,rgba(99,102,241,0.10),rgba(168,85,247,0.06));'
             +   'border:1px solid rgba(99,102,241,0.25);'
             +   'display:flex;align-items:center;gap:18px;flex-wrap:wrap">'
-            +   '<div style="font-size:1.5rem">📂</div>'
+            +   '<div style="font-size:1.5rem"><svg class="ic sm" aria-hidden="true"><use href="#i-folder"/></svg></div>'
             +   '<div style="flex:1;min-width:160px">'
             +     '<div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">PROJECT</div>'
             +     '<div style="font-weight:700;color:var(--text-1);font-size:1.05rem">' + escapeHtml(selectedProj.name) + '</div>'
             +     (selectedProj.desc ? '<div style="font-size:.78rem;color:var(--text-3);margin-top:2px">' + escapeHtml(selectedProj.desc) + '</div>' : '')
             +   '</div>'
             +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
-            +     '<div style="font-size:.7rem;color:var(--text-3)">👥 USERS</div>'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">USERS</div>'
             +     '<div style="font-weight:700;color:var(--accent);font-size:1.4rem">' + users.length + '</div>'
             +   '</div>'
             +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
-            +     '<div style="font-size:.7rem;color:var(--text-3)">📡 REQUESTS</div>'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">REQUESTS</div>'
             +     '<div style="font-weight:700;color:var(--text-1);font-size:1.4rem">'
             +       users.reduce(function (s, u) { return s + u.history.length; }, 0)
             +     '</div>'
             +   '</div>'
             +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
-            +     '<div style="font-size:.7rem;color:var(--text-3)">🔢 TOKENS</div>'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">TOKENS</div>'
             +     '<div style="font-weight:700;color:var(--text-1);font-size:1.4rem">'
             +       (projTokens >= 1000 ? (projTokens / 1000).toFixed(1) + 'K' : projTokens)
             +     '</div>'
             +   '</div>'
             +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
-            +     '<div style="font-size:.7rem;color:var(--text-3)">💸 SPENT</div>'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">SPENT</div>'
             +     '<div style="font-weight:700;color:var(--accent);font-size:1.4rem">' + formatTHB(projSpent) + '</div>'
             +   '</div>'
             + '</div>';
@@ -328,19 +328,19 @@ export default {
 
       if (grid) {
         grid.innerHTML =
-          '<div class="mini-card"><div class="mini-card-label">📡 Total Requests</div>' +
+          '<div class="mini-card"><div class="mini-card-label">Total Requests</div>' +
           '<div class="mini-card-value">' + totalRequests.toLocaleString() + '</div>' +
           '<div class="mini-card-sub">' + (selectedProj ? tf('lbl.inProject', { project: selectedProj.name }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน')) + '</div></div>' +
 
-          '<div class="mini-card"><div class="mini-card-label">🔢 Total Tokens</div>' +
+          '<div class="mini-card"><div class="mini-card-label">Total Tokens</div>' +
           '<div class="mini-card-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
           '<div class="mini-card-sub">input + output tokens</div></div>' +
 
-          '<div class="mini-card"><div class="mini-card-label">💸 Total Spent</div>' +
+          '<div class="mini-card"><div class="mini-card-label">Total Spent</div>' +
           '<div class="mini-card-value" style="color:var(--accent)">' + formatTHB(totalCost) + '</div>' +
           '<div class="mini-card-sub">' + t('lbl.spentAlready', 'เงินที่ถูกหักไปแล้ว') + '</div></div>' +
 
-          '<div class="mini-card"><div class="mini-card-label">👥 Active Users</div>' +
+          '<div class="mini-card"><div class="mini-card-label">Active Users</div>' +
           '<div class="mini-card-value">' + users.filter(function (u) { return u.history.length > 0; }).length + ' / ' + users.length + '</div>' +
           '<div class="mini-card-sub">' + t('lbl.hasUsageHistory', 'มีประวัติการใช้งาน') + '</div></div>';
       }
@@ -397,8 +397,8 @@ export default {
           '<div class="usage-user-card" id="ucard-' + idx + '">' +
           '<div class="usage-user-header" onclick="admin.toggleUsageDetail(' + idx + ')">' +
           '<div>' +
-          '<div class="usage-user-name">👤 ' + escapeHtml(u.displayName || u.username || '') + '</div>' +
-          '<div class="usage-user-meta">' + escapeHtml(u.username || '') + (proj ? ' · 📂 ' + escapeHtml(proj.name || '') : '') + '</div>' +
+          '<div class="usage-user-name">' + escapeHtml(u.displayName || u.username || '') + '</div>' +
+          '<div class="usage-user-meta">' + escapeHtml(u.username || '') + (proj ? ' · ' + escapeHtml(proj.name || '') : '') + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
           '<span style="font-family:var(--font-mono);font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
@@ -484,7 +484,7 @@ export default {
           badge.style.display = pending > 0 ? 'inline-flex' : 'none';
         }
         if (rows.length === 0) {
-          wrap.innerHTML = '<div class="qr-empty">' + t('empty.noQuotaRequests', '📭 ยังไม่มีคำขอเพิ่มโควต้า') + '</div>';
+          wrap.innerHTML = '<div class="qr-empty">' + t('empty.noQuotaRequests', 'ยังไม่มีคำขอเพิ่มโควต้า') + '</div>';
           return;
         }
         self._cachedQuota = rows;   // so the resolve modal can read details
@@ -503,8 +503,8 @@ export default {
     var actions;
     if (r.status === 'pending') {
       actions =
-        '<button class="qr-btn approve" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'approve\')">✓ Approve</button>' +
-        '<button class="qr-btn deny"    onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'deny\')">✗ Deny</button>';
+        '<button class="qr-btn approve" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'approve\')">Approve</button>' +
+        '<button class="qr-btn deny"    onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'deny\')">Deny</button>';
     } else {
       var resolver = r.resolved_by_display ? t('lbl.resolvedByPrefix', ' โดย ') + escapeHtml(r.resolved_by_display) : '';
       actions = '<span class="' + statusClass + '">' + r.status + '</span>' +
@@ -522,8 +522,8 @@ export default {
       +     '</div>'
       +     (r.reason ? '<div class="qr-reason" title="' + escapeHtml(r.reason) + '">' + escapeHtml(t('lbl.reasonPrefix', 'เหตุผล: ')) + escapeHtml(r.reason) + '</div>' : '')
       +     '<div class="qr-meta">'
-      +       '<span>📅 ' + dtStr + '</span>'
-      +       (r.project_name ? '<span>📦 ' + escapeHtml(r.project_name) + '</span>' : '')
+      +       '<span>' + dtStr + '</span>'
+      +       (r.project_name ? '<span>' + escapeHtml(r.project_name) + '</span>' : '')
       +     '</div>'
       +   '</div>'
       +   '<div class="qr-actions">' + actions + '</div>'
@@ -542,19 +542,19 @@ export default {
     var titleEl = document.getElementById('qr-resolve-title');
     var btn = document.getElementById('qr-resolve-confirm');
     if (action === 'approve') {
-      titleEl.textContent = TT('qr.approveTitle', '✓ อนุมัติคำขอเพิ่มโควต้า');
-      btn.textContent = TT('qr.btnApprove', '✓ อนุมัติ');
+      titleEl.textContent = TT('qr.approveTitle', 'อนุมัติคำขอเพิ่มโควต้า');
+      btn.textContent = TT('qr.btnApprove', 'อนุมัติ');
       btn.className = 'btn-modal-submit';
     } else {
-      titleEl.textContent = TT('qr.denyTitle', '✗ ปฏิเสธคำขอเพิ่มโควต้า');
-      btn.textContent = TT('qr.btnDeny', '✗ ปฏิเสธ');
+      titleEl.textContent = TT('qr.denyTitle', 'ปฏิเสธคำขอเพิ่มโควต้า');
+      btn.textContent = TT('qr.btnDeny', 'ปฏิเสธ');
       btn.className = 'btn-modal-danger';
     }
 
     if (row) {
       document.getElementById('qr-resolve-user').textContent = row.user_display || ('user#' + row.user_id);
       document.getElementById('qr-resolve-amount').textContent = '฿' + Number(row.requested_extra).toFixed(2);
-      document.getElementById('qr-resolve-project').textContent = row.project_name ? (' · 📦 ' + row.project_name) : '';
+      document.getElementById('qr-resolve-project').textContent = row.project_name ? (' · ' + row.project_name) : '';
       var rRow = document.getElementById('qr-resolve-reason-row');
       if (row.reason) {
         document.getElementById('qr-resolve-reason').textContent = row.reason;
@@ -581,11 +581,11 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         btn.disabled = false;
-        if (!d.ok) { errEl.textContent = '❌ ' + (d.message || d.error || 'unknown'); return; }
+        if (!d.ok) { errEl.textContent = (d.message || d.error || 'unknown'); return; }
         hideModal('modal-quota-resolve');
-        flash('✅ ' + (action === 'approve' ? t('msg.quotaApproved', 'อนุมัติคำขอแล้ว') : t('msg.quotaDenied', 'ปฏิเสธคำขอแล้ว')));
+        flash('' + (action === 'approve' ? t('msg.quotaApproved', 'อนุมัติคำขอแล้ว') : t('msg.quotaDenied', 'ปฏิเสธคำขอแล้ว')), 'success');
         self.renderQuotaRequests();
       })
-      .catch(function (e) { btn.disabled = false; errEl.textContent = '❌ ' + e.message; });
+      .catch(function (e) { btn.disabled = false; errEl.textContent = e.message; });
   },
 };

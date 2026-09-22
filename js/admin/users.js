@@ -32,7 +32,7 @@ export default {
       var filterChevron = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
       var filterBar =
           '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
-        +   '<label style="color:var(--text-3);font-size:.85rem;font-weight:600">📂 Project:</label>'
+        +   '<label style="color:var(--text-3);font-size:.85rem;font-weight:600">Project:</label>'
         +   '<span class="user-project-filter-trigger dd-trigger" onclick="admin.toggleUserProjectFilter(event)" '
         +     'style="cursor:pointer;min-width:200px;' + (hasActive ? 'border-color:var(--accent-soft-border);color:var(--accent);' : '') + '">'
         +     '<span class="dd-trigger-label">' + escapeHtml(filterLabel) + '</span>'
@@ -49,7 +49,7 @@ export default {
         if (tableEl) tableEl.innerHTML = filterBar
           + '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.85rem;'
           + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-          + '👤 ' + (hasActive ? t('empty.noUsersMatchFilter', 'ไม่พบ user ที่ตรงกับตัวกรอง') : t('empty.noUsersSystem', 'ยังไม่มี user ในระบบ'))
+          + (hasActive ? t('empty.noUsersMatchFilter', 'ไม่พบ user ที่ตรงกับตัวกรอง') : t('empty.noUsersSystem', 'ยังไม่มี user ในระบบ'))
           + '</div>';
         return;
       }
@@ -94,7 +94,7 @@ export default {
           // Project
           + '<div style="font-size:.84rem;color:var(--text-2);min-width:0;'
           +   'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-          +   (u.projectId ? '📂 ' + escapeHtml(projectName) : '<span style="opacity:.5">— No project —</span>')
+          +   (u.projectId ? escapeHtml(projectName) : '<span style="opacity:.5">— No project —</span>')
           + '</div>'
           // Created
           + '<div style="font-size:.82rem;color:var(--text-3);font-family:var(--font-mono)">' + created + '</div>'
@@ -158,7 +158,7 @@ export default {
   toggleUserStatus: function (username, ev) {
     if (ev) ev.stopPropagation();
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
+    if (!u) { flash(t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
     var current = String(u.accStatus || 'active').toLowerCase();
 
     // ไม่มีปุ่ม toggle ไป 'locked' — locked มาจาก failed-login policy เท่านั้น
@@ -180,12 +180,12 @@ export default {
     } else if (current === 'locked') {
       theme = 'info';
       next = 'active'; nextId = 1;
-      title = t('modal.unlockUser.title', '🔓 ปลดล็อก User');
+      title = t('modal.unlockUser.title', 'ปลดล็อก User');
       explain = t('modal.unlockUser.body', 'บัญชีนี้ถูก lock จาก failed login attempts<br>การยืนยันจะเคลียร์ failed-attempt counter และเปิดใช้งานต่อ');
       btnClass = 'btn-modal-info';
       btnText = t('btn.unlockAction', 'ปลดล็อก');
     } else {
-      flash('❌ unknown status: ' + current, 'error'); return;
+      flash('unknown status: ' + current, 'error'); return;
     }
 
     var boxColors = {
@@ -233,17 +233,17 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { errEl.textContent = '❌ ' + (d.error || 'update failed'); btn.disabled = false; return; }
+        if (!d.ok) { errEl.textContent = (d.error || 'update failed'); btn.disabled = false; return; }
         // update the cache so later badge clicks see the new state
         p.user.accStatus = p.next;
         p.user.accStatusId = p.nextId;
         hideModal('modal-confirm-status-toggle');
-        flash('✅ ' + tf('msg.statusChanged', { username: p.user.username, status: p.next }, '@{username} → {status}'));
+        flash(tf('msg.statusChanged', { username: p.user.username, status: p.next }, '@{username} → {status}'), 'success', 'success');
         self._pendingStatusToggle = null;
         self.renderUsers();
       })
       .catch(function (e) {
-        errEl.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         btn.disabled = false;
       });
   },
@@ -286,7 +286,7 @@ export default {
     pop.style.width = Math.max(rect.width, 260) + 'px';
 
     pop.innerHTML =
-        '<input type="text" id="user-pf-search" class="dd-search" placeholder="🔎 Search project..."/>'
+        '<input type="text" id="user-pf-search" class="dd-search" placeholder="Search project..."/>'
       + '<div id="user-pf-list" class="dd-list"></div>'
       + '<div style="display:flex;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-subtle)">'
       +   '<button onclick="admin._clearUserProjectFilter()" '
@@ -316,7 +316,7 @@ export default {
       listEl.innerHTML = items.map(function (p) {
         var sel = current.has(String(p.id));
         var divider = (p._all && items.length > 1) ? '<div class="dd-divider"></div>' : '';
-        var emoji = p._all ? '' : '📂 ';
+        var emoji = p._all ? '' : '';
         return '<div class="dd-item' + (sel ? ' dd-selected' : '') + '" '
           + 'data-pid="' + escapeHtml(String(p.id)) + '" '
           + 'onclick="admin._toggleUserPfItem(this)" '
@@ -404,7 +404,7 @@ export default {
   // --- Edit user modal ---
   openEditUser: function (username) {
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { flash('❌ ' + t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
+    if (!u) { flash(t('err.userNotFound', 'ไม่พบ user'), 'error'); return; }
 
     document.getElementById('eu-username').value = username;
     document.getElementById('eu-username-display').textContent = username;
@@ -421,7 +421,7 @@ export default {
     document.getElementById('eu-project').value = projectId;
     var projObj = projects.find(function (p) { return String(p.id) === projectId; });
     document.getElementById('eu-project-label').textContent =
-      projObj ? ('📂 ' + projObj.name) : t('dd.noProjectAssigned', '— ไม่มี Project —');
+      projObj ? (projObj.name) : t('dd.noProjectAssigned', '— ไม่มี Project —');
 
     var status = String(u.accStatus || 'active').toLowerCase();
     document.getElementById('eu-status').value = status;
@@ -439,15 +439,15 @@ export default {
     var projects = (this._cachedDBProjects || []).slice()
       .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     this.openDropdown('eu-project-trigger', {
-      items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
+      items: projects.map(function (p) { return { value: p.id, label: p.name }; }),
       selected: document.getElementById('eu-project').value || '',
       searchable: true,
-      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      placeholder: t('dd.searchProject', 'ค้นหา project...'),
       allowEmpty: { label: t('dd.noProjectAssigned', '— ไม่มี Project —') },
       onPick: function (value, item) {
         document.getElementById('eu-project').value = value || '';
         document.getElementById('eu-project-label').textContent =
-          item && !item._all ? ('📂 ' + item.label) : t('dd.noProjectAssigned', '— ไม่มี Project —');
+          item && !item._all ? (item.label) : t('dd.noProjectAssigned', '— ไม่มี Project —');
       },
     });
   },
@@ -473,7 +473,7 @@ export default {
     var self = this;
     var username = document.getElementById('eu-username').value;
     var u = (this._cachedDBUsers || []).find(function (x) { return x.username === username; });
-    if (!u) { document.getElementById('eu-error').textContent = '❌ ' + t('err.userNotFound', 'ไม่พบ user'); return; }
+    if (!u) { document.getElementById('eu-error').textContent = t('err.userNotFound', 'ไม่พบ user'); return; }
 
     // identity-only; credit and dailyCap live in Credit Management
     var name      = document.getElementById('eu-name').value.trim();
@@ -483,10 +483,10 @@ export default {
     var errEl     = document.getElementById('eu-error');
     errEl.textContent = '';
 
-    if (!name)    { errEl.textContent = '❌ ' + t('err.enterFirstname', 'กรุณากรอกชื่อ');     return; }
-    if (!surname) { errEl.textContent = '❌ ' + t('err.enterLastname', 'กรุณากรอกนามสกุล');  return; }
-    if (name.length    > 50) { errEl.textContent = '❌ ' + t('err.firstnameTooLong', 'ชื่อยาวเกินไป (สูงสุด 50)');    return; }
-    if (surname.length > 50) { errEl.textContent = '❌ ' + t('err.lastnameTooLong', 'นามสกุลยาวเกินไป (สูงสุด 50)'); return; }
+    if (!name)    { errEl.textContent = t('err.enterFirstname', 'กรุณากรอกชื่อ');     return; }
+    if (!surname) { errEl.textContent = t('err.enterLastname', 'กรุณากรอกนามสกุล');  return; }
+    if (name.length    > 50) { errEl.textContent = t('err.firstnameTooLong', 'ชื่อยาวเกินไป (สูงสุด 50)');    return; }
+    if (surname.length > 50) { errEl.textContent = t('err.lastnameTooLong', 'นามสกุลยาวเกินไป (สูงสุด 50)'); return; }
 
     var statusIdMap = { active: 1, inactive: 2, locked: 3 };
     var accStatusId = statusIdMap[status] || 1;
@@ -504,10 +504,10 @@ export default {
       .then(function (d) {
         if (!d.ok) throw new Error(d.error || 'PUT user failed');
         hideModal('modal-edit-user');
-        flash('✅ ' + tf('msg.userSaved', { username: username }, 'บันทึก user @{username} เรียบร้อย'));
+        flash(tf('msg.userSaved', { username: username }, 'บันทึก user @{username} เรียบร้อย'), 'success', 'success');
         self.renderUsers();
       })
-      .catch(function (e) { errEl.textContent = '❌ ' + (e.message || 'error'); });
+      .catch(function (e) { errEl.textContent = (e.message || 'error'); });
   },
 
   // ล้าง API key ผ่าน modal ใน-แอป — จำ projectId ไว้ให้ปุ่ม confirm
@@ -547,13 +547,13 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          if (err) err.textContent = '❌ ' + (d.error || 'clear failed');
+          if (err) err.textContent = (d.error || 'clear failed');
           if (btn) { btn.disabled = false; btn.textContent = t('m.clearKey.btn', 'ลบ API key'); }
           return;
         }
         hideModal('modal-confirm-clear-apikey');
         self._pendingClearApiKey = null;
-        flash('✅ ' + t('msg.apiKeyDeleted', 'ลบ API key เรียบร้อย'));
+        flash(t('msg.apiKeyDeleted', 'ลบ API key เรียบร้อย'), 'success', 'success');
         self.fetchProjectsFromDB().then(function () {
           if (self.currentView === 'projects') self.renderProjects();
           var openModal = document.getElementById('modal-edit-project');
@@ -563,7 +563,7 @@ export default {
         });
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('m.clearKey.btn', 'ลบ API key'); }
       });
   },
@@ -586,7 +586,7 @@ export default {
   resetPassword: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
+    if (!u || !u.id) { flash(t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
 
     this._pendingResetPw = {
       username: u.username,
@@ -604,7 +604,7 @@ export default {
     var inp = document.getElementById('rp-password');
     if (inp) { inp.value = ''; inp.type = 'password'; }
     var tog = document.getElementById('rp-toggle');
-    if (tog) tog.textContent = '👁';
+    if (tog) tog.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>';
 
     var err = document.getElementById('rp-error');
     if (err) err.textContent = '';
@@ -621,11 +621,11 @@ export default {
     if (!inp || !tog) return;
     if (inp.type === 'password') {
       inp.type = 'text';
-      tog.textContent = '🙈';
+      tog.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-eye-off"/></svg>';
       tog.setAttribute('aria-pressed', 'true');
     } else {
       inp.type = 'password';
-      tog.textContent = '👁';
+      tog.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg>';
       tog.setAttribute('aria-pressed', 'false');
     }
   },
@@ -654,7 +654,7 @@ export default {
     var pw = inp ? inp.value : '';
 
     var msg = this._validatePw(pw);
-    if (msg) { if (err) err.textContent = '❌ ' + msg; return; }
+    if (msg) { if (err) err.textContent = msg; return; }
 
     if (err) err.textContent = '';
     if (btn) { btn.disabled = true; btn.textContent = t('btn.savingEllipsis', 'กำลังบันทึก...'); }
@@ -663,7 +663,7 @@ export default {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.id === pending.id; });
     if (!u) {
-      if (err) err.textContent = '❌ ' + t('err.userNotFoundRefresh', 'ไม่พบ user (โปรด refresh แล้วลองใหม่)');
+      if (err) err.textContent = t('err.userNotFoundRefresh', 'ไม่พบ user (โปรด refresh แล้วลองใหม่)');
       if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
       return;
     }
@@ -684,16 +684,16 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          if (err) err.textContent = '❌ ' + (d.error || t('err.dbRejectedShort', 'DB ปฏิเสธ'));
+          if (err) err.textContent = (d.error || t('err.dbRejectedShort', 'DB ปฏิเสธ'));
           if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
           return;
         }
         hideModal('modal-reset-password');
         self._pendingResetPw = null;
-        flash('✅ ' + tf('msg.pwReset', { username: pending.username }, 'รีเซ็ตรหัสผ่านของ @{username} เรียบร้อย'));
+        flash(tf('msg.pwReset', { username: pending.username }, 'รีเซ็ตรหัสผ่านของ @{username} เรียบร้อย'), 'success', 'success');
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('btn.savePlain', 'บันทึก'); }
       });
   },
@@ -704,7 +704,7 @@ export default {
   deleteUser: function (username) {
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.username === username; });
-    if (!u || !u.id) { flash('❌ ' + t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
+    if (!u || !u.id) { flash(t('err.userIdNotFound', 'ไม่พบ user_id (DB row)'), 'error'); return; }
 
     this._pendingDelete = {
       username: u.username,
@@ -751,7 +751,7 @@ export default {
       .then(function (res) {
         if (!res.body || !res.body.ok) {
           var msg = (res.body && res.body.error) || ('HTTP ' + res.status);
-          if (err) err.textContent = '❌ ' + msg;
+          if (err) err.textContent = msg;
           if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
           return;
         }
@@ -759,13 +759,13 @@ export default {
         try { Auth.deleteUser(p.username); } catch (_) {}
         self._pendingDelete = null;
         hideModal('modal-confirm-delete-user');
-        flash('✅ ' + tf('msg.userDeleted', { username: p.username }, 'ลบ @{username} แล้ว'));
+        flash(tf('msg.userDeleted', { username: p.username }, 'ลบ @{username} แล้ว'), 'success', 'success');
         self.renderUsers();
         self.refreshProjectSelects();
         if (self.currentView === 'overview') self.renderOverview();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('btn.deletePermanent', 'ลบถาวร'); }
       });
   },
@@ -811,15 +811,15 @@ export default {
     var projects = (this._cachedDBProjects || []).slice()
       .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
     this.openDropdown('au-project-trigger', {
-      items: projects.map(function (p) { return { value: p.id, label: p.name, emoji: '📂' }; }),
+      items: projects.map(function (p) { return { value: p.id, label: p.name }; }),
       selected: document.getElementById('au-project').value || '',
       searchable: true,
-      placeholder: t('dd.searchProject', '🔎 ค้นหา project...'),
+      placeholder: t('dd.searchProject', 'ค้นหา project...'),
       allowEmpty: { label: t('dd.selectProject', '— เลือก Project —') },
       onPick: function (value, item) {
         document.getElementById('au-project').value = value || '';
         document.getElementById('au-project-label').textContent =
-          item && !item._all ? ('📂 ' + item.label) : t('dd.selectProject', '— เลือก Project —');
+          item && !item._all ? (item.label) : t('dd.selectProject', '— เลือก Project —');
       },
     });
   },
@@ -842,15 +842,15 @@ export default {
       ? roleEl2.value : 'user';
     var isStaff = pickedRole === 'admin' || pickedRole === 'trainer';
 
-    if (!username) { errEl.textContent = '❌ ' + t('err.enterUsername', 'กรุณากรอก Username'); return; }
-    if (!firstname || !lastname) { errEl.textContent = '❌ ' + t('err.enterNameSurname', 'กรุณากรอก Name และ Surname'); return; }
-    if (!isStaff && !projectId) { errEl.textContent = '❌ ' + t('err.selectProject', 'กรุณาเลือก Project'); return; }
-    if (password.length < 8) { errEl.textContent = '❌ ' + t('err.pwMin8', 'Password ต้องมีอย่างน้อย 8 ตัว'); return; }
-    if (!/[A-Z]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwUpper', 'Password ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว'); return; }
-    if (!/[0-9]/.test(password)) { errEl.textContent = '❌ ' + t('err.pwNumber', 'Password ต้องมีตัวเลขอย่างน้อย 1 ตัว'); return; }
-    if (password !== confirm) { errEl.textContent = '❌ ' + t('err.pwMismatch', 'Password ไม่ตรงกัน'); return; }
+    if (!username) { errEl.textContent = t('err.enterUsername', 'กรุณากรอก Username'); return; }
+    if (!firstname || !lastname) { errEl.textContent = t('err.enterNameSurname', 'กรุณากรอก Name และ Surname'); return; }
+    if (!isStaff && !projectId) { errEl.textContent = t('err.selectProject', 'กรุณาเลือก Project'); return; }
+    if (password.length < 8) { errEl.textContent = t('err.pwMin8', 'Password ต้องมีอย่างน้อย 8 ตัว'); return; }
+    if (!/[A-Z]/.test(password)) { errEl.textContent = t('err.pwUpper', 'Password ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว'); return; }
+    if (!/[0-9]/.test(password)) { errEl.textContent = t('err.pwNumber', 'Password ต้องมีตัวเลขอย่างน้อย 1 ตัว'); return; }
+    if (password !== confirm) { errEl.textContent = t('err.pwMismatch', 'Password ไม่ตรงกัน'); return; }
     if (dailyCap !== null && (!isFinite(dailyCap) || dailyCap < 0)) {
-      errEl.textContent = '❌ ' + t('err.dailyCapInvalid2', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 หรือเว้นว่าง (= ไม่จำกัด)'); return;
+      errEl.textContent = t('err.dailyCapInvalid2', 'Daily Cap ต้องเป็นตัวเลข ≥ 0 หรือเว้นว่าง (= ไม่จำกัด)'); return;
     }
 
     var self = this;
@@ -873,13 +873,13 @@ export default {
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!data.ok) { errEl.textContent = '❌ ' + (data.error || t('err.createUserFailed', 'ไม่สามารถสร้าง user ได้')); return; }
+        if (!data.ok) { errEl.textContent = (data.error || t('err.createUserFailed', 'ไม่สามารถสร้าง user ได้')); return; }
         hideModal('modal-add-user');
-        flash('✅ ' + tf('msg.userCreated', { name: displayName, username: safeUsername }, 'สร้าง user "{name}" (@{username}) เรียบร้อย'));
+        flash(tf('msg.userCreated', { name: displayName, username: safeUsername }, 'สร้าง user "{name}" (@{username}) เรียบร้อย'), 'success', 'success');
         self.renderUsers();
         self.refreshProjectSelects();
       })
-      .catch(function (e) { errEl.textContent = '❌ Server error: ' + e.message; });
+      .catch(function (e) { errEl.textContent = 'Server error: ' + e.message; });
   },
 
   // --- Password helpers ---
@@ -911,7 +911,7 @@ export default {
     if (pwEl) { pwEl.value = pw; pwEl.type = 'text'; }
     if (cfEl) { cfEl.value = pw; cfEl.type = 'text'; }
     this.checkPwStrength();
-    flash('🔑 Generated: ' + pw);
+    flash('Generated: ' + pw);
   },
 
   togglePw: function (inputId, eyeId) {
@@ -940,10 +940,10 @@ export default {
       hint.textContent = t('hint.pwPolicy', 'Must be 8 or more characters and contain at least 1 number (0-9) and 1 upper case letter (A-Z)');
     } else if (pw.length < 8 || !/[A-Z]/.test(pw) || !/[0-9]/.test(pw)) {
       hint.style.color = '#e05555';
-      hint.textContent = '❌ ' + (pw.length < 8 ? t('pw.needMin8', 'ต้องมีอย่างน้อย 8 ตัว') : !/[A-Z]/.test(pw) ? t('pw.needUpper', 'ต้องมีตัวพิมพ์ใหญ่') : t('pw.needNumber', 'ต้องมีตัวเลข'));
+      hint.textContent = (pw.length < 8 ? t('pw.needMin8', 'ต้องมีอย่างน้อย 8 ตัว') : !/[A-Z]/.test(pw) ? t('pw.needUpper', 'ต้องมีตัวพิมพ์ใหญ่') : t('pw.needNumber', 'ต้องมีตัวเลข'));
     } else {
       hint.style.color = '#4ade80';
-      hint.textContent = t('pw.strengthGood', '✅ Password strength: Good');
+      hint.textContent = t('pw.strengthGood', 'Password strength: Good');
     }
   },
 
@@ -952,12 +952,12 @@ export default {
     if (!inp || !inp.value) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(inp.value)
-        .then(function () { flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); })
-        .catch(function () { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); });
+        .then(function () { flash(t('msg.copiedClipboard', 'Copied to clipboard')); })
+        .catch(function () { flash(t('err.copyFailed', 'ไม่สามารถ copy ได้'), 'error'); }, 'error');
     } else {
       inp.type = 'text';
       inp.select();
-      try { document.execCommand('copy'); flash(t('msg.copiedClipboard', '📋 Copied to clipboard')); } catch { flash('❌ ' + t('err.copyFailed', 'ไม่สามารถ copy ได้')); }
+      try { document.execCommand('copy'); flash(t('msg.copiedClipboard', 'Copied to clipboard')); } catch { flash(t('err.copyFailed', 'ไม่สามารถ copy ได้'), 'error'); }
     }
   },
 

@@ -73,11 +73,11 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noAuditData', '⚠️ ไม่พบข้อมูล audit log') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noAuditData', 'ไม่พบข้อมูล audit log') + '</td></tr>';
           return;
         }
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noLoginHistory', '📋 ยังไม่มีประวัติการเข้าออกระบบ') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noLoginHistory', 'ยังไม่มีประวัติการเข้าออกระบบ') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
@@ -108,25 +108,25 @@ export default {
         }).join('');
       })
       .catch(function () {
-        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', '⚠️ ไม่สามารถเชื่อมต่อ server ได้') + '</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', 'ไม่สามารถเชื่อมต่อ server ได้') + '</td></tr>';
       });
   },
 
   // Admin actions history: action labels + colour variant
   _actionLabels: {
-    create_user:          { icon: '➕', text: 'สร้าง User',           variant: 'success' },
-    update_user:          { icon: '✏️', text: 'แก้ไข User',            variant: '' },
-    delete_user:          { icon: '🗑️', text: 'ลบ User',              variant: 'danger'  },
-    update_balance:       { icon: '💰', text: 'แก้ยอดเงิน User',      variant: 'warn'    },
-    admin_reset_password: { icon: '🔑', text: 'รีเซ็ตรหัสผ่าน',       variant: 'warn'    },
-    change_own_password:  { icon: '🔑', text: 'เปลี่ยนรหัสตัวเอง',    variant: ''        },
-    update_role:          { icon: '🎭', text: 'เปลี่ยน Role',         variant: 'warn'    },
-    update_status:        { icon: '🚦', text: 'เปลี่ยนสถานะ',         variant: 'warn'    },
-    update_daily_cap:     { icon: '📊', text: 'ตั้ง Daily Cap',       variant: ''        },
-    update_project:       { icon: '📝', text: 'แก้ไข Project',        variant: ''        },
-    create_project:       { icon: '📁', text: 'สร้าง Project',        variant: 'success' },
-    delete_project:       { icon: '🗂️', text: 'ลบ Project',          variant: 'danger'  },
-    topup_project:        { icon: '💸', text: 'เติมเงิน Project',     variant: 'success' },
+    create_user:          { icon: '', text: 'สร้าง User',           variant: 'success' },
+    update_user:          { icon: '', text: 'แก้ไข User',            variant: '' },
+    delete_user:          { icon: '', text: 'ลบ User',              variant: 'danger'  },
+    update_balance:       { icon: '', text: 'แก้ยอดเงิน User',      variant: 'warn'    },
+    admin_reset_password: { icon: '', text: 'รีเซ็ตรหัสผ่าน',       variant: 'warn'    },
+    change_own_password:  { icon: '', text: 'เปลี่ยนรหัสตัวเอง',    variant: ''        },
+    update_role:          { icon: '', text: 'เปลี่ยน Role',         variant: 'warn'    },
+    update_status:        { icon: '', text: 'เปลี่ยนสถานะ',         variant: 'warn'    },
+    update_daily_cap:     { icon: '', text: 'ตั้ง Daily Cap',       variant: ''        },
+    update_project:       { icon: '', text: 'แก้ไข Project',        variant: ''        },
+    create_project:       { icon: '', text: 'สร้าง Project',        variant: 'success' },
+    delete_project:       { icon: '', text: 'ลบ Project',          variant: 'danger'  },
+    topup_project:        { icon: '', text: 'เติมเงิน Project',     variant: 'success' },
   },
 
   // Field-name pretty labels for the diff renderer (Thai where it helps)
@@ -234,7 +234,7 @@ export default {
       // target_id is a user_id; change_json often carries the username.
       var cj = l.change_json || {};
       var hint = (cj.after && cj.after.username) || (cj.before && cj.before.username);
-      var label = '👤 User #' + (l.target_id != null ? l.target_id : '?');
+      var label = 'User #' + (l.target_id != null ? l.target_id : '?');
       if (hint) label += ' <span class="action-target-code">@' + this._esc(hint) + '</span>';
       return label;
     }
@@ -273,13 +273,13 @@ export default {
       .then(function (d) {
         var countEl = document.getElementById('action-log-count');
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogData', '⚠️ ไม่พบข้อมูล action log') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogData', 'ไม่พบข้อมูล action log') + '</td></tr>';
           if (countEl) countEl.textContent = '';
           return;
         }
         if (countEl) countEl.textContent = d.logs.length + ' record' + (d.logs.length === 1 ? '' : 's');
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogFiltered', '📋 ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogFiltered', 'ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
@@ -287,7 +287,7 @@ export default {
           var adminHtml = '<span class="audit-name">' + self._esc(l.display_name || '—') + '</span>' +
                           '<br><span class="audit-username" style="font-size:.74rem">@' + self._esc(l.username || '—') + '</span>';
 
-          var meta = self._actionLabels[l.action_type] || { icon: '•', text: l.action_type || 'unknown', variant: '' };
+          var meta = self._actionLabels[l.action_type] || { icon: '', text: l.action_type || 'unknown', variant: '' };
           var actionText = t('action.' + l.action_type, meta.text);
           var actionHtml = '<span class="action-label ' + meta.variant + '">' +
                            meta.icon + ' ' + self._esc(actionText) + '</span>';
@@ -306,7 +306,7 @@ export default {
         }).join('');
       })
       .catch(function (e) {
-        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', '⚠️ ไม่สามารถเชื่อมต่อ server ได้') + ' (' + self._esc(e.message) + ')</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', 'ไม่สามารถเชื่อมต่อ server ได้') + ' (' + self._esc(e.message) + ')</td></tr>';
       });
   },
 
@@ -333,7 +333,7 @@ export default {
     var err = document.getElementById('ch-error');
     var btn = document.getElementById('ch-confirm-btn');
     if (!inp || (inp.value || '').trim() !== 'DELETE') {
-      if (err) err.textContent = '❌ ' + t('err.typeDeleteConfirm', 'พิมพ์ DELETE เพื่อยืนยัน');
+      if (err) err.textContent = t('err.typeDeleteConfirm', 'พิมพ์ DELETE เพื่อยืนยัน');
       return;
     }
     if (btn) { btn.disabled = true; btn.textContent = t('btn.deletingEllipsis', 'กำลังลบ...'); }
@@ -343,16 +343,16 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          if (err) err.textContent = '❌ ' + (d.error || 'unknown');
+          if (err) err.textContent = (d.error || 'unknown');
           if (btn) { btn.disabled = false; btn.textContent = t('btn.deleteAll', 'ลบทั้งหมด'); }
           return;
         }
         hideModal('modal-confirm-clear-history');
-        flash('✅ ' + t('msg.activityLogCleared', 'ล้าง Activity Log ทั้งหมดแล้ว'));
+        flash(t('msg.activityLogCleared', 'ล้าง Activity Log ทั้งหมดแล้ว'), 'success', 'success');
         self.renderActivity();
       })
       .catch(function (e) {
-        if (err) err.textContent = '❌ ' + t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
+        if (err) err.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message;
         if (btn) { btn.disabled = false; btn.textContent = t('btn.deleteAll', 'ลบทั้งหมด'); }
       });
   },

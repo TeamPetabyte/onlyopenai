@@ -667,69 +667,7 @@
             margin-top: 3px;
         }
 
-        /* sidebar admin info */
-        .admin-user-info {
-            padding: 12px 20px;
-            border-bottom: 1px solid var(--border-subtle);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 6px;
-        }
-
-        .admin-avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: var(--surface-3);
-            border: 1px solid var(--border-default);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: .9rem;
-            flex-shrink: 0;
-        }
-
-        .admin-name {
-            font-size: .85rem;
-            font-weight: 600;
-            color: var(--text-1);
-        }
-
-        .sidebar-logout {
-            margin: 0 14px 16px;
-        }
-
-        .app-version {
-            margin-top: 10px;
-            text-align: center;
-            font-size: 0.68rem;
-            color: var(--text-3);
-            user-select: none;
-        }
-
-        .logout-btn {
-            width: 100%;
-            padding: 9px;
-            background: var(--surface-3);
-            border: 1px solid var(--border-subtle);
-            border-radius: 8px;
-            color: var(--text-3);
-            font-family: var(--font-sans);
-            font-size: .82rem;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            transition: all .18s;
-        }
-
-        .logout-btn:hover {
-            background: var(--surface-3);
-            color: var(--text-2);
-        }
+        .app-version { text-align: center; font: 400 11px var(--font-mono); color: var(--text-3); user-select: none; }
 
         /* flash */
         .flash {
@@ -1250,157 +1188,114 @@
 <body>
 
     <!-- Sidebar -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2"/></symbol>
+        <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 17a9 9 0 1 1 16 0"/><path d="m12 14 4-5"/><circle cx="12" cy="14" r="1.5"/></symbol>
+        <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4z"/></symbol>
+        <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+        <symbol id="i-login" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.5 6.5l2 2M15.5 15.5l2 2M6.5 17.5l2-2M15.5 8.5l2-2"/></symbol>
+        <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5.5 9a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 9V3"/></symbol>
+        <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+        <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+        <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4.4-1"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    </svg>
+
     <aside class="sidebar" id="sidebar">
-        <!-- PipekAI mascot; object-fit:contain + a tight 32×32 wrapper keeps the row height fixed -->
-        <div class="sidebar-brand">
-            <div class="brand-icon" style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center">
-                <img src="/assets/mascot.png" alt="PipekAI"
-                     style="width:100%;height:100%;object-fit:contain"/>
-            </div>
-            <div class="brand-name">PipekAI</div>
-        </div>
-
-        <div class="admin-user-info">
-            <div class="admin-avatar">🛡️</div>
-            <div>
-                <div class="admin-name" id="admin-display-name">Admin</div>
-                <div style="margin-top:3px"><span class="admin-badge" id="admin-role-badge">Admin</span></div>
+        <div class="side-top">
+            <div class="brand-row">
+                <img class="brand-mascot" src="/assets/mascot.png" alt="" />
+                <div class="brand-text"><b>PipekAI</b><span data-i18n="nav.adminConsole">Admin console</span></div>
+                <span class="admin-badge" id="admin-role-badge">Admin</span>
             </div>
         </div>
 
-        <!-- Hierarchical sidebar: Dashboard, User Management (Project, User, Activity Log, Credits, Login History), Balance -->
+        <!-- Sidebar groups: Overview, Manage, Audit, Trainer. Ids stay nav-<view> for admin.navigate(). -->
         <nav class="sidebar-nav">
             <a class="nav-item active" onclick="admin.navigate('overview');return false;" href="#" id="nav-overview">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7" />
-                    <rect x="14" y="3" width="7" height="7" />
-                    <rect x="14" y="14" width="7" height="7" />
-                    <rect x="3" y="14" width="7" height="7" />
-                </svg>
-                <span data-i18n="nav.dashboard">Dashboard</span>
+                <svg class="ic"><use href="#i-grid"/></svg><span data-i18n="nav.dashboard">Dashboard</span>
             </a>
-
-            <!-- Section header (non-clickable) -->
-            <div class="nav-section">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 00-3-3.87" />
-                    <path d="M16 3.13a4 4 0 010 7.75" />
-                </svg>
-                <span data-i18n="nav.userManagement">User Management</span>
-            </div>
-
-            <a class="nav-item nav-sub" onclick="admin.navigate('projects');return false;" href="#" id="nav-projects">
-                <span data-i18n="nav.project">Project</span>
+            <div class="nav-group" data-i18n="nav.manage">Manage</div>
+            <a class="nav-item" onclick="admin.navigate('projects');return false;" href="#" id="nav-projects">
+                <svg class="ic"><use href="#i-folder"/></svg><span data-i18n="nav.project">Project</span>
             </a>
-            <a class="nav-item nav-sub" onclick="admin.navigate('users');return false;" href="#" id="nav-users">
-                <span data-i18n="nav.user">User</span>
+            <a class="nav-item" onclick="admin.navigate('users');return false;" href="#" id="nav-users">
+                <svg class="ic"><use href="#i-users"/></svg><span data-i18n="nav.user">User</span>
             </a>
-            <a class="nav-item nav-sub" onclick="admin.navigate('activity');return false;" href="#" id="nav-activity">
-                <span data-i18n="nav.activityLog">Activity Log</span>
+            <a class="nav-item" onclick="admin.navigate('usage');return false;" href="#" id="nav-usage">
+                <svg class="ic"><use href="#i-gauge"/></svg><span data-i18n="nav.capUsage">Cap & Usage</span>
             </a>
-            <a class="nav-item nav-sub" onclick="admin.navigate('usage');return false;" href="#" id="nav-usage">
-                <span data-i18n="nav.capUsage">Cap & Usage</span>
+            <a class="nav-item" onclick="admin.navigate('balance');return false;" href="#" id="nav-balance">
+                <svg class="ic"><use href="#i-wallet"/></svg><span data-i18n="nav.balance">Balance</span>
+            </a>
+            <div class="nav-group" data-i18n="nav.audit">Audit</div>
+            <a class="nav-item" onclick="admin.navigate('activity');return false;" href="#" id="nav-activity">
+                <svg class="ic"><use href="#i-activity"/></svg><span data-i18n="nav.activityLog">Activity Log</span>
             </a>
             <!-- Login History is a deep-link into the Activity Log "audit" tab -->
-            <a class="nav-item nav-sub" onclick="admin.navigate('login-history');return false;" href="#" id="nav-login-history">
-                <span data-i18n="nav.loginHistory">Login History</span>
+            <a class="nav-item" onclick="admin.navigate('login-history');return false;" href="#" id="nav-login-history">
+                <svg class="ic"><use href="#i-login"/></svg><span data-i18n="nav.loginHistory">Login History</span>
             </a>
-
-            <!-- Balance + Top-up admin page -->
-            <a class="nav-item" onclick="admin.navigate('balance');return false;" href="#" id="nav-balance">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="6" width="20" height="12" rx="2" />
-                    <circle cx="12" cy="12" r="2.5" />
-                    <path d="M6 10h.01M18 14h.01" />
-                </svg>
-                <span data-i18n="nav.balance">Balance</span>
-            </a>
+            <div class="nav-group" id="nav-group-trainer" data-i18n="nav.trainer">Trainer</div>
             <!-- Skill Prompts — add/edit prompts and hot-reload -->
-            <a class="nav-item" onclick="admin.navigate('skills');return false;"
-               href="#" id="nav-skills">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-                <span>Skill Prompts</span>
+            <a class="nav-item" onclick="admin.navigate('skills');return false;" href="#" id="nav-skills">
+                <svg class="ic"><use href="#i-sparkle"/></svg><span>Skill Prompts</span>
             </a>
-
             <!-- Prompt Lab — test a skill's system prompt, judge answers, browse history -->
-            <a class="nav-item" onclick="admin.navigate('lab');return false;"
-               href="#" id="nav-lab">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10 3v6.5L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9.5V3"/>
-                    <path d="M9 3h6M7 15h10"/>
-                </svg>
-                <span data-i18n="nav.lab">Prompt Lab</span>
+            <a class="nav-item" onclick="admin.navigate('lab');return false;" href="#" id="nav-lab">
+                <svg class="ic"><use href="#i-flask"/></svg><span data-i18n="nav.lab">Prompt Lab</span>
             </a>
-
             <!-- Evals — batch-exam a skill's prompt against the golden dataset with an AI judge -->
-            <a class="nav-item" onclick="admin.navigate('evals');return false;"
-               href="#" id="nav-evals">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3v18h18"/>
-                    <path d="M7 15l4-6 3 4 5-8"/>
-                </svg>
-                <span data-i18n="nav.evals">Evals</span>
+            <a class="nav-item" onclick="admin.navigate('evals');return false;" href="#" id="nav-evals">
+                <svg class="ic"><use href="#i-chart"/></svg><span data-i18n="nav.evals">Evals</span>
             </a>
-
             <!-- Sync Status — HIDDEN pending PM approval. View, handlers, endpoints and the sync job stay
                  wired so tbl_daily_token keeps filling; to re-enable, remove the inline display:none. -->
-            <a class="nav-item" onclick="admin.navigate('sync');return false;" href="#" id="nav-sync"
-               style="display:none">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="23 4 23 10 17 10"/>
-                    <polyline points="1 20 1 14 7 14"/>
-                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                </svg>
-                <span>Sync Status</span>
+            <a class="nav-item" onclick="admin.navigate('sync');return false;" href="#" id="nav-sync" style="display:none">
+                <svg class="ic"><use href="#i-refresh"/></svg><span>Sync Status</span>
             </a>
         </nav>
 
-        <div class="sidebar-logout">
-            <!-- Theme toggle; preference persisted in localStorage and applied by the <head> bootstrap -->
-            <button class="theme-toggle-btn" id="theme-toggle-btn" type="button"
-                    onclick="toggleTheme()" aria-label="Toggle theme">
-                <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-                    <circle cx="12" cy="12" r="4"/>
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-                </svg>
-                <span id="theme-toggle-label" data-i18n="theme.light">Light Mode</span>
-            </button>
-            <!-- language toggle (TH ⇄ EN) -->
-            <button class="theme-toggle-btn" id="lang-toggle-btn" type="button"
-                    onclick="I18N.toggle()" aria-label="Toggle language"
-                    style="margin-top:8px">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                </svg>
-                <span id="lang-toggle-label">EN</span>
-            </button>
-            <button class="logout-btn" onclick="Auth.logout()">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-<span data-i18n="btn.logout">ออกจากระบบ</span>
-            </button>
+        <div class="side-bottom">
+            <div class="user-row">
+                <div class="user-avatar" id="admin-avatar">A</div>
+                <div class="user-name"><span id="admin-display-name">Admin</span></div>
+                <!-- Theme toggle; preference persisted in localStorage and applied by the <head> bootstrap -->
+                <button class="side-icon-btn" id="theme-toggle-btn" type="button" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <svg class="ic" id="theme-icon-moon"><use href="#i-moon"/></svg>
+                    <svg class="ic" id="theme-icon-sun" style="display:none"><use href="#i-sun"/></svg>
+                    <span class="sr-only" id="theme-toggle-label" data-i18n="theme.light">Light Mode</span>
+                </button>
+                <!-- language toggle (TH ⇄ EN) -->
+                <button class="side-icon-btn" id="lang-toggle-btn" type="button" onclick="I18N.toggle()" aria-label="Toggle language">
+                    <span id="lang-toggle-label">EN</span>
+                </button>
+                <button class="side-icon-btn logout-btn" onclick="Auth.logout()" data-i18n-title="btn.logout" data-i18n-aria="btn.logout" title="Log out" aria-label="Log out">
+                    <svg class="ic"><use href="#i-logout"/></svg>
+                </button>
+            </div>
             <div class="app-version" id="app-version"></div>
         </div>
     </aside>
 
     <!-- Mobile header -->
     <header class="mobile-header">
-        <button class="hamburger" id="hamburger-btn"><span></span><span></span><span></span></button>
-        <span class="mobile-brand">Admin Dashboard</span>
+        <button class="hamburger" id="hamburger-btn" aria-label="Open menu"><svg class="ic"><use href="#i-menu"/></svg></button>
+        <span class="mobile-brand">PipekAI · Admin</span>
     </header>
 
     <main class="main-content">
@@ -1412,7 +1307,7 @@
                     <h2 class="page-title" data-i18n="page.overview.title">Overview</h2>
                     <p class="page-subtitle" data-i18n="page.overview.sub">ภาพรวมระบบทั้งหมด</p>
                 </div>
-                <span class="admin-badge">🛡️ Admin Mode</span>
+                <span class="admin-badge"><svg class="ic sm"><use href="#i-shield"/></svg>Admin Mode</span>
             </div>
             <div class="overview-mini" id="overview-mini"></div>
             <div class="glass-card">
@@ -1478,7 +1373,7 @@
                         <div class="qr-subtitle" data-i18n="qr.sub">คำขอเพิ่มโควต้ารายวันจาก user</div>
                     </div>
                     <button type="button" class="btn-action btn-secondary-sm" onclick="admin.renderQuotaRequests()"
-                        style="padding:7px 14px;font-size:.78rem">🔄 Refresh</button>
+                        style="padding:7px 14px;font-size:.78rem">Refresh</button>
                 </div>
                 <div id="qr-list-wrap" class="qr-list-wrap">
                     <div class="qr-loading"><span data-i18n="common.loading">⏳ กำลังโหลด…</span></div>
@@ -1523,15 +1418,15 @@
                     <p class="page-subtitle" id="activity-page-subtitle">ประวัติการใช้งานของผู้ใช้ · chat / admin actions</p>
                 </div>
                 <div style="display:flex;gap:8px">
-                    <button class="btn-action btn-save" onclick="admin.refreshActivityTab()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                    <button class="btn-action btn-save" onclick="admin.refreshActivityTab()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
                     <button id="activity-clear-btn" class="btn-action btn-danger" onclick="admin.clearAllHistory()"><span data-i18n="btn.clearChatLog">ล้าง Chat Log</span></button>
                 </div>
             </div>
 
             <!-- Sub-tabs (chat / action) — hidden entirely when entering as Login History -->
             <div class="audit-tabs" id="activity-tabs" role="tablist" aria-label="Activity log sub-tabs">
-                <button type="button" class="audit-tab active" data-tab="chat"   role="tab" aria-selected="true"  onclick="admin.switchActivityTab('chat')" data-i18n="tab.chatHistory">💬 Chat History</button>
-                <button type="button" class="audit-tab"        data-tab="action" role="tab" aria-selected="false" onclick="admin.switchActivityTab('action')" data-i18n="tab.adminActions">⚙️ Admin Actions</button>
+                <button type="button" class="audit-tab active" data-tab="chat"   role="tab" aria-selected="true"  onclick="admin.switchActivityTab('chat')" data-i18n="tab.chatHistory">Chat History</button>
+                <button type="button" class="audit-tab"        data-tab="action" role="tab" aria-selected="false" onclick="admin.switchActivityTab('action')" data-i18n="tab.adminActions">Admin Actions</button>
             </div>
 
             <!-- Chat history (existing) -->
@@ -1567,7 +1462,7 @@
                     <button type="button" class="dd-trigger" id="action-log-filter-type-trigger"
                             style="min-width:200px"
                             onclick="admin.openActionFilterTypeDropdown(event)">
-                        <span class="dd-trigger-label" id="action-log-filter-type-label" data-i18n="filter.allAction">🔎 ทุก Action</span>
+                        <span class="dd-trigger-label" id="action-log-filter-type-label" data-i18n="filter.allAction">ทุก Action</span>
                         <svg class="dd-trigger-chevron" width="14" height="14" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="2.5">
                             <polyline points="6 9 12 15 18 9"/>
@@ -1583,7 +1478,7 @@
                             <polyline points="6 9 12 15 18 9"/>
                         </svg>
                     </button>
-                    <button type="button" class="btn-action btn-save" onclick="admin.renderActionLog()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                    <button type="button" class="btn-action btn-save" onclick="admin.renderActionLog()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
                     <span id="action-log-count" style="color:var(--text-3);font-size:.82rem;margin-left:auto"></span>
                 </div>
                 <div class="audit-table-wrap">
@@ -1680,17 +1575,17 @@
                     <h2 class="page-title" data-i18n="page.cap.title">Cap & Usage</h2>
                     <p class="page-subtitle" data-i18n="page.cap.sub">ตั้งโควต้าการใช้ต่อวันของแต่ละ user · ติดตามการใช้งานแบบ real-time</p>
                 </div>
-                <button class="btn-action btn-save" onclick="admin.refreshCreditsTab()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                <button class="btn-action btn-save" onclick="admin.refreshCreditsTab()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
             </div>
 
             <!-- Sub-tabs; default on first navigation = Credit Management -->
             <div class="audit-tabs" role="tablist" aria-label="Credits sub-tabs">
                 <button type="button" class="audit-tab active" data-tab="credit"
                         role="tab" aria-selected="true"
-                        onclick="admin.switchCreditsTab('credit')" data-i18n="tab.capManagement">🎯 Cap Management</button>
+                        onclick="admin.switchCreditsTab('credit')" data-i18n="tab.capManagement">Cap Management</button>
                 <button type="button" class="audit-tab"        data-tab="usage"
                         role="tab" aria-selected="false"
-                        onclick="admin.switchCreditsTab('usage')" data-i18n="tab.usageAnalytics">📊 Usage Analytics</button>
+                        onclick="admin.switchCreditsTab('usage')" data-i18n="tab.usageAnalytics">Usage Analytics</button>
             </div>
 
             <!-- Pane 1: Credit Management -->
@@ -1701,7 +1596,7 @@
             <!-- Pane 2: Usage Analytics — project filter row with custom dropdown -->
             <div class="audit-pane hidden" id="pane-usage">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-                    <label style="color:var(--text-2);font-size:.85rem;font-weight:600">📂 Project:</label>
+                    <label style="color:var(--text-2);font-size:.85rem;font-weight:600">Project:</label>
                     <!-- Custom dropdown trigger — looks like an input, opens a styled popup. -->
                     <button type="button" class="dd-trigger" id="usage-filter-trigger"
                             onclick="admin.toggleUsageProjectDropdown(event)">
@@ -1735,7 +1630,7 @@
                     <h2 class="page-title" data-i18n="page.balance.title">Balance &amp; Top-up</h2>
                     <p class="page-subtitle" data-i18n="page.balance.sub">ดูยอด credit ของแต่ละ project และเติมเงิน</p>
                 </div>
-                <button class="btn-action btn-save" onclick="admin.renderBalance()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                <button class="btn-action btn-save" onclick="admin.renderBalance()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
             </div>
 
             <!-- Section 1: current balance per project -->
@@ -1762,12 +1657,12 @@
                     <h2 class="page-title">Skill Prompts</h2>
                     <p class="page-subtitle"><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span>
                         · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span>
-                        · <span data-i18n="page.skills.testHint">ทดสอบ prompt ได้ที่แท็บ 🧪 Prompt Lab</span></p>
+                        · <span data-i18n="page.skills.testHint">ทดสอบ prompt ได้ที่แท็บ Prompt Lab</span></p>
                 </div>
                 <div style="display:flex;gap:8px">
-                    <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
+                    <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
                     <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.openAddSkill()">➕ <span data-i18n="skills.add">เพิ่ม Skill</span></button>
-                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.reloadSkills()">⚡ Reload from file</button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.reloadSkills()">Reload from file</button>
                 </div>
             </div>
 
@@ -1783,7 +1678,7 @@
         <div class="view hidden" id="view-lab">
             <div class="page-header">
                 <div>
-                    <h2 class="page-title" data-i18n="page.lab.title">🧪 Prompt Lab</h2>
+                    <h2 class="page-title" data-i18n="page.lab.title">Prompt Lab</h2>
                     <p class="page-subtitle" data-i18n="page.lab.sub">ทดสอบคำถามกับ system prompt ของแต่ละ skill → ให้ senior อนุมัติคำตอบ → สะสมเป็นชุดเฉลย (golden dataset)</p>
                 </div>
             </div>
@@ -1818,7 +1713,7 @@
                     </div>
                 </div>
                 <details style="margin-top:8px">
-                    <summary id="lab-prompt-summary" style="cursor:pointer;font-size:.76rem;color:var(--text-3);font-weight:600;user-select:none">📄 System prompt</summary>
+                    <summary id="lab-prompt-summary" style="cursor:pointer;font-size:.76rem;color:var(--text-3);font-weight:600;user-select:none">System prompt</summary>
                     <pre id="lab-prompt-preview" style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.74rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto"></pre>
                 </details>
             </div>
@@ -1865,15 +1760,15 @@
             <div class="glass-card" id="lab-history-card">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
                     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                        <label class="modal-label" style="margin:0" data-i18n="lab.historyLabel">📋 ประวัติการทดสอบ</label>
+                        <label class="modal-label" style="margin:0" data-i18n="lab.historyLabel">ประวัติการทดสอบ</label>
                         <span id="lab-stats" style="font-size:.78rem;color:var(--text-2)"></span>
                     </div>
                     <select class="modal-input" id="lab-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
                         <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
                         <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่อนุมัติ</option>
-                        <option value="correct" data-i18n="modal.testHistory.filterCorrect">✅ ถูกต้อง</option>
-                        <option value="partial" data-i18n="modal.testHistory.filterPartial">⚠️ เกือบถูก</option>
-                        <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">❌ ผิด</option>
+                        <option value="correct" data-i18n="modal.testHistory.filterCorrect">ถูกต้อง</option>
+                        <option value="partial" data-i18n="modal.testHistory.filterPartial">เกือบถูก</option>
+                        <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">ผิด</option>
                     </select>
                 </div>
                 <div class="modal-error" id="lab-hist-error"></div>
@@ -1887,8 +1782,8 @@
         <div class="view hidden" id="view-evals">
             <div class="page-header">
                 <div>
-                    <h2 class="page-title" data-i18n="page.evals.title">📊 Evals</h2>
-                    <p class="page-subtitle" data-i18n="page.evals.sub">สอบ AI ด้วยชุดข้อสอบ ⭐ ที่ senior ยืนยันแล้ว — วัดว่า prompt/model เวอร์ชันไหนตอบแม่นแค่ไหน</p>
+                    <h2 class="page-title" data-i18n="page.evals.title">Evals</h2>
+                    <p class="page-subtitle" data-i18n="page.evals.sub">สอบ AI ด้วยชุดข้อสอบ ที่ senior ยืนยันแล้ว — วัดว่า prompt/model เวอร์ชันไหนตอบแม่นแค่ไหน</p>
                 </div>
             </div>
 
@@ -1957,8 +1852,8 @@
                     <p class="page-subtitle" data-i18n="page.sync.sub">สถานะการ sync ข้อมูล usage จาก OpenAI (ทุก 15 นาที)</p>
                 </div>
                 <div style="display:flex;gap:8px">
-                    <button class="btn-action btn-save" onclick="admin.renderSync()"><span data-i18n="btn.refresh">🔄 รีเฟรช</span></button>
-                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.syncNow()">⚡ Sync Now</button>
+                    <button class="btn-action btn-save" onclick="admin.renderSync()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.syncNow()">Sync Now</button>
                 </div>
             </div>
 
@@ -1988,8 +1883,8 @@
                 <label class="modal-label" data-i18n="m.field.role">บทบาท (Role)</label>
                 <!-- No trainer option: superadmin accounts are provisioned manually, never from the app -->
                 <select class="modal-input" id="au-role" onchange="admin.onAddUserRoleChange(this.value)">
-                    <option value="user" selected data-i18n="m.role.user">👤 User — ใช้งาน chat</option>
-                    <option value="admin" data-i18n="m.role.admin">🛡️ Admin — จัดการคน+เงิน</option>
+                    <option value="user" selected data-i18n="m.role.user">User — ใช้งาน chat</option>
+                    <option value="admin" data-i18n="m.role.admin">Admin — จัดการคน+เงิน</option>
                 </select>
             </div>
 
@@ -2054,8 +1949,7 @@
                        border-radius:8px;color:var(--text-2);font-family:var(--font-sans);font-size:.875rem;font-weight:600;
                        cursor:pointer;margin-bottom:14px;transition:all .15s"
                 onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                onmouseout="this.style.background='rgba(255,255,255,0.06)'">
-                🔑 Generate Password
+                onmouseout="this.style.background='rgba(255,255,255,0.06)'">Generate Password
             </button>
 
             <!-- Confirm Password -->
@@ -2123,7 +2017,7 @@
     <!-- MODAL: Add Project -->
     <div class="modal-overlay" id="modal-add-project">
         <div class="modal-box">
-            <div class="modal-title" data-i18n="m.addProject.title">📂 สร้าง Project ใหม่</div>
+            <div class="modal-title" data-i18n="m.addProject.title">สร้าง Project ใหม่</div>
             <div class="modal-field">
                 <label class="modal-label" data-i18n="m.field.projectName">ชื่อ Project</label>
                 <input class="modal-input" id="ap-name" type="text" data-i18n-ph="m.ph.projectName" placeholder="เช่น SAP S/4HANA Migration" />
@@ -2211,18 +2105,18 @@
                 <div class="modal-actions-left">
                     <button class="btn-modal-cancel btn-eu-secondary" type="button"
                             onclick="admin.editUserResetPassword()">
-                        <span data-i18n="m.btn.resetPw">🔑 รีเซ็ต PW</span>
+                        <span data-i18n="m.btn.resetPw">รีเซ็ต PW</span>
                     </button>
                     <button class="btn-modal-danger btn-eu-danger" type="button"
                             onclick="admin.editUserDelete()">
-                        <span data-i18n="m.btn.deleteUser">🗑 ลบ User</span>
+                        <span data-i18n="m.btn.deleteUser">ลบ User</span>
                     </button>
                 </div>
                 <div class="modal-actions-right">
                     <button class="btn-modal-cancel" type="button"
                             onclick="hideModal('modal-edit-user')">Cancel</button>
                     <button class="btn-modal-submit" type="button"
-                            onclick="admin.submitEditUser()"><span data-i18n="btn.save">💾 บันทึก</span></button>
+                            onclick="admin.submitEditUser()"><span data-i18n="btn.save">บันทึก</span></button>
                 </div>
             </div>
         </div>
@@ -2233,7 +2127,7 @@
     <!-- MODAL: Edit Daily Cap -->
     <div class="modal-overlay" id="modal-edit-credit">
         <div class="modal-box" style="max-width:440px">
-            <div class="modal-title" data-i18n="m.cap.title">🎯 ตั้งโควต้ารายวัน (Daily Cap)</div>
+            <div class="modal-title" data-i18n="m.cap.title">ตั้งโควต้ารายวัน (Daily Cap)</div>
             <input type="hidden" id="ec-user-id" />
             <div style="margin-bottom:14px;padding:12px;background:var(--surface-3);
                  border:1px solid var(--border-subtle);border-radius:8px">
@@ -2269,7 +2163,7 @@
             <div class="modal-error" id="ec-error"></div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-edit-credit')">Cancel</button>
-                <button class="btn-modal-submit" id="ec-submit-btn" onclick="admin.submitEditCap()"><span data-i18n="btn.save">💾 บันทึก</span></button>
+                <button class="btn-modal-submit" id="ec-submit-btn" onclick="admin.submitEditCap()"><span data-i18n="btn.save">บันทึก</span></button>
             </div>
         </div>
     </div>
@@ -2277,7 +2171,7 @@
     <!-- MODAL: Insufficient project pool — shown when /api/users/:id/balance returns code='INSUFFICIENT_POOL' -->
     <div class="modal-overlay" id="modal-insufficient-pool">
         <div class="modal-box" style="max-width:420px">
-            <div class="modal-title" style="color:#e25563"><span data-i18n="m.pool.title">⚠️ Project pool ไม่พอ</span></div>
+            <div class="modal-title" style="color:#e25563"><span data-i18n="m.pool.title">Project pool ไม่พอ</span></div>
             <div style="margin-bottom:14px;padding:14px;border-radius:8px;
                  background:rgba(220,53,69,0.08);border:1px solid rgba(220,53,69,0.25);
                  line-height:1.6;font-size:.86rem">
@@ -2304,7 +2198,7 @@
     <!-- MODAL: Edit Project -->
     <div class="modal-overlay" id="modal-edit-project">
         <div class="modal-box" style="max-width:520px">
-            <div class="modal-title" data-i18n="m.editProject.title">✏️ แก้ไข Project</div>
+            <div class="modal-title" data-i18n="m.editProject.title">แก้ไข Project</div>
             <input type="hidden" id="ep-proj-id" />
             <div class="modal-field">
                 <label class="modal-label" data-i18n="m.field.projectName">ชื่อ Project</label>
@@ -2345,8 +2239,7 @@
                     style="font-size:.78rem;margin-bottom:6px;padding:6px 10px;border-radius:6px"></div>
                 <input class="modal-input" id="ep-api-key" type="password" autocomplete="new-password"
                     data-i18n-ph="m.apikey.ph" placeholder="sk-svcacct-… หรือ sk-proj-… (เว้นว่าง = ไม่เปลี่ยน)" />
-                <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45" data-i18n-html="m.apikey.hint">
-                    💡 สร้าง key ที่ <a href="https://platform.openai.com/api-keys" target="_blank"
+                <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45" data-i18n-html="m.apikey.hint">สร้าง key ที่ <a href="https://platform.openai.com/api-keys" target="_blank"
                         style="color:var(--accent);text-decoration:underline">platform.openai.com</a>
                     ใน project นั้น แล้ว copy ค่าเต็ม (โผล่ครั้งเดียว!) มาวางที่นี่
                 </div>
@@ -2362,7 +2255,7 @@
     <!-- MODAL: Add / Edit Skill Prompt -->
     <div class="modal-overlay" id="modal-edit-skill">
         <div class="modal-box" style="max-width:760px">
-            <div class="modal-title" id="es-title">✏️ แก้ไข Skill</div>
+            <div class="modal-title" id="es-title">แก้ไข Skill</div>
             <!-- when editing: id is fixed; when adding: id is editable -->
             <input type="hidden" id="es-mode" value="edit" />
             <div class="modal-row">
@@ -2393,8 +2286,7 @@
                 <textarea class="modal-input" id="es-content" rows="16"
                     style="font-family:var(--font-mono);font-size:.8rem;line-height:1.5;white-space:pre"
                     placeholder="วาง prompt เต็มที่นี่… ใช้ {code} เป็นจุดที่จะแทนด้วยโค้ดของผู้ใช้"></textarea>
-                <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45">
-                    💡 ใส่ <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px">{code}</code> ตรงที่ต้องการให้ระบบแทนด้วยโค้ดที่ผู้ใช้ส่งมา
+                <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45">ใส่ <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px">{code}</code> ตรงที่ต้องการให้ระบบแทนด้วยโค้ดที่ผู้ใช้ส่งมา
                 </div>
             </div>
             <div class="modal-error" id="es-error"></div>
@@ -2408,7 +2300,7 @@
     <!-- MODAL: Top-up Project -->
     <div class="modal-overlay" id="modal-topup">
         <div class="modal-box" style="max-width:420px">
-            <div class="modal-title">💰 Top up balance</div>
+            <div class="modal-title">Top up balance</div>
             <!-- Project picker — switch project inside the modal -->
             <div class="modal-field">
                 <label class="modal-label">Project <span style="color:#d04545">*</span></label>
@@ -2516,7 +2408,7 @@
 
     <div class="modal-overlay" id="modal-confirm-status-toggle">
         <div class="modal-box" style="max-width:440px">
-            <div class="modal-title" id="cts-title" data-i18n="m.status.title">⚙️ เปลี่ยนสถานะ</div>
+            <div class="modal-title" id="cts-title" data-i18n="m.status.title">เปลี่ยนสถานะ</div>
             <div class="cts-target" id="cts-target">
                 <div class="cts-username" id="cts-username">—</div>
                 <div class="cts-row"><span data-i18n="m.status.name">ชื่อ:</span> <b id="cts-displayname">—</b></div>
@@ -2537,7 +2429,7 @@
 
     <div class="modal-overlay" id="modal-confirm-delete-user">
         <div class="modal-box" style="max-width:440px">
-            <div class="modal-title" data-i18n="m.delUser.title">⚠️ ยืนยันการลบ User</div>
+            <div class="modal-title" data-i18n="m.delUser.title">ยืนยันการลบ User</div>
             <div class="confirm-target">
                 <div style="font-weight:700;color:#ff8080;margin-bottom:4px">
                     <span data-i18n="m.delUser.pre">คุณกำลังจะลบ</span> <span id="cd-username">—</span>
@@ -2563,7 +2455,7 @@
          with chat history; that error goes to #cdp-error without closing the modal. -->
     <div class="modal-overlay" id="modal-confirm-delete-project">
         <div class="modal-box" style="max-width:460px">
-            <div class="modal-title" data-i18n="m.delProj.title">⚠️ ยืนยันการลบ Project</div>
+            <div class="modal-title" data-i18n="m.delProj.title">ยืนยันการลบ Project</div>
             <div class="confirm-target">
                 <div style="font-weight:700;color:#ff8080;margin-bottom:4px">
                     <span data-i18n="m.delProj.pre">คุณกำลังจะลบ</span> <span id="cdp-name">—</span>
@@ -2588,7 +2480,7 @@
     <!-- Confirm remove-user-from-project modal — non-destructive, neutral submit button -->
     <div class="modal-overlay" id="modal-confirm-remove-user-from-project">
         <div class="modal-box" style="max-width:420px">
-            <div class="modal-title" data-i18n="m.removeUser.title">🚪 ย้าย User ออกจาก Project</div>
+            <div class="modal-title" data-i18n="m.removeUser.title">ย้าย User ออกจาก Project</div>
             <div class="confirm-target" style="background:var(--surface-3);border-color:var(--border-default)">
                 <div style="font-weight:700;color:var(--text-1);margin-bottom:4px">
                     <span data-i18n="m.removeUser.pre">ย้าย</span> <span id="cru-username">—</span> <span data-i18n="m.removeUser.post">ออกจาก project</span>
@@ -2612,7 +2504,7 @@
     <!-- Reset password modal. Mirrors server policy: 8+ chars, letter + digit. -->
     <div class="modal-overlay" id="modal-reset-password">
         <div class="modal-box" style="max-width:440px">
-            <div class="modal-title" data-i18n="m.resetPw.title">🔑 รีเซ็ตรหัสผ่าน</div>
+            <div class="modal-title" data-i18n="m.resetPw.title">รีเซ็ตรหัสผ่าน</div>
             <div class="confirm-target" style="background:var(--surface-3);border-color:var(--border-default)">
                 <div style="font-weight:700;color:var(--text-1);margin-bottom:4px">
                     User: <span id="rp-username">—</span>
@@ -2649,7 +2541,7 @@
     <!-- Clear-project-API-key modal -->
     <div class="modal-overlay" id="modal-confirm-clear-apikey">
         <div class="modal-box" style="max-width:420px">
-            <div class="modal-title" data-i18n="m.clearKey.title">🔐 ลบ API key</div>
+            <div class="modal-title" data-i18n="m.clearKey.title">ลบ API key</div>
             <div class="confirm-target" style="background:var(--surface-3);border-color:var(--border-default)">
                 <div style="font-weight:700;color:var(--text-1);margin-bottom:4px">
                     Project: <span id="cak-name">—</span>
@@ -2673,7 +2565,7 @@
     <!-- Clear-all-history modal — destructive, so the user must type "DELETE" before the button enables -->
     <div class="modal-overlay" id="modal-confirm-clear-history">
         <div class="modal-box" style="max-width:460px">
-            <div class="modal-title" data-i18n="m.clearHist.title">🗑 ล้าง Activity Log ทั้งหมด</div>
+            <div class="modal-title" data-i18n="m.clearHist.title">ล้าง Activity Log ทั้งหมด</div>
             <div style="font-size:0.85rem;color:#d88;margin-bottom:12px;line-height:1.5" data-i18n-html="m.clearHist.warn">
                 <b>คำเตือน:</b> การกระทำนี้จะลบ Activity Log ของ <b>ผู้ใช้ทุกคน</b> ออกจาก DB ถาวร<br>
                 การกู้คืนทำได้เฉพาะจาก backup เท่านั้น
@@ -2699,7 +2591,7 @@
     <!-- Sync-now confirm modal -->
     <div class="modal-overlay" id="modal-confirm-sync-now">
         <div class="modal-box" style="max-width:420px">
-            <div class="modal-title" data-i18n="m.syncNow.title">🔄 เริ่ม Usage Sync</div>
+            <div class="modal-title" data-i18n="m.syncNow.title">เริ่ม Usage Sync</div>
             <div style="font-size:0.85rem;color:var(--text-2);margin-bottom:12px;line-height:1.5" data-i18n-html="m.syncNow.body">
                 เรียก OpenAI Usage API เพื่อ sync ข้อมูลการใช้งานล่าสุดเข้า DB<br>
                 ใช้เวลาประมาณ 5-15 วินาที — กรุณาอย่าปิดหน้านี้ระหว่างทำงาน
@@ -2750,7 +2642,7 @@
     <!-- View a single chat turn (full prompt + response) for incident investigation -->
     <div class="modal-overlay" id="modal-view-turn">
         <div class="modal-box" style="max-width:640px">
-            <div class="modal-title" data-i18n="vt.title">💬 รายละเอียดการสนทนา</div>
+            <div class="modal-title" data-i18n="vt.title">รายละเอียดการสนทนา</div>
             <div class="confirm-target" style="background:var(--surface-3);border-color:var(--border-default);display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.8rem">
                 <span><b id="vt-user">—</b> <span style="color:var(--text-3)" id="vt-username"></span></span>
                 <span style="color:var(--text-3)" id="vt-time">—</span>
