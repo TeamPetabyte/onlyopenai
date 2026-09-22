@@ -401,7 +401,7 @@ export default {
           '<div class="usage-user-meta">' + escapeHtml(u.username || '') + (proj ? ' · 📂 ' + escapeHtml(proj.name || '') : '') + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px">' +
-          '<span style="font-family:\'Geist Mono\',monospace;font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
+          '<span style="font-family:var(--font-mono);font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
           '<span style="color:var(--text-3);font-size:1.1rem" id="ucard-arrow-' + idx + '">▸</span>' +
           '</div>' +
           '</div>' +

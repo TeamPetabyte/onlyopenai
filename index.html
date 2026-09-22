@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.13.1" />
     <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.13.1" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <!-- Apply the saved theme before first paint (no white→dark flash); same localStorage key as admin. -->
     <script>
@@ -22,69 +22,31 @@
         })();
     </script>
     <!-- Chat UX polish: markdown + syntax highlight theme -->
+    <link rel="stylesheet" href="css/tokens.css" />
     <link rel="stylesheet" href="css/vendor/highlight-github.min.css" />
     <style>
-        /* Petabyte blue palette (matches the logo gradient) */
+        /* --pb-* are aliases onto css/tokens.css so chat, admin and login share one palette. */
         :root {
-            --pb-blue-1:        #5a4fcf;             /* logo top — indigo violet */
-            --pb-blue-2:        #4a7bd6;             /* logo middle */
-            --pb-blue-3:        #5fb2e8;             /* logo right — sky blue */
-            --pb-accent:        #2563eb;             /* main interactive blue */
-            --pb-accent-hover:  #1d4ed8;
-            --pb-accent-soft:   #eaf2ff;             /* near-white blue tint */
-            --pb-accent-line:   #c7dbff;
-            --pb-grad:          linear-gradient(135deg, var(--pb-blue-1) 0%, var(--pb-blue-2) 50%, var(--pb-blue-3) 100%);
-            --pb-text-1:        #1a1a1a;
-            --pb-text-2:        #444;
-            --pb-text-3:        #777;
-            --pb-text-4:        #aaa;
-            --pb-surface-0:     #f4f6fa;             /* page bg — soft cool */
-            --pb-surface-1:     #ffffff;             /* cards */
-            --pb-surface-2:     #f8fafd;             /* subtle elevated */
-            --pb-sidebar-bg:    #eef1f7;             /* sidebar — slightly warmer than page */
-            --pb-border:        rgba(15, 23, 42, 0.08);
-            --pb-border-strong: rgba(15, 23, 42, 0.14);
-
-            /* Legacy aliases (--text-*, --surface-*, --accent*, --border-*) → --pb-* palette.
-               New code should use --pb-* directly. */
-            --text-1:           var(--pb-text-1);
-            --text-2:           var(--pb-text-2);
-            --text-3:           var(--pb-text-3);
-            --text-4:           var(--pb-text-4);
-            --surface-0:        var(--pb-surface-0);
-            --surface-1:        var(--pb-surface-1);
-            --surface-2:        var(--pb-surface-2);
-            --surface-3:        var(--pb-sidebar-bg);
-            --surface-4:        #e3e8f2;
-            --accent:           var(--pb-accent);
-            --accent-hover:     var(--pb-accent-hover);
-            --accent-soft:      var(--pb-accent-soft);
-            --accent-line:      var(--pb-accent-line);
-            --success-hover:    #16a34a;
-            --border-default:   var(--pb-border);
-            --border-subtle:    var(--pb-border);
-            --border-strong:    var(--pb-border-strong);
-        }
-
-        /* Dark-mode palette — data-theme="dark" on <html>. Only the tokens change;
-           remaining hardcoded #fff / #1a1a1a spots get overrides where they live. */
-        :root[data-theme="dark"] {
-            --pb-text-1:        #f1f3f9;
-            --pb-text-2:        #c1c6d2;
-            --pb-text-3:        #8a90a0;
-            --pb-text-4:        #5e6473;
-            --pb-surface-0:     #0e1117;     /* page bg */
-            --pb-surface-1:     #161b24;     /* cards */
-            --pb-surface-2:     #1b2230;     /* elevated */
-            --pb-sidebar-bg:    #11151d;     /* sidebar — slightly darker than page */
-            --pb-border:        rgba(255, 255, 255, 0.08);
-            --pb-border-strong: rgba(255, 255, 255, 0.16);
-            --pb-accent-soft:   rgba(74, 123, 214, 0.18);
-            --pb-accent-line:   rgba(74, 123, 214, 0.32);
-
-            /* Legacy aliases follow the dark tokens too */
-            --surface-3:        #1b2230;
-            --surface-4:        #232c3c;
+            --pb-blue-1:        var(--accent-active);
+            --pb-blue-2:        var(--accent);
+            --pb-blue-3:        var(--accent-hover);
+            --pb-accent:        var(--accent);
+            --pb-accent-hover:  var(--accent-hover);
+            --pb-accent-soft:   var(--accent-weak);
+            --pb-accent-line:   var(--accent-soft-border);
+            --pb-grad:          var(--grad-accent);
+            --pb-text-1:        var(--text-1);
+            --pb-text-2:        var(--text-2);
+            --pb-text-3:        var(--text-3);
+            --pb-text-4:        var(--text-4);
+            --pb-surface-0:     var(--surface-0);
+            --pb-surface-1:     var(--surface-1);
+            --pb-surface-2:     var(--surface-3);
+            --pb-sidebar-bg:    var(--surface-1);
+            --pb-border:        var(--border-default);
+            --pb-border-strong: var(--border-strong);
+            --accent-soft:      var(--accent-weak);
+            --accent-line:      var(--accent-soft-border);
         }
 
         /* Spot fixes for hardcoded #fff / white / #1a1a1a, in DOM order. */
@@ -244,7 +206,7 @@
         }
 
         body {
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             background: var(--pb-surface-0);
             color: var(--pb-text-1);
             height: 100vh;
@@ -308,7 +270,7 @@
             border: none;
             background: var(--pb-grad);
             cursor: pointer;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.86rem;
             font-weight: 600;
             color: #fff;
@@ -664,12 +626,12 @@
             font-weight: 800;
             color: var(--pb-text-1);
             letter-spacing: -0.02em;
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
         }
         .cap-usage-of {
             font-size: 0.74rem;
             color: var(--pb-text-3);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
         }
         .cap-usage-bar-track {
             margin-top: 8px;
@@ -737,7 +699,7 @@
             font-weight: 800;
             color: var(--pb-text-1);
             letter-spacing: -0.02em;
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
         }
 
         .balance-project {
@@ -827,7 +789,7 @@
             border-radius: 8px;
             border: none;
             background: var(--pb-accent-soft);
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             letter-spacing: -0.01em;
         }
 
@@ -850,7 +812,7 @@
             transition: background 0.12s;
             border: none;
             background: none;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
         }
 
         .user-menu-btn:hover {
@@ -904,7 +866,7 @@
             background: none;
             border: none;
             border-bottom: 1px solid var(--pb-border);
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.85rem;
             color: var(--pb-text-1);
             cursor: pointer;
@@ -1070,7 +1032,7 @@
             color: var(--pb-text-1);
             border: 1px solid var(--pb-border);
             border-bottom-left-radius: 4px;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.88rem;
             position: relative;
         }
@@ -1091,7 +1053,7 @@
         .chat-msg.assistant .msg-bubble li { margin: 0.15em 0; }
         .chat-msg.assistant .msg-bubble code {
             background: #e9e9e9; padding: 1px 6px; border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace; font-size: 0.82em;
+            font-family: var(--font-mono); font-size: 0.82em;
         }
         .chat-msg.assistant .msg-bubble pre {
             position: relative;
@@ -1137,7 +1099,7 @@
             position: absolute; top: 6px; right: 6px;
             background: var(--surface-4); border: 1px solid #d0d7de;
             border-radius: 5px; padding: 2px 8px;
-            font-family: 'Geomini', 'Inter', sans-serif; font-size: 0.68rem; color: var(--text-3);
+            font-family: var(--font-sans); font-size: 0.68rem; color: var(--text-3);
             cursor: pointer; opacity: 0; transition: opacity 0.15s, background 0.15s;
         }
         .chat-msg.assistant .msg-bubble pre:hover .code-copy-btn { opacity: 1; }
@@ -1154,7 +1116,7 @@
         .msg-action-btn {
             background: transparent; border: 1px solid transparent;
             border-radius: 6px; padding: 3px 8px;
-            font-family: 'Geomini', 'Inter', sans-serif; font-size: 0.72rem; color: var(--text-3);
+            font-family: var(--font-sans); font-size: 0.72rem; color: var(--text-3);
             display: inline-flex; align-items: center; gap: 5px;
             cursor: pointer;
         }
@@ -1167,7 +1129,7 @@
             position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%);
             background: #2a2a2a; color: white; border: none;
             border-radius: 999px; padding: 6px 14px;
-            font-family: 'Geomini', 'Inter', sans-serif; font-size: 0.75rem;
+            font-family: var(--font-sans); font-size: 0.75rem;
             display: none; align-items: center; gap: 6px;
             cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             z-index: 5;
@@ -1363,7 +1325,7 @@
             border: 1.5px solid var(--pb-border);
             border-radius: 20px;
             background: var(--pb-surface-1);
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.78rem;
             color: var(--pb-text-2);
             cursor: pointer;
@@ -1387,7 +1349,7 @@
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238a99b0' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
             background-repeat: no-repeat;
             background-position: right 10px center;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.78rem;
             color: var(--pb-text-2);
             cursor: pointer;
@@ -1444,7 +1406,7 @@
             flex: 1;
             border: none;
             background: transparent;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.875rem;
             color: var(--pb-text-1);
             outline: none;
@@ -1733,7 +1695,7 @@
             padding: 9px 12px;
             border: 1.5px solid #e8e8e8;
             border-radius: 8px;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.875rem;
             color: #1a1a1a;
             outline: none;
@@ -1751,7 +1713,7 @@
             color: white;
             border: none;
             border-radius: 8px;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.875rem;
             font-weight: 600;
             cursor: pointer;
@@ -1770,7 +1732,7 @@
             color: #333;
             border: none;
             border-radius: 8px;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: 0.875rem;
             font-weight: 500;
             cursor: pointer;

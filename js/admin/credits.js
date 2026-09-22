@@ -203,7 +203,7 @@ export default {
 
       var usedCell;
       if (!hasCap) {
-        usedCell = '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + fmtB(spent) + '</span>'
+        usedCell = '<span style="font-family:var(--font-mono);color:var(--text-2)">' + fmtB(spent) + '</span>'
                  + '<span style="color:var(--text-3);font-size:.7rem"> ' + TTc('lbl.used','ใช้แล้ว') + '</span>';
       } else {
         var ratio = effective > 0 ? Math.min(1, spent / effective) : (spent > 0 ? 1 : 0);
@@ -211,7 +211,7 @@ export default {
         var barColor = ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#16a34a';
         usedCell =
             '<div style="display:flex;flex-direction:column;gap:4px;min-width:120px">'
-          +   '<div style="font-family:Geist Mono,monospace;font-size:.8rem">'
+          +   '<div style="font-family:var(--font-mono);font-size:.8rem">'
           +     '<b style="color:' + barColor + '">' + fmtB(spent) + '</b>'
           +     '<span style="color:var(--text-3)"> / ' + fmtB(effective) + '</span>'
           +     '<span style="color:var(--text-3);font-size:.7rem"> · ' + pct + '%</span>'

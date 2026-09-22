@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
     build: {
@@ -21,6 +22,7 @@ export default defineConfig({
         proxy: { '/api': 'http://localhost:3001' },
     },
     plugins: [
+        tailwindcss(),
         {
             // vite ต่อ CSS รวมไว้หลัง <style> inline ที่ตั้งใจ override มัน — ย้าย <link> กลับไปก่อน <style> ให้ cascade เท่า source
             name: 'css-before-inline-style',

@@ -47,7 +47,7 @@ export default {
         return '<div style="padding:14px 16px;background:var(--surface-2);'
           + 'border:1px solid var(--border-default);border-radius:10px">'
           + '<div style="font-size:.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">' + icon + ' ' + label + '</div>'
-          + '<div style="font-size:1.25rem;font-weight:700;color:' + valueColor + ';font-family:Geist Mono,monospace">' + value + '</div>'
+          + '<div style="font-size:1.25rem;font-weight:700;color:' + valueColor + ';font-family:var(--font-mono)">' + value + '</div>'
           + '</div>';
       };
 
@@ -59,7 +59,7 @@ export default {
         +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
         +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
         +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
-        +         'style="font-family:Geist Mono,monospace;font-size:.7rem;padding:3px 9px;'
+        +         'style="font-family:var(--font-mono);font-size:.7rem;padding:3px 9px;'
         +         'background:var(--accent-soft-bg);color:var(--accent);'
         +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer">'
         +         escapeHtml(p.id) + '</span>'

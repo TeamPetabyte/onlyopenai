@@ -10,19 +10,19 @@
     <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.13.1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Geomini:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <!-- tokens.css MUST load before style.css — defines --sidebar-w, --surface-0, --accent, etc. -->
     <link rel="stylesheet" href="css/tokens.css?v=1.3.8.1" />
 
-    <!-- Apply the saved theme before first paint to avoid a flash of the default dark theme. -->
+    <!-- Apply the saved theme before first paint (no flash); same key and default as chat. -->
     <script>
         (function () {
             try {
-                var t = localStorage.getItem('ag_theme') || 'dark';
-                if (t !== 'dark' && t !== 'light') t = 'dark';
+                var t = localStorage.getItem('ag_theme') || 'light';
+                if (t !== 'dark' && t !== 'light') t = 'light';
                 document.documentElement.setAttribute('data-theme', t);
-            } catch (_) { /* localStorage might be blocked; default to dark */ }
+            } catch (_) { /* localStorage might be blocked; default to light */ }
         })();
         function toggleTheme() {
             var html = document.documentElement;
@@ -75,7 +75,7 @@
             border: 1px solid var(--border-default);
             border-radius: 6px;
             color: var(--text-1);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             font-size: .82rem;
             padding: 6px 10px;
             width: 90px;
@@ -95,7 +95,7 @@
             border: none;
             cursor: pointer;
             transition: all .18s;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
         }
 
         .btn-save {
@@ -207,7 +207,7 @@
 
         .log-cost {
             color: var(--text-2);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             font-size: .78rem;
             white-space: nowrap;
             margin-left: 12px;
@@ -256,7 +256,7 @@
             background: transparent;
             border: none;
             color: var(--text-1);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             font-size: .82rem;
             padding: 4px 4px;
             outline: none;
@@ -546,12 +546,12 @@
             background: rgba(37, 99, 235, .05);
         }
         .tx-cell-mono {
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             font-size: .8rem;
             color: var(--text-2);
         }
         .tx-cell-amount {
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             font-size: .88rem;
             font-weight: 700;
             text-align: right;
@@ -715,7 +715,7 @@
             border: 1px solid var(--border-subtle);
             border-radius: 8px;
             color: var(--text-3);
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: .82rem;
             font-weight: 500;
             cursor: pointer;
@@ -805,7 +805,7 @@
             border: 1px solid var(--border-default);
             border-radius: 8px;
             color: var(--text-1);
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: .875rem;
             padding: 10px 12px;
             transition: border-color .2s;
@@ -900,7 +900,7 @@
         .eu-identity-sub {
             font-size: .72rem;
             color: var(--text-3);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
             margin-top: 2px;
         }
         .modal-actions-eu {
@@ -949,7 +949,7 @@
             border: 1px solid var(--border-default);
             color: var(--text-3);
             cursor: pointer;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: .875rem;
             font-weight: 600;
             transition: all .15s;
@@ -966,7 +966,7 @@
             color: var(--text-on-accent, #fff);
             border: none;
             cursor: pointer;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             font-size: .875rem;
             font-weight: 700;
             transition: all .15s;
@@ -1065,7 +1065,7 @@
             font-size: 1rem;
             font-weight: 700;
             color: var(--text-1);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
         }
 
         .usage-bar-wrap {
@@ -1119,7 +1119,7 @@
 
         .usage-history-table td.val {
             color: var(--text-2);
-            font-family: 'Geist Mono', monospace;
+            font-family: var(--font-mono);
         }
 
         .usage-history-table tbody tr:hover td {
@@ -1157,7 +1157,7 @@
             padding: 10px 16px;
             font-size: .85rem;
             font-weight: 600;
-            font-family: 'Geomini', 'Inter', sans-serif;
+            font-family: var(--font-sans);
             cursor: pointer;
             transition: color .15s ease, border-color .15s ease, background .15s ease;
             border-radius: 6px 6px 0 0;
@@ -1201,8 +1201,8 @@
         .audit-table tbody tr:hover { background: var(--surface-3); }
         .audit-table tbody tr:last-child td { border-bottom: none; }
         .audit-name { color: var(--text-1, #f4f4f7); font-weight: 600; }
-        .audit-username { color: var(--text-3, #9ca3af); font-family: 'Geist Mono', monospace; font-size: .78rem; }
-        .audit-duration { color: var(--accent, #818cf8); font-family: 'Geist Mono', monospace; font-size: .82rem; }
+        .audit-username { color: var(--text-3, #9ca3af); font-family: var(--font-mono); font-size: .78rem; }
+        .audit-duration { color: var(--accent, #818cf8); font-family: var(--font-mono); font-size: .82rem; }
         .audit-empty { text-align: center; padding: 32px; color: var(--text-3, #9ca3af); font-size: .85rem; }
         .audit-pill {
             display: inline-block;
@@ -1819,7 +1819,7 @@
                 </div>
                 <details style="margin-top:8px">
                     <summary id="lab-prompt-summary" style="cursor:pointer;font-size:.76rem;color:var(--text-3);font-weight:600;user-select:none">📄 System prompt</summary>
-                    <pre id="lab-prompt-preview" style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.74rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto"></pre>
+                    <pre id="lab-prompt-preview" style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.74rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto"></pre>
                 </details>
             </div>
 
@@ -1842,7 +1842,7 @@
                     <!-- wrap="off" + white-space:pre: long ABAP lines scroll horizontally instead of wrapping;
                          resize stays vertical-only -->
                     <textarea class="modal-input" id="lab-question" rows="14" wrap="off"
-                        style="font-family:'Geist Mono',monospace;font-size:.8rem;white-space:pre;overflow-x:auto;min-height:180px;tab-size:4"
+                        style="font-family:var(--font-mono);font-size:.8rem;white-space:pre;overflow-x:auto;min-height:180px;tab-size:4"
                         data-i18n-ph="lab.questionPh"
                         placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."
                         oninput="admin._labUpdateCharCount()"></textarea>
@@ -1856,7 +1856,7 @@
                         <label class="modal-label" style="margin:0" data-i18n="modal.testSkill.answerLabel">คำตอบ AI</label>
                         <span id="lab-meta" style="font-size:.72rem;color:var(--text-3)"></span>
                     </div>
-                    <pre id="lab-answer" style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;min-height:120px;max-height:420px;overflow:auto"></pre>
+                    <pre id="lab-answer" style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;min-height:120px;max-height:420px;overflow:auto"></pre>
                     <div id="lab-verdict" style="display:none;margin-top:10px"></div>
                 </div>
             </div>
@@ -2051,7 +2051,7 @@
 
             <!-- Generate Password -->
             <button type="button" onclick="admin.generatePassword()" style="width:100%;padding:10px;background:var(--surface-3);border:1px solid var(--border-default);
-                       border-radius:8px;color:var(--text-2);font-family:'Geomini', 'Inter',sans-serif;font-size:.875rem;font-weight:600;
+                       border-radius:8px;color:var(--text-2);font-family:var(--font-sans);font-size:.875rem;font-weight:600;
                        cursor:pointer;margin-bottom:14px;transition:all .15s"
                 onmouseover="this.style.background='rgba(255,255,255,0.1)'"
                 onmouseout="this.style.background='rgba(255,255,255,0.06)'">
@@ -2391,7 +2391,7 @@
                     <span id="es-charcount" style="float:right;color:var(--text-3);font-weight:400;font-size:.72rem">0 chars</span>
                 </label>
                 <textarea class="modal-input" id="es-content" rows="16"
-                    style="font-family:'Geist Mono',monospace;font-size:.8rem;line-height:1.5;white-space:pre"
+                    style="font-family:var(--font-mono);font-size:.8rem;line-height:1.5;white-space:pre"
                     placeholder="วาง prompt เต็มที่นี่… ใช้ {code} เป็นจุดที่จะแทนด้วยโค้ดของผู้ใช้"></textarea>
                 <div style="font-size:.7rem;color:var(--text-3);margin-top:4px;line-height:1.45">
                     💡 ใส่ <code style="background:var(--surface-3);padding:1px 5px;border-radius:4px">{code}</code> ตรงที่ต้องการให้ระบบแทนด้วยโค้ดที่ผู้ใช้ส่งมา
@@ -2760,11 +2760,11 @@
             </div>
             <div class="modal-field">
                 <label class="modal-label" data-i18n="vt.prompt">สิ่งที่ user พิมพ์</label>
-                <pre id="vt-prompt" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+                <pre id="vt-prompt" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:var(--font-mono);font-size:.8rem;color:var(--text-1)"></pre>
             </div>
             <div class="modal-field">
                 <label class="modal-label" data-i18n="vt.response">คำตอบของ AI</label>
-                <pre id="vt-response" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:'Geist Mono',monospace;font-size:.8rem;color:var(--text-1)"></pre>
+                <pre id="vt-response" style="white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:8px;font-family:var(--font-mono);font-size:.8rem;color:var(--text-1)"></pre>
             </div>
             <div class="modal-actions">
                 <button class="btn-modal-cancel" onclick="hideModal('modal-view-turn')" data-i18n="btn.cancelTh">ยกเลิก</button>

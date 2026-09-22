@@ -55,12 +55,12 @@ export default {
         '<span style="display:inline-block;padding:4px 12px;border-radius:20px;'
         + 'background:' + c.bg + ';color:' + c.fg + ';border:1px solid ' + c.bd + ';'
         + 'font-size:.82rem;font-weight:600">' + c.label + '</span>' },
-      { label: 'Last Run',          value: '<span style="font-family:Geist Mono,monospace;color:var(--text-1)">' + lastRun + '</span>' },
-      { label: 'Next Run',          value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + nextEta + '</span>' },
+      { label: 'Last Run',          value: '<span style="font-family:var(--font-mono);color:var(--text-1)">' + lastRun + '</span>' },
+      { label: 'Next Run',          value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + nextEta + '</span>' },
       { label: 'Interval',          value: '<span style="color:var(--text-2)">' + (d.intervalMin || '?') + ' min</span>' },
-      { label: 'Last Duration',     value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.last_duration_ms != null ? s.last_duration_ms + ' ms' : '—') + '</span>' },
-      { label: 'Rows This Run',     value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.last_rows_inserted || 0) + '</span>' },
-      { label: 'Rows Total',        value: '<span style="font-family:Geist Mono,monospace;color:var(--text-2)">' + (s.rows_synced_total || 0).toLocaleString() + '</span>' },
+      { label: 'Last Duration',     value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.last_duration_ms != null ? s.last_duration_ms + ' ms' : '—') + '</span>' },
+      { label: 'Rows This Run',     value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.last_rows_inserted || 0) + '</span>' },
+      { label: 'Rows Total',        value: '<span style="font-family:var(--font-mono);color:var(--text-2)">' + (s.rows_synced_total || 0).toLocaleString() + '</span>' },
       { label: 'Admin Key',         value: d.adminKeyConfigured ? '<span style="color:#3fa64d">✓ configured</span>' : '<span style="color:#e25563">✗ missing</span>' },
     ];
 
@@ -76,7 +76,7 @@ export default {
           }).join('')
       + '</div>'
       + (s.last_error
-          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:Geist Mono,monospace">'
+          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:var(--font-mono)">'
             + '<b>Error:</b> ' + escapeHtml(s.last_error) + '</div>'
           : '');
   },
@@ -107,7 +107,7 @@ export default {
         ? formatDateStd(r.openai_synced_at)
         : '<span style="color:var(--text-3);font-style:italic">never</span>';
       var pidPill = r.openai_project_id
-        ? '<span style="font-family:Geist Mono,monospace;font-size:.7rem;padding:2px 7px;'
+        ? '<span style="font-family:var(--font-mono);font-size:.7rem;padding:2px 7px;'
           + 'background:var(--accent-soft-bg);color:var(--accent);'
           + 'border:1px solid var(--accent-soft-border);border-radius:5px;margin-left:8px">'
           + escapeHtml(r.openai_project_id.slice(0, 16) + '…') + '</span>'
@@ -119,9 +119,9 @@ export default {
         +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem">'
         +     '📂 ' + escapeHtml(r.project_name || '—') + pidPill + '</div>'
         + '</div>'
-        + '<div style="font-size:.82rem;color:var(--text-2);font-family:Geist Mono,monospace">' + synced + '</div>'
-        + '<div style="text-align:right;font-family:Geist Mono,monospace;color:var(--text-1);font-weight:600">' + tokens.toLocaleString() + '</div>'
-        + '<div style="text-align:right;font-family:Geist Mono,monospace;color:' + (cached > 0 ? '#3fa64d' : 'var(--text-3)') + ';font-weight:600">' + cachedPct + '</div>'
+        + '<div style="font-size:.82rem;color:var(--text-2);font-family:var(--font-mono)">' + synced + '</div>'
+        + '<div style="text-align:right;font-family:var(--font-mono);color:var(--text-1);font-weight:600">' + tokens.toLocaleString() + '</div>'
+        + '<div style="text-align:right;font-family:var(--font-mono);color:' + (cached > 0 ? '#3fa64d' : 'var(--text-3)') + ';font-weight:600">' + cachedPct + '</div>'
         + '</div>';
     }).join('');
 

@@ -1,0 +1,43 @@
+/* Tailwind entry. Utilities map onto css/tokens.css, so classes follow the theme for free. */
+@import "tailwindcss" source(none);
+@source "../login.html";
+@source "../change-password.html";
+
+@theme inline {
+    --color-*: initial;
+    --color-bg: var(--surface-0);
+    --color-surface: var(--surface-1);
+    --color-surface-2: var(--surface-2);
+    --color-surface-3: var(--surface-3);
+    --color-surface-4: var(--surface-4);
+    --color-line: var(--border-default);
+    --color-line-strong: var(--border-strong);
+    --color-text-1: var(--text-1);
+    --color-text-2: var(--text-2);
+    --color-text-3: var(--text-3);
+    --color-text-4: var(--text-4);
+    --color-accent: var(--accent);
+    --color-accent-hover: var(--accent-hover);
+    --color-accent-weak: var(--accent-weak);
+    --color-on-accent: var(--text-on-accent);
+    --color-success: var(--success);
+    --color-success-weak: var(--success-weak);
+    --color-warning: var(--warning);
+    --color-warning-weak: var(--warning-weak);
+    --color-danger: var(--danger);
+    --color-danger-weak: var(--danger-weak);
+    --color-white: #ffffff;
+    --color-transparent: transparent;
+
+    --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
+
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+    --radius-xl: var(--radius-xl);
+
+    --shadow-sm: var(--shadow-sm);
+    --shadow-md: var(--shadow-md);
+    --shadow-lg: var(--shadow-lg);
+    --shadow-ring: var(--shadow-ring);
+}

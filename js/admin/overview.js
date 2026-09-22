@@ -33,7 +33,7 @@ export default {
           +   'letter-spacing:.06em;margin-bottom:8px;font-weight:600">'
           +   icon + ' ' + label + '</div>'
           + '<div style="font-size:1.55rem;font-weight:800;color:var(--text-1);'
-          +   'font-family:Geist Mono,monospace;letter-spacing:-.02em;margin-bottom:4px">'
+          +   'font-family:var(--font-mono);letter-spacing:-.02em;margin-bottom:4px">'
           +   value + '</div>'
           + (sub ? '<div style="font-size:.72rem;color:var(--text-3)">' + sub + '</div>' : '')
           + '</div>';
@@ -382,7 +382,7 @@ export default {
       +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
       +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">📂 ' + escapeHtml(p.name) + '</div>'
       +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'✓ Copied: ' + jsArg(p.id) + '\'))" '
-      +         'style="font-family:Geist Mono,monospace;font-size:.72rem;padding:3px 9px;'
+      +         'style="font-family:var(--font-mono);font-size:.72rem;padding:3px 9px;'
       +         'background:var(--accent-soft-bg);color:var(--accent);'
       +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer;'
       +         'transition:background .15s">' + escapeHtml(p.id) + '</span>'
@@ -418,7 +418,7 @@ export default {
       footHtml = '💡 ' + TT('proj.topupHint','กด "+ เติมเงิน Project" เพื่อเริ่มใช้งาน');
     } else if (isEmpty) {
       // funded before but spent everything — clear "depleted" warning
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:Geist Mono,monospace">0%</span>'
+      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:var(--font-mono)">0%</span>'
                + '<span style="font-size:.78rem;color:#dc2626;font-weight:600;margin-left:8px">⚠ '
                + TT('proj.depleted','เครดิตหมด') + '</span>';
       barPct = 0; barColor = '#dc2626'; poolNumColor = '#dc2626';
@@ -427,7 +427,7 @@ export default {
       // normal — colour by how much is left
       var col = usablePct >= 50 ? 'var(--success-hover,#34d399)'
               : usablePct >= 20 ? '#f59e0b' : '#dc2626';
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:' + col + ';font-family:Geist Mono,monospace;letter-spacing:-.02em">'
+      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:' + col + ';font-family:var(--font-mono);letter-spacing:-.02em">'
                + usablePct.toFixed(1) + '%</span>'
                + '<span style="font-size:.76rem;color:var(--text-3);margin-left:8px">' + TT('proj.usableLeft','คงเหลือใช้ได้') + '</span>';
       barPct = usablePct; barColor = col; poolNumColor = 'var(--text-1)';
@@ -440,7 +440,7 @@ export default {
       +   '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px;gap:12px;flex-wrap:wrap">'
       +     '<div>' + leftHtml + '</div>'
       +     '<div style="text-align:right">'
-      +       '<span style="font-size:1.4rem;font-weight:800;color:' + poolNumColor + ';font-family:Geist Mono,monospace">'
+      +       '<span style="font-size:1.4rem;font-weight:800;color:' + poolNumColor + ';font-family:var(--font-mono)">'
       +         formatTHB(budget.pool) + '</span>'
       +       '<span style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-left:6px">' + TT('proj.poolLeft','Pool left') + '</span>'
       +     '</div>'
@@ -458,7 +458,7 @@ export default {
       return '<div style="padding:14px 16px;background:var(--surface-2);'
         + 'border:1px solid var(--border-default);border-radius:10px">'
         + '<div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">' + icon + ' ' + label + '</div>'
-        + '<div style="font-size:1.3rem;font-weight:700;color:' + valueColor + ';font-family:Geist Mono,monospace">' + value + '</div>'
+        + '<div style="font-size:1.3rem;font-weight:700;color:' + valueColor + ';font-family:var(--font-mono)">' + value + '</div>'
         + (sub ? '<div style="font-size:.7rem;color:var(--text-3);margin-top:4px">' + sub + '</div>' : '')
         + '</div>';
     };
@@ -495,7 +495,7 @@ export default {
           + '</div>';
       };
       var mono = function (s, color) {
-        return '<span style="font-weight:600;color:' + (color || 'var(--text-1)') + ';font-family:Geist Mono,monospace;font-size:.85rem">' + s + '</span>';
+        return '<span style="font-weight:600;color:' + (color || 'var(--text-1)') + ';font-family:var(--font-mono);font-size:.85rem">' + s + '</span>';
       };
       var rows = users.map(function (u, idx) {
         var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();

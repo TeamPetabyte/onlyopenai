@@ -41,10 +41,10 @@ export default {
 
     var blocks = [
       { label: 'Status',     value: statusPill },
-      { label: 'Total',      value: '<span style="font-family:Geist Mono,monospace">' + totalCount + ' skills</span>' },
-      { label: 'Configured', value: '<span style="font-family:Geist Mono,monospace;color:#3fa64d">' + configuredCount + '</span>' },
-      { label: 'Placeholder',value: '<span style="font-family:Geist Mono,monospace;color:#e6a14a">' + (totalCount - configuredCount) + '</span>' },
-      { label: 'Last Loaded',value: '<span style="font-family:Geist Mono,monospace;font-size:.82rem">' + loadedAt + '</span>' },
+      { label: 'Total',      value: '<span style="font-family:var(--font-mono)">' + totalCount + ' skills</span>' },
+      { label: 'Configured', value: '<span style="font-family:var(--font-mono);color:#3fa64d">' + configuredCount + '</span>' },
+      { label: 'Placeholder',value: '<span style="font-family:var(--font-mono);color:#e6a14a">' + (totalCount - configuredCount) + '</span>' },
+      { label: 'Last Loaded',value: '<span style="font-family:var(--font-mono);font-size:.82rem">' + loadedAt + '</span>' },
     ];
 
     el.innerHTML =
@@ -59,7 +59,7 @@ export default {
           }).join('')
       + '</div>'
       + (hasError
-          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:Geist Mono,monospace">'
+          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:var(--font-mono)">'
             + '<b>Load error:</b> ' + escapeHtml(status.error) + '</div>'
           : '');
   },
@@ -78,7 +78,7 @@ export default {
         ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">⚠ Placeholder</span>'
         : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.30);font-size:.7rem;font-weight:600">✓ Configured</span>';
       var openaiPill = s.openaiPromptId
-        ? '<span style="font-family:Geist Mono,monospace;font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
+        ? '<span style="font-family:var(--font-mono);font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
         : '<span style="color:var(--text-3);font-size:.72rem;font-style:italic">no openai ref</span>';
 
       var idJs = "'" + String(s.id).replace(/'/g, "\\'") + "'";
@@ -90,7 +90,7 @@ export default {
         +       statusBadge
         +     '</div>'
         +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-        +       '<span style="font-family:Geist Mono,monospace;font-size:.74rem;color:var(--text-3)">id: <b style="color:var(--text-2)">' + escapeHtml(s.id) + '</b></span>'
+        +       '<span style="font-family:var(--font-mono);font-size:.74rem;color:var(--text-3)">id: <b style="color:var(--text-2)">' + escapeHtml(s.id) + '</b></span>'
         +       openaiPill
         +     '</div>'
         +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
@@ -103,7 +103,7 @@ export default {
         + '<details style="margin-top:10px">'
         +   '<summary style="cursor:pointer;font-size:.74rem;color:var(--text-3);font-weight:600;user-select:none">'
         +     '📄 Content preview (' + s.contentLength + ' chars)</summary>'
-        +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:Geist Mono,monospace;font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
+        +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
         +     escapeHtml(s.contentPreview) + '</pre>'
         + '</details>'
         + '</div>';
@@ -493,7 +493,7 @@ export default {
         + admin._verdictBadge(r.verdict)
         + (r.is_eval_case ? '<span title="อยู่ในชุดข้อสอบ">⭐</span>' : '')
         + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
-        + '<span style="font-family:Geist Mono,monospace;font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
+        + '<span style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
         // which skill/prompt this run tested
         + (r.skill_label ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--surface-3);border:1px solid var(--border-subtle);color:var(--text-2);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(r.skill_label) + '</span>' : '')
         + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
@@ -525,7 +525,7 @@ export default {
     if (!det) return;
     var pre = function (label, text) {
       return '<label class="modal-label" style="margin-top:8px">' + escapeHtml(label) + '</label>'
-        + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
+        + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
         + escapeHtml(text || '') + '</pre>';
     };
     // ⭐ promote/demote into the exam set; the backend enforces verdict + golden reference, this only hints.
@@ -739,7 +739,7 @@ export default {
       +   '</div>'
       +   '<div style="text-align:right">'
       +     '<div style="font-size:.72rem;color:var(--text-3);font-weight:600">' + escapeHtml(t('evals.trend', 'แนวโน้ม')) + '</div>'
-      +     '<div style="font-family:\'Geist Mono\',monospace;font-size:.85rem;color:var(--text-2)">' + trend + '</div>'
+      +     '<div style="font-family:var(--font-mono);font-size:.85rem;color:var(--text-2)">' + trend + '</div>'
       +   '</div>'
       + '</div>';
     card.style.display = '';
@@ -767,7 +767,7 @@ export default {
         + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
         + '<b style="font-size:.78rem;color:var(--text-2);white-space:nowrap">#' + r.run_id + '</b>'
         + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
-        + '<span style="font-family:\'Geist Mono\',monospace;font-size:.68rem;color:var(--text-3)">' + escapeHtml(r.model) + (r.effort ? '/' + escapeHtml(r.effort) : '') + '</span>'
+        + '<span style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-3)">' + escapeHtml(r.model) + (r.effort ? '/' + escapeHtml(r.effort) : '') + '</span>'
         + badge(r.status)
         + '<span style="flex:1"></span>'
         + (r.score_pct != null ? '<b style="font-size:.85rem;color:var(--text-1)">' + Number(r.score_pct).toFixed(1) + '%</b>' : '')
@@ -846,7 +846,7 @@ export default {
     if (box.style.display !== 'none') { box.style.display = 'none'; return; }
     var pre = function (label, text) {
       return '<label class="modal-label" style="margin-top:6px">' + escapeHtml(label) + '</label>'
-        + '<pre style="margin:0;padding:9px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:\'Geist Mono\',monospace;font-size:.72rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto">'
+        + '<pre style="margin:0;padding:9px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.72rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto">'
         + escapeHtml(text || '') + '</pre>';
     };
     var golden = (r.corrected_answer || '').trim() || r.old_answer;

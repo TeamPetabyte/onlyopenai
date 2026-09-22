@@ -97,7 +97,7 @@ export default {
           +   (u.projectId ? '📂 ' + escapeHtml(projectName) : '<span style="opacity:.5">— No project —</span>')
           + '</div>'
           // Created
-          + '<div style="font-size:.82rem;color:var(--text-3);font-family:Geist Mono,monospace">' + created + '</div>'
+          + '<div style="font-size:.82rem;color:var(--text-3);font-family:var(--font-mono)">' + created + '</div>'
           // Status badge
           + '<div style="min-width:78px;text-align:center">' + statusBadge + '</div>'
           // Action

@@ -1,61 +1,65 @@
-/* Design tokens: dark theme by default, light theme under [data-theme="light"]. */
+/* Design tokens — one set for chat, admin, login. Light by default, dark under [data-theme="dark"]. */
 
 :root {
     /* ── Surfaces ───────────────────────────────────────── */
-    --surface-0: #08090c;          /* page background */
-    --surface-1: #0f1014;          /* cards / panels */
-    --surface-2: #17181d;          /* modals, popovers */
-    --surface-3: #1e1f25;          /* elevated hover, input bg */
-    --surface-4: #262730;          /* hover on surface-3 */
-    --surface-inverse: #f4f4f7;    /* for light-on-dark flip cases */
+    --surface-0: #f4f6fa;          /* page background */
+    --surface-1: #ffffff;          /* cards / panels / sidebar */
+    --surface-2: #ffffff;          /* modals, popovers */
+    --surface-3: #eef1f6;          /* input bg, muted surface */
+    --surface-4: #e4e8f0;          /* hover on surface-3 */
+    --surface-inverse: #111827;
 
     /* ── Borders ────────────────────────────────────────── */
-    --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-default: rgba(255, 255, 255, 0.10);
-    --border-strong: rgba(255, 255, 255, 0.18);
+    --border-subtle: rgba(17, 24, 39, 0.06);
+    --border-default: rgba(17, 24, 39, 0.10);
+    --border-strong: rgba(17, 24, 39, 0.20);
     --border-focus: var(--accent);
 
     /* ── Text ───────────────────────────────────────────── */
-    --text-1: #f4f4f7;             /* primary */
-    --text-2: #b8b9c0;             /* secondary */
-    --text-3: #72737a;             /* muted / placeholder */
-    --text-4: #4a4b52;             /* disabled */
+    --text-1: #111827;             /* primary */
+    --text-2: #3f4756;             /* secondary */
+    --text-3: #66707f;             /* muted, still ≥4.5:1 on white */
+    --text-4: #8b93a1;             /* placeholder / disabled */
     --text-on-accent: #ffffff;
 
-    /* ── Accent (legacy --purple aliases map here) ─────── */
-    --accent: #3b82f6;                          /* blue-500 */
-    --accent-hover: #60a5fa;                    /* blue-400, lighter for hover on dark bg */
-    --accent-active: #2563eb;                   /* blue-600, pressed state */
-    --accent-weak: rgba(59, 130, 246, 0.14);
-    --accent-weaker: rgba(59, 130, 246, 0.07);
-    --accent-ring: rgba(59, 130, 246, 0.35);
-    --accent-rgb: 59, 130, 246;                 /* for inline rgba() concatenation */
-    --accent-soft-bg: rgba(59, 130, 246, 0.08);
-    --accent-soft-border: rgba(59, 130, 246, 0.30);
+    /* ── Accent ─────────────────────────────────────────── */
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-active: #1e40af;
+    --accent-weak: #e8f0ff;
+    --accent-weaker: rgba(37, 99, 235, 0.05);
+    --accent-ring: rgba(37, 99, 235, 0.30);
+    --accent-rgb: 37, 99, 235;
+    --accent-soft-bg: rgba(37, 99, 235, 0.06);
+    --accent-soft-border: rgba(37, 99, 235, 0.25);
 
     /* ── Semantic colors ────────────────────────────────── */
-    --success: #10b981;
-    --success-weak: rgba(16, 185, 129, 0.14);
-    --success-hover: #34d399;
+    --success: #047857;
+    --success-weak: #e6f6ef;
+    --success-hover: #059669;
 
-    --warning: #f59e0b;
-    --warning-weak: rgba(245, 158, 11, 0.14);
-    --warning-hover: #fbbf24;
+    --warning: #b45309;
+    --warning-weak: #fdf1df;
+    --warning-hover: #d97706;
 
-    --danger: #ef4444;
-    --danger-weak: rgba(239, 68, 68, 0.14);
-    --danger-hover: #f87171;
+    --danger: #b91c1c;
+    --danger-weak: #fdeaea;
+    --danger-hover: #dc2626;
 
-    --info: #3b82f6;
-    --info-weak: rgba(59, 130, 246, 0.14);
-    --info-hover: #60a5fa;
+    --info: #2563eb;
+    --info-weak: #e8f0ff;
+    --info-hover: #1d4ed8;
 
-    /* ── Gradients (blue family, no purple) ─────────────── */
-    --grad-accent: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-    --grad-accent-soft: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(29, 78, 216, 0.12) 100%);
-    --grad-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    --grad-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-    --grad-surface: linear-gradient(180deg, #0f1014 0%, #08090c 100%);
+    /* ── Gradients (kept for legacy call sites; flat accent now) ─ */
+    --grad-accent: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    --grad-accent-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.14) 0%, rgba(29, 78, 216, 0.08) 100%);
+    --grad-success: linear-gradient(135deg, #059669 0%, #047857 100%);
+    --grad-danger: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    --grad-surface: linear-gradient(180deg, #ffffff 0%, #f4f6fa 100%);
+
+    /* ── Code block (same in both themes) ───────────────── */
+    --code-bg: #0f1420;
+    --code-text: #e6e9f0;
 
     /* ── Spacing (4pt grid) ─────────────────────────────── */
     --space-0: 0;
@@ -82,17 +86,17 @@
     --radius-full: 9999px;
 
     /* ── Shadows ────────────────────────────────────────── */
-    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.55);
-    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
-    --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.65);
+    --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.06);
+    --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06), 0 1px 1px rgba(17, 24, 39, 0.04);
+    --shadow-md: 0 8px 24px rgba(17, 24, 39, 0.10);
+    --shadow-lg: 0 24px 60px rgba(17, 24, 39, 0.18);
+    --shadow-xl: 0 32px 80px rgba(17, 24, 39, 0.22);
     --shadow-ring: 0 0 0 3px var(--accent-ring);
-    --shadow-glow: 0 0 32px rgba(59, 130, 246, 0.18);
+    --shadow-glow: 0 0 32px rgba(37, 99, 235, 0.20);
 
     /* ── Typography ─────────────────────────────────────── */
-    --font-sans: 'Geomini', 'Inter', 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, Consolas, monospace;
+    --font-sans: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
     --text-xs: 11px;
     --text-sm: 12px;
@@ -136,9 +140,9 @@
     --z-tooltip: 1100;
 
     /* ── Layout ─────────────────────────────────────────── */
-    --sidebar-w: 260px;
+    --sidebar-w: 264px;
     --sidebar-w-collapsed: 72px;
-    --topbar-h: 60px;
+    --topbar-h: 56px;
     --content-max: 1400px;
     --container-pad: var(--space-6);
 
@@ -146,55 +150,63 @@
     --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
-/* ── Light theme ────────────────────────────────────────── */
-:root[data-theme="light"] {
-    --surface-0: #e3e7ef;                       /* page background — soft cool grey, dialed down */
-    --surface-1: #f0f3f8;                       /* cards / panels — off-white, sits above page */
-    --surface-2: #f7f9fc;                       /* modals, popovers — lightest (focal) */
-    --surface-3: #dde2eb;                       /* input bg / muted surface */
-    --surface-4: #ced4e0;                       /* hover on surface-3 */
-    --surface-inverse: #0b0c10;
+/* ── Dark theme ─────────────────────────────────────────── */
+:root[data-theme="dark"] {
+    --surface-0: #0b0d12;
+    --surface-1: #12151c;
+    --surface-2: #181c25;
+    --surface-3: #21262f;
+    --surface-4: #2a303b;
+    --surface-inverse: #f1f3f7;
 
-    --border-subtle: rgba(15, 23, 42, 0.06);
-    --border-default: rgba(15, 23, 42, 0.10);
-    --border-strong: rgba(15, 23, 42, 0.18);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.20);
 
-    /* One shade darker than the dark scale so muted text stays readable on near-white. */
-    --text-1: #0b0c10;       /* slate-950   — primary */
-    --text-2: #1e293b;       /* slate-800   — secondary, near-black */
-    --text-3: #475569;       /* slate-600   — muted but still readable */
-    --text-4: #64748b;       /* slate-500   — placeholder / disabled */
-    --text-on-accent: #ffffff;
+    --text-1: #f1f3f7;
+    --text-2: #c3c8d2;
+    --text-3: #8d95a3;
+    --text-4: #5f6775;
+    --text-on-accent: #0b1220;
 
-    /* Accent — darker blue (#2563eb) for stronger contrast on white */
-    --accent: #2563eb;
-    --accent-hover: #1d4ed8;
-    --accent-active: #1e40af;
-    --accent-weak: rgba(37, 99, 235, 0.10);
-    --accent-weaker: rgba(37, 99, 235, 0.05);
-    --accent-ring: rgba(37, 99, 235, 0.30);
-    --accent-rgb: 37, 99, 235;
-    --accent-soft-bg: rgba(37, 99, 235, 0.06);
-    --accent-soft-border: rgba(37, 99, 235, 0.25);
+    --accent: #5b9bff;
+    --accent-hover: #7cb0ff;
+    --accent-active: #3b82f6;
+    --accent-weak: rgba(91, 155, 255, 0.14);
+    --accent-weaker: rgba(91, 155, 255, 0.07);
+    --accent-ring: rgba(91, 155, 255, 0.35);
+    --accent-rgb: 91, 155, 255;
+    --accent-soft-bg: rgba(91, 155, 255, 0.08);
+    --accent-soft-border: rgba(91, 155, 255, 0.30);
 
-    --grad-accent: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    --grad-accent-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.14) 0%, rgba(29, 78, 216, 0.08) 100%);
-    --grad-surface: linear-gradient(180deg, #f0f3f8 0%, #e3e7ef 100%);
+    --success: #34d399;
+    --success-weak: rgba(52, 211, 153, 0.14);
+    --success-hover: #6ee7b7;
 
-    --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.06);
-    --shadow-sm: 0 2px 6px rgba(16, 24, 40, 0.08);
-    --shadow-md: 0 6px 16px rgba(16, 24, 40, 0.10);
-    --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.14);
-    --shadow-xl: 0 24px 64px rgba(16, 24, 40, 0.18);
-    --shadow-glow: 0 0 32px rgba(37, 99, 235, 0.20);
-}
+    --warning: #fbbf24;
+    --warning-weak: rgba(251, 191, 36, 0.14);
+    --warning-hover: #fcd34d;
 
-/* Scrollbar in light mode — needs visible-on-white treatment */
-:root[data-theme="light"] *::-webkit-scrollbar-thumb {
-    background: rgba(15, 23, 42, 0.18);
-}
-:root[data-theme="light"] *::-webkit-scrollbar-thumb:hover {
-    background: rgba(15, 23, 42, 0.30);
+    --danger: #f87171;
+    --danger-weak: rgba(248, 113, 113, 0.14);
+    --danger-hover: #fca5a5;
+
+    --info: #5b9bff;
+    --info-weak: rgba(91, 155, 255, 0.14);
+    --info-hover: #7cb0ff;
+
+    --grad-accent: linear-gradient(135deg, #5b9bff 0%, #3b82f6 100%);
+    --grad-accent-soft: linear-gradient(135deg, rgba(91, 155, 255, 0.18) 0%, rgba(59, 130, 246, 0.12) 100%);
+    --grad-surface: linear-gradient(180deg, #12151c 0%, #0b0d12 100%);
+
+    --code-bg: #0a0d14;
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.65);
+    --shadow-xl: 0 32px 80px rgba(0, 0, 0, 0.7);
+    --shadow-glow: 0 0 32px rgba(91, 155, 255, 0.18);
 }
 
 /* ── Respect reduced motion ─────────────────────────────── */
@@ -222,10 +234,10 @@
     color: var(--text-1);
 }
 
-/* ── Scrollbar (dark) ───────────────────────────────────── */
+/* ── Scrollbar ──────────────────────────────────────────── */
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--surface-4) transparent;
+    scrollbar-color: var(--border-strong) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -238,14 +250,14 @@
 }
 
 *::-webkit-scrollbar-thumb {
-    background: var(--surface-4);
+    background: var(--border-strong);
     border-radius: var(--radius-full);
     border: 2px solid transparent;
     background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: var(--border-strong);
+    background: var(--text-4);
     background-clip: padding-box;
     border: 2px solid transparent;
 }
