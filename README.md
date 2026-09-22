@@ -100,7 +100,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 │   ├── lib/                     # abap-scan (rules + abaplint), prompt (appendix, target release), models
 │   ├── skill-prompts.js         # DB-backed prompt registry (+ file fallback, seeds new file skills)
 │   ├── config/skill-prompts.json# seed/fallback prompt catalog (7 skills)
-│   ├── knowledge/               # 17 SAP/ABAP reference files (function-tool RAG)
+│   ├── knowledge/               # 15 SAP/ABAP reference files (function-tool RAG)
 │   ├── migrations/*.sql         # versioned schema migrations
 │   ├── test/                    # unit tests (node --test)
 │   ├── test-routes/             # HTTP tests on a throwaway Postgres
