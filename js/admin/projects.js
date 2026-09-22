@@ -1,125 +1,73 @@
 // projects.js — หน้า Projects + modal
-import { escapeHtml, jsArg, flash, formatTHB, hideModal, showModal } from './helpers.js';
+import { escapeHtml, jsArg, flash, formatMoney, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
   // --- Projects ---
   renderProjects: function () {
     var self = this;
     var container = document.getElementById('project-list');
-    if (container) container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:.85rem">' + t('common.loadingProjectsDb', '⏳ กำลังโหลด projects จาก DB...') + '</div>';
-    // Always pull fresh from DB so create/edit/delete reflect immediately
-    this.fetchProjectsFromDB().then(function (projects) {
-      self._renderProjectsHtml(projects, container);
+    if (container) container.innerHTML = '<div class="ad-empty">' + t('common.loadingProjectsDb', 'กำลังโหลด projects จาก DB...') + '</div>';
+    Promise.all([
+      this.fetchProjectsFromDB(),
+      fetch(BASE + '/api/credits', { headers: Auth.authHeaders() }).then(function (r) { return r.json(); })
+        .then(function (d) { return (d && d.ok && d.credits) ? d.credits : []; }).catch(function () { return []; }),
+    ]).then(function (res) {
+      self._cachedCredits = res[1] || [];
+      self._renderProjectsHtml(res[0] || [], container);
     });
   },
 
   _renderProjectsHtml: function (projects, container) {
-    var users = this.getUsersWithHistory();
-
+    var credits = this._cachedCredits || [];
+    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
+    var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
+    var countEl = document.getElementById('projects-count');
+    if (countEl) countEl.textContent = '· ' + projects.length;
+    var detailCard = document.getElementById('project-detail-card');
     if (projects.length === 0) {
-      container.innerHTML = '<div class="glass-card" style="text-align:center;padding:48px 24px">'
-        + '<div style="font-size:2.5rem;margin-bottom:12px"><svg class="ic sm" aria-hidden="true"><use href="#i-folder"/></svg></div>'
-        + '<div style="color:var(--text-3);font-size:0.9rem">' + t('empty.noProjectsHtml', 'ยังไม่มี Project<br>กดปุ่ม <strong style="color:var(--text-3)">+ Add Project</strong> เพื่อสร้างใหม่') + '</div>'
-        + '</div>';
+      container.innerHTML = '<div class="ad-empty">' + t('empty.noProjectsHtml', 'ยังไม่มี Project<br>กดปุ่ม <strong>+ Add Project</strong> เพื่อสร้างใหม่') + '</div>';
+      if (detailCard) detailCard.style.display = 'none';
       return;
     }
-
-    // coerce เป็น Number กัน "NaN" จาก cache โผล่ในการ์ด
-    var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
-    container.innerHTML = projects.map(function (p) {
-      var members = users.filter(function (u) { return u.projectId === p.id; });
-      var totalReq = members.reduce(function (s, u) {
-          return s + ((u.history && u.history.length) || 0);
-      }, 0);
-      var totalTok = members.reduce(function (s, u) {
-          return s + (u.history || []).reduce(function (ss, h) {
-              return ss + nz(h.inputTokens) + nz(h.outputTokens);
-          }, 0);
-      }, 0);
-      var totalCost = members.reduce(function (s, u) {
-          return s + (u.history || []).reduce(function (ss, h) {
-              return ss + nz(h.cost);
-          }, 0);
-      }, 0);
-      var totalBal = members.reduce(function (s, u) { return s + nz(u.balance); }, 0);
-
-      var statCard = function (icon, label, value, valueColor) {
-        return '<div style="padding:14px 16px;background:var(--surface-2);'
-          + 'border:1px solid var(--border-default);border-radius:10px">'
-          + '<div style="font-size:.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">' + icon + ' ' + label + '</div>'
-          + '<div style="font-size:1.25rem;font-weight:700;color:' + valueColor + ';font-family:var(--font-mono)">' + value + '</div>'
-          + '</div>';
-      };
-
-      var hero =
-          '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;'
-        + 'gap:14px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid var(--border-subtle)">'
-        +   '<div style="flex:1;min-width:240px">'
-        +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-        +       '<div style="font-size:1.15rem;font-weight:800;color:var(--text-1)">' + escapeHtml(p.name) + '</div>'
-        +       '<span title="' + escapeHtml(t('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" '
-        +         'onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'Copied: ' + jsArg(p.id) + '\'))" '
-        +         'style="font-family:var(--font-mono);font-size:.7rem;padding:3px 9px;'
-        +         'background:var(--accent-soft-bg);color:var(--accent);'
-        +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer">'
-        +         escapeHtml(p.id) + '</span>'
-        +       '<span style="font-size:.68rem;color:var(--text-2);padding:3px 10px;'
-        +         'background:var(--surface-3);border:1px solid var(--border-default);'
-        +         'border-radius:20px">' + members.length + ' member' + (members.length === 1 ? '' : 's') + '</span>'
-        +     '</div>'
-        +     '<div style="font-size:.84rem;color:var(--text-3);line-height:1.5;margin-bottom:10px">'
-        +       (p.desc ? escapeHtml(p.desc) : '<span style="font-style:italic;opacity:.6">' + escapeHtml(t('lbl.noDescription', 'No description')) + '</span>')
-        +     '</div>'
-        +     '<div style="display:flex;gap:8px;flex-wrap:wrap">'
-        +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-        +         'In <b>฿' + p.inputRate + '</b>/1K</span>'
-        +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-        +         'Out <b>฿' + p.outputRate + '</b>/1K</span>'
-        // chip Budget แยกเป็น lifetime (สะสม ไม่ลด) กับ balance ปัจจุบัน — lifetime คือตัวชี้วัด tier
-        +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.lifetimeTopupHint', 'ยอดสะสมที่ลูกค้าเคยเติม (ไม่ลดลง)')) + '">'
-        +         'Lifetime <b>฿' + (p.lifetimeAmount || 0).toFixed(2) + '</b></span>'
-        +       '<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-        +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)" title="' + escapeHtml(t('tt.usableNowHint', 'ยอดคงเหลือใช้ได้ตอนนี้')) + '">'
-        +         'Balance <b>฿' + (p.balance || 0).toFixed(2) + '</b></span>'
-        +       (p.creditLimit ? ('<span style="font-size:.7rem;padding:4px 10px;background:var(--surface-3);'
-                                  + 'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-                                  + 'Limit/user <b>฿' + p.creditLimit + '</b></span>') : '')
-        +     '</div>'
-        +   '</div>'
-        +   '<div style="display:flex;gap:8px">'
-        +     '<button class="btn-icon-action btn-icon-edit-large" title="' + escapeHtml(t('tt.editProject', 'แก้ไข Project')) + '" '
-        +       'onclick="admin.openEditProject(\'' + jsArg(p.id) + '\')">'
-        +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
-        +       '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
-        +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.edit', 'แก้ไข')) + '</span>'
-        +     '</button>'
-        +     '<button class="btn-icon-action btn-icon-danger-large" title="' + escapeHtml(t('tt.deleteProject', 'ลบ Project')) + '" '
-        +       'onclick="admin.deleteProject(\'' + jsArg(p.id) + '\')">'
-        +       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
-        +       '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
-        +       '<span style="margin-left:6px;font-size:.78rem">' + escapeHtml(t('btn.deletePlain', 'ลบ')) + '</span>'
-        +     '</button>'
-        +   '</div>'
-        + '</div>';
-
-      var statsGrid =
-          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'
-        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', 'Requests',           totalReq.toLocaleString(),     'var(--text-1)')
-        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-cpu"/></svg>', 'Tokens',             totalTok.toLocaleString(),     'var(--text-1)')
-        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', 'Cost Billed',        formatTHB(totalCost),          'var(--text-2)')
-        +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', 'Credit Outstanding', formatTHB(totalBal),
-                     totalBal > 0 ? 'var(--success-hover, #34d399)' : 'var(--text-2)')
-        + '</div>';
-
-      // members list intentionally not rendered here (duplicates Users/Credits)
-      return '<div class="glass-card" style="margin-bottom:18px">'
-        + hero
-        + statsGrid
-        + '</div>';
+    var selected = this._selectedProjectRow || projects[0].id;
+    this._selectedProjectRow = selected;
+    var rows = projects.map(function (p) {
+      var members = credits.filter(function (c) { return String(c.projectId) === String(p.id); });
+      var spend = members.reduce(function (s, u) { return s + nz(u.lifetimeSpend); }, 0);
+      var bal = nz(p.balance), life = nz(p.lifetimeAmount);
+      var health = life <= 0 ? '<span class="ad-chip">' + TT('proj.noCredit', 'No credit yet') + '</span>'
+        : bal <= 0 ? '<span class="ad-chip bad"><span class="dot"></span>' + TT('proj.depleted', 'Out of credit') + '</span>'
+        : bal / life < 0.2 ? '<span class="ad-chip warn"><span class="dot"></span>' + TT('proj.low', 'Running low') + '</span>'
+        : '<span class="ad-chip ok"><span class="dot"></span>' + TT('proj.healthy', 'Healthy') + '</span>';
+      var abbr = (p.name || '?').split(/\s+/).map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+      return '<tr class="click' + (String(p.id) === String(selected) ? ' selected' : '') + '" onclick="admin.selectProjectRow(\'' + jsArg(p.id) + '\')">'
+        + '<td><div class="ad-who"><span class="ad-avatar sq">' + escapeHtml(abbr) + '</span><div><b>' + escapeHtml(p.name) + '</b><span>' + escapeHtml(p.id) + ' · ' + (p.hasApiKey ? TT('lbl.ownKey', 'own key') : TT('lbl.globalKey', 'global key')) + '</span></div></div></td>'
+        + '<td><span class="ad-chip">' + escapeHtml(p.targetRelease || '—') + '</span></td>'
+        + '<td class="num">' + members.length + '</td>'
+        + '<td class="num">฿' + p.inputRate + ' / ฿' + p.outputRate + '</td>'
+        + '<td class="num"' + (life > 0 && bal <= 0 ? ' style="color:var(--danger)"' : '') + '>' + formatMoney(bal) + '</td>'
+        + '<td class="num">' + formatMoney(spend) + '</td>'
+        + '<td>' + health + '</td>'
+        + '<td><div class="ad-acts">'
+        +   '<button class="ad-btn icon sm ghost" title="' + escapeHtml(t('tt.editProject', 'แก้ไข Project')) + '" onclick="event.stopPropagation();admin.openEditProject(\'' + jsArg(p.id) + '\')"><svg class="ic sm"><use href="#i-pencil"/></svg></button>'
+        +   '<button class="ad-btn icon sm ghost danger" title="' + escapeHtml(t('tt.deleteProject', 'ลบ Project')) + '" onclick="event.stopPropagation();admin.deleteProject(\'' + jsArg(p.id) + '\')"><svg class="ic sm"><use href="#i-trash"/></svg></button>'
+        + '</div></td></tr>';
     }).join('');
+    var total = projects.reduce(function (s, p) { return s + nz(p.balance); }, 0);
+    container.innerHTML =
+        '<table class="ad-table" style="min-width:860px"><thead><tr><th>' + TT('col.project', 'Project') + '</th><th>' + TT('col.release', 'Release') + '</th><th class="num">' + TT('col.members', 'Members') + '</th><th class="num">' + TT('col.rates', 'Rate in / out') + '</th><th class="num">' + TT('col.balance', 'Balance') + '</th><th class="num">' + TT('col.spend', 'Spend') + '</th><th>' + TT('col.health', 'Health') + '</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+      + '<div class="ad-card-foot"><span>' + projects.length + ' projects · ' + formatMoney(total) + ' ' + TT('lbl.totalBalance', 'total balance') + '</span><span>' + TT('lbl.clickRowDetail', 'Click a row to see the details below') + '</span></div>';
+    if (detailCard) { detailCard.style.display = ''; this.renderProjectDetail(selected, 'project-detail'); }
+  },
+
+  selectProjectRow: function (projectId) {
+    this._selectedProjectRow = projectId;
+    document.querySelectorAll('#project-list tr.click').forEach(function (tr) {
+      tr.classList.toggle('selected', tr.getAttribute('onclick').indexOf("'" + String(projectId).replace(/'/g, "\\'") + "'") !== -1);
+    });
+    var detailCard = document.getElementById('project-detail-card');
+    if (detailCard) detailCard.style.display = '';
+    this.renderProjectDetail(projectId, 'project-detail');
   },
 
   openEditProject: function (projectId) {

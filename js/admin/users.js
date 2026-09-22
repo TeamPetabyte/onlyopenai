@@ -5,115 +5,74 @@ export default {
   // --- Users page --- sticky filter: Set ของ project ids, "__none__" = ไม่มี project
   _userProjectFilter: null,   // Set | null (null = uninitialised, treated as "all")
 
-  renderUsers: function () {
+  _userStatusFilter: 'all',
+  _userSearch: '',
+  setUserStatusFilter: function (v) { this._userStatusFilter = v || 'all'; this.renderUsers(); },
+  onUserSearch: function (v) {
+    this._userSearch = (v || '').trim().toLowerCase();
+    var self = this; clearTimeout(this._userSearchTimer);
+    this._userSearchTimer = setTimeout(function () { self.renderUsers(true); }, 150);
+  },
+
+  renderUsers: function (keepToolbar) {
     var self = this;
     var tableEl = document.getElementById('user-table');
-    if (tableEl) tableEl.innerHTML =
-      '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.85rem;'
-      + 'background:var(--surface-2);border:1px solid var(--border-default);border-radius:10px">'
-      + '⏳ กำลังโหลด...</div>';
+    var toolbar = document.getElementById('users-toolbar');
+    if (tableEl && !keepToolbar) tableEl.innerHTML = '<div class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</div>';
 
     this.fetchUsersFromDB().then(function (users) {
       self._cachedDBUsers = users;
       users = users.filter(function (u) { return u.role !== 'admin' && u.role !== 'trainer'; });
-      var totalUsers = users.length;
+      var all = users.slice();
 
       var filter = self._userProjectFilter;
-      if (filter && filter.size > 0) {
-        users = users.filter(function (u) {
-          var key = u.projectId ? String(u.projectId) : '__none__';
-          return filter.has(key);
-        });
-      }
+      if (filter && filter.size > 0) users = users.filter(function (u) { return filter.has(u.projectId ? String(u.projectId) : '__none__'); });
+      var counts = { all: all.length, active: 0, locked: 0, inactive: 0 };
+      all.forEach(function (u) { var st = String(u.accStatus || 'active').toLowerCase(); if (counts[st] != null) counts[st]++; });
+      var sf = self._userStatusFilter || 'all';
+      if (sf !== 'all') users = users.filter(function (u) { return String(u.accStatus || 'active').toLowerCase() === sf; });
+      var q = self._userSearch;
+      if (q) users = users.filter(function (u) { return ((u.username || '') + ' ' + (u.name || '') + ' ' + (u.surname || '') + ' ' + (u.displayName || '')).toLowerCase().indexOf(q) !== -1; });
 
-      // filter header bar
       var hasActive = filter && filter.size > 0;
-      var filterLabel = hasActive ? ('Filtered (' + filter.size + ')') : 'ทุก Project';
-      var filterChevron = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
-      var filterBar =
-          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
-        +   '<label style="color:var(--text-3);font-size:.85rem;font-weight:600">Project:</label>'
-        +   '<span class="user-project-filter-trigger dd-trigger" onclick="admin.toggleUserProjectFilter(event)" '
-        +     'style="cursor:pointer;min-width:200px;' + (hasActive ? 'border-color:var(--accent-soft-border);color:var(--accent);' : '') + '">'
-        +     '<span class="dd-trigger-label">' + escapeHtml(filterLabel) + '</span>'
-        +     '<span class="dd-trigger-chevron">' + filterChevron + '</span>'
-        +   '</span>'
-        +   '<span style="color:var(--text-3);font-size:.78rem">'
-        +     (hasActive
-                ? tf('lbl.showingUsersFiltered', { shown: users.length, total: totalUsers }, '· แสดง {shown} จาก {total} users')
-                : tf('lbl.showingUsersTotal', { shown: users.length, total: totalUsers }, '· แสดง {shown}/{total} users'))
-        +   '</span>'
-        + '</div>';
+      var countEl = document.getElementById('users-count');
+      if (countEl) countEl.textContent = '· ' + users.length + (users.length !== all.length ? ' / ' + all.length : '');
+      var chip = function (v, label, n) { return '<button type="button" class="ad-chip click" aria-pressed="' + (sf === v) + '" onclick="admin.setUserStatusFilter(\'' + v + '\')">' + label + ' ' + n + '</button>'; };
+      if (toolbar && !keepToolbar) toolbar.innerHTML =
+          '<div class="ad-search"><svg class="ic sm"><use href="#i-search"/></svg><input id="users-search" placeholder="' + escapeHtml(t('lbl.searchUsers', 'Search name or username')) + '" value="' + escapeHtml(self._userSearch || '') + '" oninput="admin.onUserSearch(this.value)" /></div>'
+        + '<button type="button" class="ad-btn sm user-project-filter-trigger" onclick="admin.toggleUserProjectFilter(event)"' + (hasActive ? ' style="border-color:var(--accent);color:var(--accent)"' : '') + '><svg class="ic sm"><use href="#i-folder"/></svg><span class="dd-trigger-label">' + escapeHtml(hasActive ? ('Filtered (' + filter.size + ')') : t('filter.allProject', 'ทุก Project')) + '</span><svg class="ic sm"><use href="#i-chevron"/></svg></button>'
+        + '<div class="ad-filters">' + chip('all', t('filter.all', 'All'), counts.all) + chip('active', t('status.active', 'Active'), counts.active) + chip('locked', t('status.locked', 'Locked'), counts.locked) + chip('inactive', t('status.inactive', 'Disabled'), counts.inactive) + '</div>';
+      else if (toolbar) {
+        toolbar.querySelectorAll('.ad-chip.click').forEach(function (c) { c.setAttribute('aria-pressed', String(c.getAttribute('onclick').indexOf("'" + sf + "'") !== -1)); });
+      }
 
       if (users.length === 0) {
-        if (tableEl) tableEl.innerHTML = filterBar
-          + '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.85rem;'
-          + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-          + (hasActive ? t('empty.noUsersMatchFilter', 'ไม่พบ user ที่ตรงกับตัวกรอง') : t('empty.noUsersSystem', 'ยังไม่มี user ในระบบ'))
-          + '</div>';
+        if (tableEl) tableEl.innerHTML = '<div class="ad-empty">' + (hasActive || sf !== 'all' || q ? t('empty.noUsersMatchFilter', 'ไม่พบ user ที่ตรงกับตัวกรอง') : t('empty.noUsersSystem', 'ยังไม่มี user ในระบบ')) + '</div>';
         return;
       }
-
-      // column header strip
-      var gridCols = 'auto 1.4fr 1.2fr .8fr auto auto';
-      var headerStrip =
-          '<div style="display:grid;grid-template-columns:' + gridCols + ';'
-        + 'gap:14px;padding:10px 16px;font-size:.66rem;color:var(--text-3);'
-        + 'text-transform:uppercase;letter-spacing:.05em;font-weight:700;'
-        + 'border-bottom:1px solid var(--border-subtle)">'
-        +   '<div style="width:38px"></div>'                  // avatar column placeholder
-        +   '<div>Username / Name</div>'
-        +   '<div>Project</div>'
-        +   '<div>Created</div>'
-        +   '<div style="min-width:78px;text-align:center">Status</div>'
-        +   '<div style="width:36px"></div>'                  // action column placeholder
-        + '</div>';
-
-      // member rows
-      var rows = users.map(function (u, idx) {
-        var fullName = ((u.name || '') + ' ' + (u.surname || '')).trim() || '—';
-        var projectName = self._projectNameById(u.projectId) || '—';
-        var statusBadge = self._renderStatusBadge(u.accStatus, u.username);
+      var rows = users.map(function (u) {
+        var fullName = ((u.name || '') + ' ' + (u.surname || '')).trim() || u.displayName || u.username || '—';
+        var projectName = self._projectNameById(u.projectId) || '';
         var created = u.createdAt ? formatDateStd(u.createdAt).split(' ')[0] : '—';
-        var initial = (fullName !== '—' ? fullName : u.username || '?').charAt(0).toUpperCase();
-        return '<div style="display:grid;grid-template-columns:' + gridCols + ';'
-          + 'gap:14px;align-items:center;padding:12px 16px;'
-          + (idx > 0 ? 'border-top:1px solid var(--border-subtle);' : '') + '">'
-          // Avatar
-          + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-soft-bg);'
-          +   'color:var(--accent);font-weight:700;font-size:.95rem;'
-          +   'display:flex;align-items:center;justify-content:center;'
-          +   'border:1px solid var(--accent-soft-border)">' + escapeHtml(initial) + '</div>'
-          // Username + Name
-          + '<div style="min-width:0">'
-          +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem;'
-          +     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(u.username) + '</div>'
-          +   '<div style="font-size:.74rem;color:var(--text-3);margin-top:1px;'
-          +     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(fullName) + '</div>'
-          + '</div>'
-          // Project
-          + '<div style="font-size:.84rem;color:var(--text-2);min-width:0;'
-          +   'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-          +   (u.projectId ? escapeHtml(projectName) : '<span style="opacity:.5">— No project —</span>')
-          + '</div>'
-          // Created
-          + '<div style="font-size:.82rem;color:var(--text-3);font-family:var(--font-mono)">' + created + '</div>'
-          // Status badge
-          + '<div style="min-width:78px;text-align:center">' + statusBadge + '</div>'
-          // Action
-          + '<button class="btn-icon-edit" title="Edit user" aria-label="Edit user ' + escapeHtml(u.username) + '" '
-          +   'onclick="admin.openEditUser(\'' + escapeHtml(u.username) + '\')">'
-          +   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
-          +   '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
-          + '</button>'
-          + '</div>';
+        var initial = fullName.charAt(0).toUpperCase();
+        var uq = escapeHtml(u.username);
+        var cap = u.dailyCap == null ? '<span class="muted">' + t('val.unlimited', 'ไม่จำกัด') + '</span>' : formatTHB(u.dailyCap);
+        return '<tr>'
+          + '<td><div class="ad-who"><span class="ad-avatar">' + escapeHtml(initial) + '</span><div><b>' + escapeHtml(fullName) + '</b><span>' + uq + '</span></div></div></td>'
+          + '<td>' + (u.projectId ? escapeHtml(projectName) : '<span class="muted">—</span>') + '</td>'
+          + '<td>' + self._renderStatusBadge(u.accStatus, u.username) + '</td>'
+          + '<td class="num">' + cap + '</td>'
+          + '<td class="ad-mono muted">' + created + '</td>'
+          + '<td><div class="ad-acts">'
+          +   '<button class="ad-btn icon sm ghost" title="' + escapeHtml(t('tt.editUser', 'Edit user')) + '" onclick="admin.openEditUser(\'' + uq + '\')"><svg class="ic sm"><use href="#i-pencil"/></svg></button>'
+          +   '<button class="ad-btn icon sm ghost" title="' + escapeHtml(t('tt.resetPassword', 'Reset password')) + '" onclick="admin.resetPassword(\'' + uq + '\')"><svg class="ic sm"><use href="#i-key"/></svg></button>'
+          + '</div></td>'
+          + '</tr>';
       }).join('');
-
-      if (tableEl) tableEl.innerHTML = filterBar
-        + '<div style="background:var(--surface-2);border:1px solid var(--border-default);'
-        + 'border-radius:10px;overflow:hidden">'
-        + headerStrip + rows
-        + '</div>';
+      if (tableEl) tableEl.innerHTML =
+          '<table class="ad-table"><thead><tr><th>' + t('col.user', 'User') + '</th><th>' + t('col.project', 'Project') + '</th><th>' + t('col.status', 'Status') + '</th><th class="num">' + t('col.dailyCap', 'Daily Cap') + '</th><th>' + t('col.created', 'Created') + '</th><th></th></tr></thead>'
+        + '<tbody>' + rows + '</tbody></table>'
+        + '<div class="ad-card-foot"><span>' + users.length + ' ' + t('lbl.of', 'of') + ' ' + all.length + ' users</span><span>' + t('lbl.statusClickHint', 'Click a status to enable or disable the account') + '</span></div>';
     });
   },
 
@@ -125,31 +84,10 @@ export default {
   },
 
   _renderStatusBadge: function (status, username) {
-    // pill สถานะกดได้ → toggleUserStatus(username) — ตาราง key ด้วย username อยู่แล้ว
     var s = String(status || 'active').toLowerCase();
-    var label = s.charAt(0).toUpperCase() + s.slice(1);
-    // inactive เป็นแดงเหมือน locked (ทั้งคู่ = ห้าม login) — ต่างกันที่ป้าย
-    var colors = {
-      active:   { bg: 'rgba(55,179,74,0.10)',   fg: '#3fa64d', bd: 'rgba(55,179,74,0.30)' },
-      inactive: { bg: 'rgba(220,53,69,0.10)',   fg: '#e25563', bd: 'rgba(220,53,69,0.30)' },
-      locked:   { bg: 'rgba(220,53,69,0.10)',   fg: '#e25563', bd: 'rgba(220,53,69,0.30)' },
-    };
-    var c = colors[s] || colors.inactive;
-    var titleAttr = s === 'locked'
-      ? 'title="' + escapeHtml(t('tt.lockedUser', 'ถูก lock จาก failed login — เปิด Edit User เพื่อปลดล็อก')) + '"'
-      : 'title="' + escapeHtml(s === 'active' ? t('tt.clickToDisable', 'คลิกเพื่อปิดการใช้งาน') : t('tt.clickToEnable', 'คลิกเพื่อเปิดการใช้งาน')) + '"';
-    var onclick = username
-      ? 'onclick="admin.toggleUserStatus(\'' + escapeHtml(username) + '\', event)"'
-      : '';
-    return '<span ' + onclick + ' ' + titleAttr
-      + ' style="display:inline-block;padding:3px 10px;border-radius:10px;'
-      + 'background:' + c.bg + ';color:' + c.fg + ';border:1px solid ' + c.bd + ';'
-      + 'font-size:.74rem;font-weight:600;'
-      + (username ? 'cursor:pointer;user-select:none;' : '')
-      + 'transition:transform .12s ease, opacity .12s ease"'
-      + ' onmouseover="this.style.transform=\'translateY(-1px)\'"'
-      + ' onmouseout="this.style.transform=\'\'">'
-      + escapeHtml(label) + '</span>';
+    var cls = s === 'active' ? 'on' : s === 'locked' || s === 'inactive' ? 'bad' : '';
+    var label = t('status.' + s, s.charAt(0).toUpperCase() + s.slice(1));
+    return '<button type="button" class="ad-status ' + cls + '" style="background:none;border:0;padding:0;cursor:pointer;font-family:inherit;color:inherit" title="' + escapeHtml(t('tt.toggleStatus', 'เปลี่ยนสถานะ')) + '" onclick="admin.toggleUserStatus(\'' + escapeHtml(username) + '\')"><span class="dot"></span>' + escapeHtml(label) + '</button>';
   },
 
   // pending badge-click action for confirmStatusToggle()

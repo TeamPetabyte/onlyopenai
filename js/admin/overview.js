@@ -6,81 +6,118 @@ export default {
   renderOverview: function () {
     var self = this;
     var projects = this._projectsList();
-    // rollup ต่อ user สดจาก /api/credits — dashboard สะท้อน pool ไม่ใช่ localStorage
+    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
+    var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
     Promise.all([
       this.fetchUsersFromDB(),
       fetch(BASE + '/api/credits', { headers: Auth.authHeaders() })
         .then(function (r) { return r.json(); })
         .then(function (d) { return (d && d.ok && d.credits) ? d.credits : []; })
         .catch(function () { return []; }),
+      fetch(BASE + '/api/quota-requests?limit=50', { headers: Auth.authHeaders() })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { return (d && d.ok && d.requests) ? d.requests : []; })
+        .catch(function () { return []; }),
     ]).then(function (results) {
       var dbUsers = results[0] || [];
       var credits = results[1] || [];
+      var quota   = results[2] || [];
       self._cachedDBUsers = dbUsers;
-      self._cachedCredits = credits;   // shared with renderProjectDetail / Cap page
+      self._cachedCredits = credits;
+      projects = self._projectsList();
 
-      var totalTokens   = credits.reduce(function (s, c) { return s + Number(c.lifetimeTokens   || 0); }, 0);
-      var totalSpendAll = credits.reduce(function (s, c) { return s + Number(c.lifetimeSpend    || 0); }, 0);
-      var totalTopUpAll  = projects.reduce(function (s, p) { return s + (p.lifetimeAmount || 0); }, 0);
-      var totalBalanceAll = projects.reduce(function (s, p) { return s + (p.balance || p.totalTopUp || 0); }, 0);
-      // mini-card แบบ stat-card ของ project + แถบ accent ซ้าย
-      var miniCard = function (icon, label, value, sub) {
-        return '<div style="position:relative;padding:18px 20px 18px 22px;'
-          + 'background:var(--surface-2);border:1px solid var(--border-default);'
-          + 'border-radius:12px;overflow:hidden">'
-          + '<div style="position:absolute;top:0;bottom:0;left:0;width:3px;background:var(--accent)"></div>'
-          + '<div style="font-size:.68rem;color:var(--text-3);text-transform:uppercase;'
-          +   'letter-spacing:.06em;margin-bottom:8px;font-weight:600">'
-          +   icon + ' ' + label + '</div>'
-          + '<div style="font-size:1.55rem;font-weight:800;color:var(--text-1);'
-          +   'font-family:var(--font-mono);letter-spacing:-.02em;margin-bottom:4px">'
-          +   value + '</div>'
-          + (sub ? '<div style="font-size:.72rem;color:var(--text-3)">' + sub + '</div>' : '')
-          + '</div>';
+      // greeting + meta line
+      var h = new Date().getHours();
+      var greet = h < 12 ? TT('greet.morning', 'Good morning') : h < 18 ? TT('greet.afternoon', 'Good afternoon') : TT('greet.evening', 'Good evening');
+      var who = (Auth.getSession() || {}).displayName || (Auth.getSession() || {}).username || 'admin';
+      var gEl = document.getElementById('overview-greeting'); if (gEl) gEl.textContent = greet + ', ' + who;
+      var pending = quota.filter(function (q) { return q.status === 'pending'; });
+      var chatUsers = dbUsers.filter(function (u) { return u.role !== 'admin' && u.role !== 'trainer'; });
+      var mEl = document.getElementById('overview-meta');
+      if (mEl) mEl.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
+        + ' · ' + projects.length + ' ' + TT('lbl.projects', 'projects') + ' · ' + chatUsers.length + ' ' + TT('lbl.users', 'users')
+        + (pending.length ? ' · ' + pending.length + ' ' + TT('lbl.requestsWaiting', 'quota requests waiting') : '');
+
+      // what needs a decision today
+      var nearCap = credits.filter(function (c) {
+        var cap = c.dailyCap == null ? null : nz(c.dailyCap) + nz(c.bonusBalance);
+        return cap && cap > 0 && nz(c.spentToday) / cap >= 0.8;
+      });
+      var empty = projects.filter(function (p) { return nz(p.lifetimeAmount) > 0 && nz(p.balance) <= 0; });
+      var att = function (kind, icon, title, body, btnHtml) {
+        return '<div class="ad-att ' + kind + '"><div class="icn"><svg class="ic"><use href="#i-' + icon + '"/></svg></div><div><b>' + title + '</b><p>' + body + '</p>' + btnHtml + '</div></div>';
       };
-      var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
-      document.getElementById('overview-mini').innerHTML =
-          miniCard('<svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>', TT('dash.users','Users'),           dbUsers.length.toLocaleString(),  projects.length + ' projects')
-        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-cpu"/></svg>', TT('dash.totalTokens','Total Tokens'), totalTokens.toLocaleString(),  TT('dash.tokensSub','สะสมทุก user'))
-        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', TT('dash.totalSpend','Total Spend'), formatMoney(totalSpendAll),       TT('dash.spendSub','ใช้จ่ายสะสมทุก user'))
-        // lifetime top-up never decreases; balance is what is redeemable now
-        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('dash.lifetimeTopup','Lifetime Top-up'), formatMoney(totalTopUpAll), TT('dash.topupSub','ยอดสะสมที่ลูกค้าเคยเติม'))
-        + miniCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('dash.projectBalance','Project Balance'), formatMoney(totalBalanceAll), TT('dash.balanceSub','ยอดคงเหลือกองกลางตอนนี้'));
+      var cards = [];
+      if (pending.length) {
+        cards.push(att('warn', 'gauge', pending.length + ' ' + TT('att.quotaWaiting', 'quota request(s) waiting'),
+          pending.slice(0, 2).map(function (q) { return escapeHtml(q.user_display) + ' ' + TT('lbl.asks', 'asks') + ' +฿' + nz(q.requested_extra).toFixed(0); }).join(' · '),
+          '<button class="ad-btn sm" onclick="document.getElementById(\'qr-card\').scrollIntoView({behavior:\'smooth\'})">' + TT('att.review', 'Review requests') + '<svg class="ic sm"><use href="#i-arrow"/></svg></button>'));
+      }
+      empty.slice(0, 1).forEach(function (p) {
+        var blocked = credits.filter(function (c) { return c.projectId === p.id; }).length;
+        cards.push(att('bad', 'wallet', escapeHtml(p.name) + ' ' + TT('att.outOfCredit', 'is out of credit'),
+          '฿0.00 ' + TT('lbl.left', 'left') + (blocked ? ' · ' + blocked + ' ' + TT('lbl.usersBlocked', 'users blocked') : ''),
+          '<button class="ad-btn sm primary" onclick="admin.openTopup(\'' + jsArg(p.id) + '\')">' + TT('att.topupNow', 'Top up now') + '</button>'));
+      });
+      if (nearCap.length) {
+        cards.push(att('info', 'users', nearCap.length + ' ' + TT('att.nearCap', 'user(s) near their daily cap'),
+          nearCap.slice(0, 3).map(function (c) { var cap = nz(c.dailyCap) + nz(c.bonusBalance); return escapeHtml(c.username) + ' ' + Math.round(nz(c.spentToday) / cap * 100) + '%'; }).join(' · '),
+          '<button class="ad-btn sm" onclick="admin.navigate(\'usage\')">' + TT('att.seeUsers', 'See users') + '<svg class="ic sm"><use href="#i-arrow"/></svg></button>'));
+      }
+      if (!cards.length) {
+        cards.push(att('ok', 'check', TT('att.allClear', 'Nothing needs a decision'), TT('att.allClearSub', 'No pending requests, no empty projects, nobody near a cap'), ''));
+      }
+      var attEl = document.getElementById('overview-attention');
+      if (attEl) { attEl.innerHTML = cards.join(''); attEl.style.gridTemplateColumns = 'repeat(' + Math.min(3, cards.length) + ', 1fr)'; }
 
+      // kpi strip
+      var totalTokens   = credits.reduce(function (s, c) { return s + nz(c.lifetimeTokens); }, 0);
+      var totalSpendAll = credits.reduce(function (s, c) { return s + nz(c.lifetimeSpend); }, 0);
+      var totalTopUpAll  = projects.reduce(function (s, p) { return s + nz(p.lifetimeAmount); }, 0);
+      var totalBalanceAll = projects.reduce(function (s, p) { return s + nz(p.balance); }, 0);
+      var spentToday = credits.reduce(function (s, c) { return s + nz(c.spentToday); }, 0);
+      var activeToday = credits.filter(function (c) { return nz(c.spentToday) > 0; }).length;
+      var pct = totalTopUpAll > 0 ? Math.round(totalBalanceAll / totalTopUpAll * 100) : 0;
+      var kpi = function (k, v, d, extra) { return '<div class="ad-kpi"><span class="k">' + k + '</span><span class="v">' + v + '</span><span class="d">' + d + '</span>' + (extra || '') + '</div>'; };
+      document.getElementById('overview-mini').innerHTML =
+          kpi(TT('dash.projectBalance', 'Project balance'), formatMoney(totalBalanceAll), TT('dash.balanceOf', 'of') + ' ' + formatMoney(totalTopUpAll) + ' ' + TT('dash.everToppedUp', 'ever topped up'),
+              '<div class="ad-bar' + (pct < 20 ? ' bad' : pct < 50 ? ' warn' : '') + '"><i style="width:' + pct + '%"></i></div>')
+        + kpi(TT('dash.spentToday', 'Spent today'), formatMoney(spentToday), activeToday + ' ' + TT('dash.usersActiveToday', 'users active today'))
+        + kpi(TT('dash.totalSpend', 'Total spend'), formatMoney(totalSpendAll), totalTokens.toLocaleString() + ' ' + TT('dash.tokens', 'tokens'))
+        + kpi(TT('dash.users', 'Users'), chatUsers.length.toLocaleString(), projects.length + ' ' + TT('lbl.projects', 'projects'));
+
+      // project rows (right column) — clicking one scopes the detail + transactions
       var saved = self._selectedProject || (projects[0] && projects[0].id) || null;
-      // project picker เป็น dropdown custom — hidden input คงค่าให้ selectProject
-      var selectHtml;
-      if (projects.length === 0) {
-        selectHtml = '<div style="color:var(--text-3);font-size:0.85rem;padding:12px 0">' + t('empty.noProjectShort', 'ยังไม่มี Project') + '</div>';
-      } else {
+      self._selectedProject = saved;
+      var list = document.getElementById('overview-user-list');
+      if (list) {
+        list.innerHTML = projects.length === 0
+          ? '<div class="ad-empty">' + t('empty.noProjectShort', 'ยังไม่มี Project') + '</div>'
+          : projects.map(function (p) {
+              var bal = nz(p.balance), life = nz(p.lifetimeAmount);
+              var left = life > 0 ? Math.round(bal / life * 100) : 0;
+              var members = credits.filter(function (c) { return c.projectId === p.id; }).length;
+              var cls = life > 0 && bal <= 0 ? 'bad' : left < 20 ? 'warn' : left >= 50 ? 'ok' : '';
+              return '<div class="ad-proj' + (String(p.id) === String(saved) ? ' selected' : '') + '" style="grid-template-columns:1.4fr 1fr 90px" onclick="admin.selectProject(\'' + jsArg(p.id) + '\')">'
+                + '<div class="name"><b>' + escapeHtml(p.name) + '</b><span>' + members + ' ' + TT('lbl.members', 'members') + ' · ' + escapeHtml(p.targetRelease || '') + '</span></div>'
+                + '<div><span class="k">' + TT('col.balance', 'Balance') + '</span><span class="v"' + (life > 0 && bal <= 0 ? ' style="color:var(--danger)"' : '') + '>' + formatMoney(bal) + '</span></div>'
+                + '<div class="ad-bar ' + cls + '"><i style="width:' + Math.max(0, Math.min(100, left)) + '%"></i></div>'
+                + '</div>';
+            }).join('');
+      }
+      var picker = document.getElementById('overview-picker');
+      if (picker) {
         var savedProj = projects.find(function (x) { return String(x.id) === String(saved); });
-        var label = savedProj ? (savedProj.name) : t('dd.selectProject', '— เลือก Project —');
-        selectHtml =
+        picker.innerHTML = projects.length === 0 ? '' :
             '<input type="hidden" id="project-selector" value="' + escapeHtml(String(saved || '')) + '" />'
-          + '<button type="button" class="dd-trigger" id="overview-project-trigger" '
-          +   'style="min-width:260px;font-weight:600" '
-          +   'onclick="admin.openOverviewProjectDropdown(event)">'
-          +   '<span class="dd-trigger-label" id="overview-project-label">' + escapeHtml(label) + '</span>'
-          +   '<svg class="dd-trigger-chevron" width="14" height="14" viewBox="0 0 24 24" '
-          +     'fill="none" stroke="currentColor" stroke-width="2.5">'
-          +     '<polyline points="6 9 12 15 18 9"/>'
-          +   '</svg>'
+          + '<button type="button" class="ad-btn sm" id="overview-project-trigger" onclick="admin.openOverviewProjectDropdown(event)">'
+          +   '<svg class="ic sm"><use href="#i-folder"/></svg><span id="overview-project-label">' + escapeHtml(savedProj ? savedProj.name : t('dd.selectProject', '— เลือก Project —')) + '</span><svg class="ic sm"><use href="#i-chevron"/></svg>'
           + '</button>';
       }
 
-      document.getElementById('overview-user-list').innerHTML =
-        '<div style="margin-bottom:18px">' + selectHtml + '</div>'
-        + '<div id="proj-detail"></div>';
-
-      if (saved) {
-        self.renderProjectDetail(saved);
-        // transaction journal is project-scoped — keep it in sync with the detail
-        self.renderTransactions(saved);
-      } else {
-        self.renderTransactions(null);
-      }
-      // quota requests are global — always render
-      self.renderQuotaRequests();
+      if (saved) { self.renderProjectDetail(saved); self.renderTransactions(saved); }
+      else { self.renderTransactions(null); }
+      self.renderQuotaRequests(quota);
     });
   },
 
@@ -88,6 +125,12 @@ export default {
     this._selectedProject = projectId;
     var sel = document.getElementById('project-selector');
     if (sel) sel.value = projectId;
+    var p = this._projectsList().find(function (x) { return String(x.id) === String(projectId); });
+    var label = document.getElementById('overview-project-label');
+    if (label && p) label.textContent = p.name;
+    document.querySelectorAll('#overview-user-list .ad-proj').forEach(function (row) {
+      row.classList.toggle('selected', row.getAttribute('onclick').indexOf("'" + String(projectId).replace(/'/g, "\\'") + "'") !== -1);
+    });
     this.renderProjectDetail(projectId);
     this.renderTransactions(projectId);
   },
@@ -108,7 +151,7 @@ export default {
       // ~ last 60 days so 2-3 months show up
       from = iso(new Date(bkk.getTime() - 60 * 86400000));
     } else {
-      from = iso(new Date(bkk.getTime() - 6 * 86400000));     // last 7 days
+      from = iso(new Date(bkk.getTime() - 29 * 86400000));    // last 30 days
     }
     return { from: from, to: to };
   },
@@ -227,7 +270,7 @@ export default {
       if (inTo)   inTo.value   = this._txTo;
     }
 
-    wrap.innerHTML = '<div class="tx-loading">⏳ กำลังโหลด…</div>';
+    wrap.innerHTML = '<div class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</div>';
 
     var qs = '?from=' + encodeURIComponent(this._txFrom)
            + '&to='   + encodeURIComponent(this._txTo)
@@ -240,19 +283,20 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) {
-          wrap.innerHTML = '<div class="tx-empty">⚠ ' +
-                           escapeHtml(d.error || 'Failed to load') + '</div>';
+          wrap.innerHTML = '<div class="ad-error">' + escapeHtml(d.error || 'Failed to load') + '</div>';
+          self._renderTxChart(null);
           return;
         }
+        self._renderTxChart(d);
         if (d.rows.length === 0) {
-          wrap.innerHTML = '<div class="tx-empty">ไม่มี transaction ในช่วงนี้</div>';
+          wrap.innerHTML = '<div class="ad-empty">' + t('tx.emptyRange', 'ไม่มี transaction ในช่วงนี้') + '</div>';
           return;
         }
         self._txLastData = d;
         wrap.innerHTML = self._renderTxTable(d);
       })
       .catch(function (e) {
-        wrap.innerHTML = '<div class="tx-empty">⚠ ' + escapeHtml(e.message) + '</div>';
+        wrap.innerHTML = '<div class="ad-error">' + escapeHtml(e.message) + '</div>';
       });
   },
 
@@ -265,16 +309,40 @@ export default {
     if (wrap) wrap.innerHTML = this._renderTxTable(this._txLastData);
   },
 
+  // Daily bars from the day-mode rows: usage vs top-up per calendar day (no extra fetch).
+  _renderTxChart: function (d) {
+    var box = document.getElementById('tx-chart'); var sub = document.getElementById('tx-chart-sub');
+    if (!box) return;
+    if (!d || d.groupBy === 'month' || !d.rows || !d.rows.length) { box.innerHTML = '<div class="ad-empty">' + t('tx.noChart', 'No daily data in this range') + '</div>'; if (sub) sub.textContent = ''; return; }
+    var from = new Date(d.from + 'T00:00:00'), to = new Date(d.to + 'T00:00:00');
+    var days = []; for (var t0 = from.getTime(); t0 <= to.getTime(); t0 += 86400000) days.push(new Date(t0));
+    var key = function (dt) { return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); };
+    var usage = {}, topup = {};
+    d.rows.forEach(function (r) {
+      var k = key(new Date(r.created_at)); var amt = Math.abs(Number(r.amount) || 0);
+      if (r.type === 'topup') topup[k] = (topup[k] || 0) + amt; else usage[k] = (usage[k] || 0) + amt;
+    });
+    var max = 1; days.forEach(function (dt) { max = Math.max(max, usage[key(dt)] || 0); });
+    var todayKey = key(new Date());
+    var bars = days.map(function (dt) {
+      var k = key(dt); var u = usage[k] || 0, tp = topup[k] || 0;
+      var isTop = tp > 0;
+      var h = isTop ? 100 : Math.max(2, Math.round(u / max * 100));
+      return '<i class="' + (isTop ? 'top' : '') + (k === todayKey ? ' today' : '') + '" style="height:' + h + '%" title="' + k + ' · usage ' + formatMoney(u) + (isTop ? ' · top-up ' + formatMoney(tp) : '') + '"></i>';
+    }).join('');
+    var lab = function (dt) { return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); };
+    var mid = days[Math.floor(days.length / 2)];
+    box.innerHTML = '<div class="ad-bars">' + bars + '</div><div class="ad-axis"><span>' + lab(days[0]) + '</span><span>' + (mid ? lab(mid) : '') + '</span><span>' + lab(days[days.length - 1]) + '</span></div>';
+    var totalU = 0, totalT = 0; Object.keys(usage).forEach(function (k) { totalU += usage[k]; }); Object.keys(topup).forEach(function (k) { totalT += topup[k]; });
+    if (sub) sub.textContent = days.length + ' ' + t('lbl.days', 'days') + ' · ' + t('lbl.usage', 'usage') + ' ' + formatMoney(totalU) + ' · ' + t('lbl.topup', 'top-up') + ' ' + formatMoney(totalT);
+  },
+
   // Build the table HTML for either day mode or month mode.
   _renderTxTable: function (d) {
     var isMonth = d.groupBy === 'month';
     var sub = document.getElementById('tx-subtitle');
-    if (sub) {
-      var TTx = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
-      sub.textContent = isMonth
-        ? TTx('tx.subMonth', 'สรุปรายเดือนต่อ user')
-        : TTx('tx.subDay', 'ประวัติการเติม credit และการใช้งาน');
-    }
+    var TTx = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
+    if (sub) sub.textContent = isMonth ? TTx('tx.subMonth', 'สรุปรายเดือนต่อ user') : TTx('tx.subDay', 'ประวัติการเติม credit และการใช้งาน');
 
     var PAGE_SIZE = 20;
     var totalRows = d.rows.length;
@@ -282,275 +350,98 @@ export default {
     var page = isMonth ? 1 : Math.min(Math.max(this._txPage || 1, 1), totalPages);
     this._txPage = page;
     var pageRows = isMonth ? d.rows : d.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    var chipFor = function (type) {
+      var tp = String(type || '').toLowerCase();
+      var cls = tp === 'topup' ? 'ok' : tp === 'usage' ? 'bad' : tp === 'bonus' || tp === 'adjustment' ? 'warn' : '';
+      return '<span class="ad-chip ' + cls + '">' + escapeHtml(tp || '—') + '</span>';
+    };
+    var who = function (r) { return '<div class="ad-who"><div><b>' + escapeHtml(r.display_name || r.username || '—') + '</b><span>' + escapeHtml(r.username || '') + '</span></div></div>'; };
 
     var rows = pageRows.map(function (r) {
-      var typeClass = String(r.type || '').toLowerCase();
-      var sign = (r.type === 'usage' || r.type === 'adjustment' && (r.amount_signed || 0) < 0) ? 'out' : 'in';
-      var amountStr = '฿' + Number(r.amount || 0).toFixed(2);
-      var typeBadge = '<span class="tx-type-badge ' + escapeHtml(typeClass) + '">'
-                    + escapeHtml(r.type) + '</span>';
-
+      var sign = (r.type === 'usage' || (r.type === 'adjustment' && (r.amount_signed || 0) < 0)) ? 'neg' : 'pos';
+      var amountStr = formatMoney(Math.abs(Number(r.amount || 0)));
       if (isMonth) {
-        return '<tr>'
-          + '<td class="tx-cell-mono">' + escapeHtml(r.period_label) + '</td>'
-          + '<td><div style="font-weight:600">' + escapeHtml(r.display_name || r.username || '—') + '</div>'
-          +   '<div style="font-size:.7rem;color:var(--text-3)">@' + escapeHtml(r.username || '') + '</div></td>'
-          + '<td>' + typeBadge + '</td>'
-          + '<td class="tx-cell-mono" style="text-align:center">' + r.event_count + '</td>'
-          + '<td class="tx-cell-amount ' + sign + '">' + amountStr + '</td>'
-          + '</tr>';
-      } else {
-        var dt = new Date(r.created_at);
-        var dateStr = dt.toLocaleDateString('th-TH', {
-          day:'2-digit', month:'2-digit', year:'2-digit'
-        }) + ' ' + dt.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
-        var refStr = r.ref_type
-          ? '<span class="tx-cell-mono">' + escapeHtml(r.ref_type) +
-            (r.ref_id ? '#' + r.ref_id : '') + '</span>'
-          : '<span style="color:var(--text-3)">—</span>';
-        return '<tr>'
-          + '<td class="tx-cell-mono">' + escapeHtml(dateStr) + '</td>'
-          + '<td><div style="font-weight:600">' + escapeHtml(r.display_name || r.username || '—') + '</div>'
-          +   '<div style="font-size:.7rem;color:var(--text-3)">@' + escapeHtml(r.username || '') + '</div></td>'
-          + '<td>' + typeBadge + '</td>'
-          + '<td>' + refStr + '</td>'
-          + '<td class="tx-cell-amount ' + sign + '">'
-          +   (sign === 'in' ? '+' : '−') + amountStr
-          + '</td>'
-          + '</tr>';
+        return '<tr><td class="ad-mono">' + escapeHtml(r.period_label) + '</td><td>' + who(r) + '</td><td>' + chipFor(r.type) + '</td>'
+          + '<td class="num">' + r.event_count + '</td><td class="num"><span class="' + sign + '">' + (sign === 'pos' ? '+' : '−') + amountStr + '</span></td></tr>';
       }
+      var dt = new Date(r.created_at);
+      var dateStr = dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      var refStr = r.ref_type ? '<span class="ad-code">' + escapeHtml(r.ref_type) + (r.ref_id ? '#' + r.ref_id : '') + '</span>' : '<span class="muted">—</span>';
+      return '<tr><td class="ad-mono muted">' + escapeHtml(dateStr) + '</td><td>' + who(r) + '</td><td>' + chipFor(r.type) + '</td><td>' + refStr + '</td>'
+        + '<td class="num"><span class="' + sign + '">' + (sign === 'pos' ? '+' : '−') + amountStr + '</span></td></tr>';
     }).join('');
 
-    var headers = isMonth
-      ? ['Month', 'User', 'Type', 'Request', 'Amount']
-      : ['Date',  'User', 'Type', 'Request', 'Amount'];
-    var ths = headers.map(function (h, i) {
-      var align = (i === headers.length - 1) ? ' style="text-align:right"'
-                : (i === 3 && isMonth)        ? ' style="text-align:center"' : '';
-      return '<th' + align + '>' + h + '</th>';
-    }).join('');
-
-    var paginationHtml = '';
+    var headers = isMonth ? ['Month', 'User', 'Type', 'Events', 'Amount'] : ['Date', 'User', 'Type', 'Ref', 'Amount'];
+    var ths = headers.map(function (h, i) { return '<th' + (i >= 3 && (isMonth || i === 4) ? ' class="num"' : '') + '>' + h + '</th>'; }).join('');
+    var pager = '';
     if (!isMonth && totalPages > 1) {
-      var btns = [];
-      for (var i = 1; i <= totalPages; i++) {
-        btns.push('<button class="tx-page-btn' + (i === page ? ' active' : '')
-          + '" onclick="admin.setTxPage(' + i + ')">' + i + '</button>');
-      }
-      paginationHtml = '<div class="tx-pagination">' + btns.join('') + '</div>';
+      var btns = []; for (var i = 1; i <= totalPages; i++) btns.push('<button type="button"' + (i === page ? ' aria-pressed="true"' : '') + ' onclick="admin.setTxPage(' + i + ')">' + i + '</button>');
+      pager = '<div class="ad-seg">' + btns.join('') + '</div>';
     }
-
-    return '<table class="tx-table">'
-      + '<thead><tr>' + ths + '</tr></thead>'
-      + '<tbody>' + rows + '</tbody>'
-      + '</table>'
-      + '<div class="tx-footer">'
-      +   '<span>' + d.count + ' rows · ' + escapeHtml(d.from) + ' → ' + escapeHtml(d.to) + '</span>'
-      +   '<span>' + (isMonth ? 'Monthly rollup' : 'Per-event detail') + '</span>'
-      + '</div>'
-      + paginationHtml;
+    return '<table class="ad-table"><thead><tr>' + ths + '</tr></thead><tbody>' + rows + '</tbody></table>'
+      + '<div class="ad-card-foot"><span>' + d.count + ' rows · ' + escapeHtml(d.from) + ' → ' + escapeHtml(d.to) + '</span>' + pager + '</div>';
   },
 
   // --- Project detail --- hero + budget + 3 mini stats + members
-  renderProjectDetail: function (projectId) {
-    // DB cache, not Auth.getProjectById (localStorage lacks balance/lifetimeAmount)
-    var p = (this._cachedDBProjects || []).find(function (x) { return x.id === projectId; })
+  renderProjectDetail: function (projectId, targetId) {
+    var p = (this._cachedDBProjects || []).find(function (x) { return String(x.id) === String(projectId); })
             || Auth.getProjectById(projectId);
     if (!p) return;
-    var container = document.getElementById('proj-detail');
+    var container = document.getElementById(targetId || 'proj-detail');
     if (!container) return;
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
-
-    // สมาชิกจาก /api/credits — เงินอยู่ที่ pool ไม่มี "แจกเข้า user"
     var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
-    var users = (this._cachedCredits || []).filter(function (c) { return c.projectId === projectId; });
+    var users = (this._cachedCredits || []).filter(function (c) { return String(c.projectId) === String(projectId); });
 
-    // totalTopUp = เติมสะสม, pool = คงเหลือ, costBilled = Σ spend สมาชิก
     var totalTopUp = nz(p.lifetimeAmount != null ? p.lifetimeAmount : p.totalTopUp);
     var pool       = nz(p.balance != null ? p.balance : p.totalTopUp);
     var costBilled = users.reduce(function (s, u) { return s + nz(u.lifetimeSpend); }, 0);
+    var spentToday = users.reduce(function (s, u) { return s + nz(u.spentToday); }, 0);
+    var isFunded = totalTopUp > 0, isEmpty = pool <= 0;
+    var leftPct = isFunded ? Math.max(0, Math.min(100, pool / totalTopUp * 100)) : 0;
+    var barCls = !isFunded ? '' : isEmpty ? 'bad' : leftPct < 20 ? 'warn' : leftPct >= 50 ? 'ok' : '';
+    var health = !isFunded ? '<span class="ad-chip">' + TT('proj.noCredit', 'ยังไม่มีเครดิต') + '</span>'
+      : isEmpty ? '<span class="ad-chip bad"><span class="dot"></span>' + TT('proj.depleted', 'เครดิตหมด') + '</span>'
+      : leftPct < 20 ? '<span class="ad-chip warn"><span class="dot"></span>' + TT('proj.low', 'Running low') + '</span>'
+      : '<span class="ad-chip ok"><span class="dot"></span>' + TT('proj.healthy', 'Healthy') + '</span>';
+    var runway = spentToday > 0 ? Math.floor(pool / spentToday) + ' ' + TT('lbl.days', 'days') : '—';
 
-    var usedPct = totalTopUp > 0 ? Math.min(100, (costBilled / totalTopUp) * 100) : 0;
-    var budget = { totalTopUp: totalTopUp, pool: pool, costBilled: costBilled };
-
-    // hero: name, ID pill (click-to-copy), rate chips, CTA
-    var hero =
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;'
-      + 'padding:20px 22px;background:var(--surface-2);border:1px solid var(--border-default);'
-      + 'border-radius:14px 14px 0 0;border-bottom:none">'
-      +   '<div style="flex:1;min-width:240px">'
-      +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
-      +       '<div style="font-size:1.2rem;font-weight:800;color:var(--text-1)">' + escapeHtml(p.name) + '</div>'
-      +       '<span title="คลิกเพื่อ copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'Copied: ' + jsArg(p.id) + '\'))" '
-      +         'style="font-family:var(--font-mono);font-size:.72rem;padding:3px 9px;'
-      +         'background:var(--accent-soft-bg);color:var(--accent);'
-      +         'border:1px solid var(--accent-soft-border);border-radius:6px;cursor:pointer;'
-      +         'transition:background .15s">' + escapeHtml(p.id) + '</span>'
-      +     '</div>'
-      +     '<div style="font-size:.84rem;color:var(--text-3);line-height:1.5">'
-      +       (p.desc ? escapeHtml(p.desc) : '<span style="font-style:italic;opacity:.6">No description</span>')
-      +     '</div>'
-      +     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
-      +       '<span style="font-size:.72rem;padding:4px 10px;background:var(--surface-3);'
-      +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-      +         'In  <b>฿' + p.inputRate + '</b>/1K</span>'
-      +       '<span style="font-size:.72rem;padding:4px 10px;background:var(--surface-3);'
-      +         'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-      +         'Out  <b>฿' + p.outputRate + '</b>/1K</span>'
-      +     '</div>'
-      +   '</div>'
-      +   '<button class="btn-action btn-primary-sm" style="padding:10px 22px;font-size:.88rem;font-weight:700"'
-      +     ' onclick="admin.openTopup(\'' + jsArg(p.id) + '\')">' + TT('btn.topupProject','+ เติมเงิน Project') + '</button>'
+    var head =
+        '<div class="ad-card-head"><h4>' + escapeHtml(p.name) + '</h4>' + health
+      +   '<span class="ad-code" title="' + escapeHtml(TT('tt.clickToCopy', 'คลิกเพื่อ copy')) + '" style="cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' + jsArg(p.id) + '\').then(()=>flash(\'Copied: ' + jsArg(p.id) + '\',\'success\'))">' + escapeHtml(p.id) + '</span>'
+      +   '<span class="ad-grow"></span>'
+      +   '<button class="ad-btn sm" onclick="admin.openEditProject(\'' + jsArg(p.id) + '\')"><svg class="ic sm"><use href="#i-pencil"/></svg>' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
+      +   '<button class="ad-btn sm primary" onclick="admin.openTopup(\'' + jsArg(p.id) + '\')"><svg class="ic sm"><use href="#i-plus"/></svg>' + escapeHtml(TT('btn.topupShort', 'Top up')) + '</button>'
       + '</div>';
-
-    // การ์ด budget สามสถานะ: not-funded / depleted / normal
-    var availTotal = budget.pool + budget.costBilled;
-    var isFunded   = availTotal > 0;
-    var isEmpty    = budget.pool <= 0;
-    var usablePct  = isFunded ? (budget.pool / availTotal) * 100 : 0;
-
-    var leftHtml, barPct, barColor, footHtml, poolNumColor;
-    if (!isFunded) {
-      // never funded — neutral "empty" state, no misleading %
-      leftHtml = '<span style="font-size:1.25rem;font-weight:700;color:var(--text-3)">💤 '
-               + TT('proj.noCredit','ยังไม่มีเครดิต') + '</span>';
-      barPct = 0; barColor = 'var(--text-3)'; poolNumColor = 'var(--text-3)';
-      footHtml = TT('proj.topupHint','กด "+ เติมเงิน Project" เพื่อเริ่มใช้งาน');
-    } else if (isEmpty) {
-      // funded before but spent everything — clear "depleted" warning
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:#dc2626;font-family:var(--font-mono)">0%</span>'
-               + '<span style="font-size:.78rem;color:#dc2626;font-weight:600;margin-left:8px">⚠ '
-               + TT('proj.depleted','เครดิตหมด') + '</span>';
-      barPct = 0; barColor = '#dc2626'; poolNumColor = '#dc2626';
-      footHtml = TT('proj.depletedHint','เติมเงินเพื่อให้ user ใช้งานต่อได้');
-    } else {
-      // normal — colour by how much is left
-      var col = usablePct >= 50 ? 'var(--success-hover,#34d399)'
-              : usablePct >= 20 ? '#f59e0b' : '#dc2626';
-      leftHtml = '<span style="font-size:1.7rem;font-weight:800;color:' + col + ';font-family:var(--font-mono);letter-spacing:-.02em">'
-               + usablePct.toFixed(1) + '%</span>'
-               + '<span style="font-size:.76rem;color:var(--text-3);margin-left:8px">' + TT('proj.usableLeft','คงเหลือใช้ได้') + '</span>';
-      barPct = usablePct; barColor = col; poolNumColor = 'var(--text-1)';
-      footHtml = TT('proj.usedOfPool','ใช้ไป') + ' ' + formatTHB(budget.costBilled) + ' · ' + usedPct.toFixed(1) + '%';
-    }
-
-    var budgetCard =
-        '<div style="padding:22px;background:var(--surface-2);border:1px solid var(--border-default);'
-      + 'border-radius:0;border-bottom:none;border-top:1px dashed var(--border-subtle)">'
-      +   '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px;gap:12px;flex-wrap:wrap">'
-      +     '<div>' + leftHtml + '</div>'
-      +     '<div style="text-align:right">'
-      +       '<span style="font-size:1.4rem;font-weight:800;color:' + poolNumColor + ';font-family:var(--font-mono)">'
-      +         formatTHB(budget.pool) + '</span>'
-      +       '<span style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-left:6px">' + TT('proj.poolLeft','Pool left') + '</span>'
-      +     '</div>'
-      +   '</div>'
-      // progress bar — empty/dashed when not funded, else filled to barPct
-      +   '<div style="height:10px;border-radius:5px;background:var(--surface-4);overflow:hidden'
-      +     (!isFunded ? ';border:1px dashed var(--border-default);background:transparent' : '') + '">'
-      +     (barPct > 0 ? '<div style="width:' + barPct + '%;height:100%;background:' + barColor + ';transition:width .4s ease"></div>' : '')
-      +   '</div>'
-      +   '<div style="font-size:.7rem;color:var(--text-3);margin-top:6px">' + footHtml + '</div>'
+    var balance =
+        '<div class="ad-section">'
+      +   '<h5>' + TT('col.balance', 'Balance') + '</h5>'
+      +   '<div class="ad-big"' + (isEmpty && isFunded ? ' style="color:var(--danger)"' : '') + '>' + formatMoney(pool) + '</div>'
+      +   '<div class="ad-bar ' + barCls + '"><i style="width:' + leftPct + '%"></i></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.lifetimeTopup', 'Lifetime top-up') + '</span><b>' + formatMoney(totalTopUp) + '</b></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.spendCumulative', 'Spend to date') + '</span><b>' + formatMoney(costBilled) + '</b></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.spentToday', 'Spent today') + '</span><b>' + formatMoney(spentToday) + '</b></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.runway', 'Runway at today\'s burn') + '</span><b>' + runway + '</b></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.rates', 'Rate in / out per 1K') + '</span><b>฿' + p.inputRate + ' / ฿' + p.outputRate + '</b></div>'
+      +   '<div class="ad-kv"><span>' + TT('proj.release', 'Target release') + '</span><b>' + escapeHtml(p.targetRelease || '—') + '</b></div>'
+      +   (p.desc ? '<div style="font-size:12.5px;color:var(--text-3)">' + escapeHtml(p.desc) + '</div>' : '')
       + '</div>';
-
-    // secondary stat cards — derived figures (top-up is in the hero)
-    var statCard = function (icon, label, value, valueColor, sub) {
-      return '<div style="padding:14px 16px;background:var(--surface-2);'
-        + 'border:1px solid var(--border-default);border-radius:10px">'
-        + '<div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">' + icon + ' ' + label + '</div>'
-        + '<div style="font-size:1.3rem;font-weight:700;color:' + valueColor + ';font-family:var(--font-mono)">' + value + '</div>'
-        + (sub ? '<div style="font-size:.7rem;color:var(--text-3);margin-top:4px">' + sub + '</div>' : '')
-        + '</div>';
-    };
-    var statsRow =
-        '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:14px;'
-      + 'background:var(--surface-2);border:1px solid var(--border-default);'
-      + 'border-radius:0 0 14px 14px;border-top:1px dashed var(--border-subtle)">'
-      +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-wallet"/></svg>', TT('proj.lifetimeTopup','Lifetime Top-up'), formatTHB(budget.totalTopUp), 'var(--text-1)',
-                   TT('proj.topupSub','ยอดเติมสะสม'))
-      +   statCard('<svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>', TT('proj.spendCumulative','ใช้จ่ายสะสม'), formatTHB(budget.costBilled), 'var(--text-2)',
-                   budget.totalTopUp > 0 ? usedPct.toFixed(1) + '% ' + TT('proj.ofTopup','ของยอดเติม') : '—')
-      + '</div>';
-
-    // members
-    var membersTitle =
-        '<div style="display:flex;align-items:center;gap:10px;margin:24px 0 12px">'
-      +   '<h3 style="font-size:.9rem;color:var(--text-1);font-weight:700;margin:0">' + TT('dash.members','Members') + '</h3>'
-      +   '<span style="font-size:.7rem;padding:2px 8px;background:var(--surface-3);'
-      +     'border:1px solid var(--border-default);border-radius:20px;color:var(--text-2)">'
-      +     users.length + '</span>'
-      + '</div>';
-
-    var membersBody;
-    if (users.length === 0) {
-      membersBody = '<div style="padding:32px;text-align:center;color:var(--text-3);font-size:.82rem;'
-        + 'background:var(--surface-2);border:1px dashed var(--border-default);border-radius:10px">'
-        + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>';
-    } else {
-      // แถวสมาชิก read-only — แก้ได้ที่หน้า Users/Cap เท่านั้น
-      var cell = function (label, valueHtml, w) {
-        return '<div style="text-align:right;min-width:' + (w || 84) + 'px">'
-          + '<div style="font-size:.64rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em">' + label + '</div>'
-          + '<div style="margin-top:2px">' + valueHtml + '</div>'
-          + '</div>';
-      };
-      var mono = function (s, color) {
-        return '<span style="font-weight:600;color:' + (color || 'var(--text-1)') + ';font-family:var(--font-mono);font-size:.85rem">' + s + '</span>';
-      };
-      var rows = users.map(function (u, idx) {
-        var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
-        var tokens  = nz(u.lifetimeTokens);
-        var spend   = nz(u.lifetimeSpend);
-        var hasCap  = !(u.dailyCap === null || u.dailyCap === undefined);
-        var base    = hasCap ? nz(u.dailyCap) : null;
-        var bonus   = nz(u.bonusBalance);
-        var effCap  = hasCap ? base + bonus : null;
-        var usedTd  = nz(u.spentToday);
-
-        var capHtml = hasCap
-          ? mono('฿' + base.toLocaleString('en-US', { maximumFractionDigits: 0 }))
-            + (bonus > 0 ? '<span style="color:#16a34a;font-size:.66rem" title="bonus คงเหลือ"> +' + bonus.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</span>' : '')
-          : '<span style="opacity:.45;font-style:italic;font-size:.8rem">' + TT('val.unlimited','ไม่จำกัด') + '</span>';
-
-        var usedHtml;
-        if (!hasCap) {
-          usedHtml = mono('฿' + usedTd.toFixed(2), 'var(--text-2)');
-        } else {
-          var ratio = effCap > 0 ? Math.min(1, usedTd / effCap) : (usedTd > 0 ? 1 : 0);
-          var pct = Math.round(ratio * 100);
-          var c = ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#16a34a';
-          usedHtml =
-              '<div style="min-width:104px">'
-            +   mono('฿' + usedTd.toFixed(0), c) + '<span style="color:var(--text-3);font-size:.72rem"> / ฿' + effCap.toFixed(0) + '</span>'
-            +   '<div style="height:4px;border-radius:2px;background:var(--surface-4);overflow:hidden;margin-top:3px">'
-            +     '<div style="height:100%;width:' + pct + '%;background:' + c + ';transition:width .3s"></div>'
-            +   '</div>'
+    var membersRows = users.length === 0
+      ? '<div class="ad-empty" style="padding:12px">' + t('empty.noMembersInProject', 'ยังไม่มี member ใน project นี้') + '</div>'
+      : users.map(function (u) {
+          var hasCap = !(u.dailyCap === null || u.dailyCap === undefined);
+          var cap = hasCap ? nz(u.dailyCap) + nz(u.bonusBalance) : null;
+          var used = nz(u.spentToday);
+          var pct = hasCap && cap > 0 ? Math.min(100, Math.round(used / cap * 100)) : 0;
+          var cls = pct >= 100 ? 'bad' : pct >= 80 ? 'warn' : '';
+          var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
+          return '<div class="ad-member"><span class="ad-avatar">' + escapeHtml(initial) + '</span><span>' + escapeHtml(u.displayName || u.username) + '</span>'
+            + (hasCap ? '<div class="ad-bar ' + cls + '" style="width:70px"><i style="width:' + pct + '%"></i></div><em>' + pct + '% ' + TT('lbl.today', 'today') + '</em>'
+                      : '<em>' + formatMoney(used) + ' ' + TT('lbl.today', 'today') + '</em>')
             + '</div>';
-        }
-
-        return '<div style="display:grid;grid-template-columns:auto 1fr auto auto auto auto;'
-          + 'gap:14px;align-items:center;padding:12px 16px;'
-          + (idx > 0 ? 'border-top:1px solid var(--border-subtle);' : '')
-          + 'transition:background .15s">'
-          + '<div style="width:36px;height:36px;border-radius:50%;background:var(--accent-soft-bg);'
-          +   'color:var(--accent);font-weight:700;font-size:.95rem;'
-          +   'display:flex;align-items:center;justify-content:center;'
-          +   'border:1px solid var(--accent-soft-border)">' + escapeHtml(initial) + '</div>'
-          + '<div style="min-width:0">'
-          +   '<div style="font-weight:600;color:var(--text-1);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(u.displayName || u.username) + '</div>'
-          +   '<div style="font-size:.7rem;color:var(--text-3);margin-top:1px">@' + escapeHtml(u.username) + '</div>'
-          + '</div>'
-          + cell(TT('col.tokens','Tokens'), mono(tokens.toLocaleString(), 'var(--text-1)'))
-          + cell(TT('col.spendCumulative','ใช้จ่ายสะสม'), mono('฿' + spend.toFixed(2), 'var(--text-2)'))
-          + cell(TT('col.dailyCap','Daily Cap'), capHtml)
-          + cell(TT('col.usedToday','ใช้วันนี้'), usedHtml, 110)
-          + '</div>';
-      }).join('');
-      membersBody = '<div style="background:var(--surface-2);border:1px solid var(--border-default);'
-        + 'border-radius:10px;overflow:hidden">' + rows + '</div>';
-    }
-
-    container.innerHTML = hero + budgetCard + statsRow + membersTitle + membersBody;
+        }).join('');
+    var members = '<div class="ad-section"><h5>' + TT('dash.members', 'Members') + ' · ' + users.length + '</h5><div class="ad-stack" style="gap:8px">' + membersRows + '</div></div>';
+    container.innerHTML = head + balance + members;
   },
 
   openTopup: function (projectId) {

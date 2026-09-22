@@ -414,7 +414,7 @@ img {
     margin-left: var(--sidebar-w);
     flex: 1;
     min-height: 100vh;
-    padding: 28px 32px 48px;
+    padding: 0 32px 48px;
     width: calc(100% - var(--sidebar-w));
     overflow-x: hidden;
 }
