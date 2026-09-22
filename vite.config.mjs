@@ -33,7 +33,13 @@ export default defineConfig({
                     const links = [];
                     html = html.replace(/[ \t]*<link rel="stylesheet"[^>]*>\r?\n?/g, (m) => { links.push(m.trim()); return ''; });
                     if (!links.length) return html;
-                    return html.replace(/<style[\s>]/, (m) => links.join('\n    ') + '\n    ' + m);
+                    // no inline <style> on this page (chat since v1.15) — put the links back before </head>
+                    const out = /<style[\s>]/.test(html)
+                        ? html.replace(/<style[\s>]/, (m) => links.join('\n    ') + '\n    ' + m)
+                        : html.replace('</head>', '    ' + links.join('\n    ') + '\n</head>');
+                    // a page that lost its stylesheets ships unstyled (v1.15.0 chat) — fail the build instead
+                    if (!out.includes('<link rel="stylesheet"')) throw new Error('css-before-inline-style: stylesheet links dropped');
+                    return out;
                 },
             },
         },
