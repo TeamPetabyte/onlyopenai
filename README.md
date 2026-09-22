@@ -61,6 +61,9 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 - **Frontend:** ES-module HTML/JS built by **Vite** into `dist/` (hashed
   filenames). The server serves `dist/` only when its build matches `HEAD`,
   otherwise it falls back to the source tree (unhashed — browsers may cache it).
+  One design-token set (`css/tokens.css`, light default, dark under
+  `data-theme="dark"`) drives chat, admin and login; **Tailwind 4** utilities
+  (`css/tailwind.css`, mapped onto those tokens) are used on the auth pages.
 - **Database:** PostgreSQL with versioned SQL migrations (auto-applied on boot).
 - **AI:** OpenAI — answer model chosen per message, router model fixed; prompts
   in `tbl_prompt` (seeded from `server/config/skill-prompts.json`, new file
@@ -78,7 +81,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 | DB | PostgreSQL (`pg`) + SQL migrations |
 | AI | `openai` SDK — Responses API (gpt-6-astra, gpt-5.6-sol/terra/luna) and Chat Completions (gpt-5.5); `gpt-4o-mini` router |
 | ABAP | `@abaplint/core` (MIT) for syntax / variable / type checks, no SAP system needed |
-| Frontend build | Vite (`npm run build` → `dist/`) |
+| Frontend build | Vite + `@tailwindcss/vite` (`npm run build` → `dist/`) |
 | Validation | `zod` |
 | Logging | `pino` / `pino-http` / `pino-roll` |
 | Misc | `multer` (uploads, in memory → vector store), `exceljs` (exports), `https-proxy-agent` |
