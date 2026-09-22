@@ -1,4 +1,6 @@
 // Markdown rendering for chat: marked → DOMPurify → hljs, plus copy/download buttons.
+const ICON_COPY = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg>';
 // Exposes global MD: render(text), postProcess(el), attachMessageCopy(el, rawText).
 // While streaming, callers render escaped plain text and swap to markdown at the end.
 
@@ -106,14 +108,22 @@
             const pre = codeEl.parentElement;
             if (pre.querySelector('.code-copy-btn')) return;   // idempotent
 
-            // copy button
+            // header row: language label + copy button
+            const head = document.createElement('div');
+            head.className = 'code-head';
+            const lang = (codeEl.className.match(/language-([\w-]+)/) || [])[1] || 'code';
+            const langEl = document.createElement('span');
+            langEl.className = 'lang';
+            langEl.textContent = lang;
+            head.appendChild(langEl);
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'code-copy-btn';
             btn.setAttribute('aria-label', 'คัดลอกโค้ด');
-            btn.textContent = 'Copy';
+            btn.innerHTML = ICON_COPY + '<span class="msg-action-label">Copy</span>';
             btn.addEventListener('click', () => copyTextTo(codeEl.innerText, btn));
-            pre.appendChild(btn);
+            head.appendChild(btn);
+            pre.appendChild(head);
         });
     }
 
@@ -129,7 +139,7 @@
         copyBtn.type = 'button';
         copyBtn.className = 'msg-action-btn';
         copyBtn.setAttribute('aria-label', 'คัดลอกคำตอบ');
-        copyBtn.innerHTML = '<span class="msg-action-icon">⧉</span><span class="msg-action-label">Copy</span>';
+        copyBtn.innerHTML = '<span class="msg-action-icon">' + ICON_COPY + '</span><span class="msg-action-label">Copy</span>';
         copyBtn.addEventListener('click', () => copyTextTo(rawText, copyBtn));
 
         actions.appendChild(copyBtn);
@@ -154,7 +164,7 @@
         dlBtn.type = 'button';
         dlBtn.className = 'msg-action-btn msg-action-download';
         dlBtn.setAttribute('aria-label', 'ดาวน์โหลดคำตอบ');
-        dlBtn.innerHTML = '<span class="msg-action-icon">⬇</span><span class="msg-action-label">Download</span>';
+        dlBtn.innerHTML = '<span class="msg-action-icon">' + ICON_DOWNLOAD + '</span><span class="msg-action-label">Download</span>';
         dlBtn.addEventListener('click', () =>
             downloadText(downloadableBody(rawText),
                 filename ? withExtension(filename, rawText) : guessFilename(rawText)));

@@ -1,4 +1,19 @@
 // chat.js — หน้าแชททั้งหมด
+// Inline SVG icons for JS-generated markup (same sprite ids as index.html).
+const ICON = {
+    chat:     '<svg class="ic sm" aria-hidden="true"><use href="#i-chat"/></svg>',
+    search:   '<svg class="ic sm" aria-hidden="true"><use href="#i-search"/></svg>',
+    star:     '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></svg>',
+    pencil:   '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    download: '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg>',
+    trash:    '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+    x:        '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    refresh:  '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>',
+    sparkle:  '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.5 6.5l2 2M15.5 15.5l2 2M6.5 17.5l2-2M15.5 8.5l2-2"/></svg>',
+    book:     '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4zM20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z"/></svg>',
+    file:     '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13l-2 2 2 2M15 13l2 2-2 2"/></svg>',
+};
+
 
 
         // --- State ---
@@ -138,10 +153,10 @@
 
             const projectId = session.projectId;
             if (projectId) {
-                let projName = null;
+                let projName = null, projRelease = null;
                 try {
                     const d = await fetch(BASE + '/api/projects', { headers: Auth.authHeaders() }).then(r => r.json());
-                    if (d.ok) { const p = d.projects.find(p => String(p.id) === String(projectId)); if (p) projName = p.name; }
+                    if (d.ok) { const p = d.projects.find(p => String(p.id) === String(projectId)); if (p) { projName = p.name; projRelease = p.target_release || p.targetRelease || null; } }
                     else      { initHadError = true; }
                 } catch {
                     initHadError = true;
@@ -151,7 +166,8 @@
                 if (projName) {
                     document.getElementById('brand-project').textContent = projName;
                     document.getElementById('sidebar-project-label').textContent = projName;
-                    // อย่าเขียนทับ brand-avatar — เป็น <img> โลโก้
+                    const sub = document.getElementById('project-sub');
+                    if (sub) sub.textContent = projRelease ? tf('u.project.release', { release: projRelease }) : '';
                 }
             }
 
@@ -260,7 +276,7 @@
             if (!messages || messages.length === 0) {
                 area.innerHTML = `
             <div class="chat-empty" id="chat-empty">
-                <div class="chat-empty-icon">💬</div>
+                <img class="chat-empty-mascot" src="/assets/mascot.png?v=2" alt="" />
                 <div class="chat-empty-title">${esc(t('u.chat.newRoomTitle'))}</div>
                 <div class="chat-empty-sub">${esc(t('u.chat.newRoomSub'))}</div>
             </div>`;
@@ -295,9 +311,10 @@
                         // label ไม่ใช่ raw id; id เป็น fallback เมื่อ catalog ไม่รู้จัก
                         const skillLabel = (id) =>
                             (PRICING.skills.find(x => x.id === id) || {}).name || id;
-                        sb.textContent = msg.skillId
-                            ? '🎯 ' + t('chat.skillMatched', 'ใช้ Skill') + ': ' + skillLabel(msg.skillId)
-                            : '🎯 ' + t('chat.skillNone', 'ไม่ได้ใช้ Skill เฉพาะ — ตอบแบบทั่วไป');
+                        sb.innerHTML = ICON.sparkle;
+                        sb.appendChild(document.createTextNode(msg.skillId
+                            ? t('chat.skillMatched', 'ใช้ Skill') + ': ' + skillLabel(msg.skillId)
+                            : t('chat.skillNone', 'ไม่ได้ใช้ Skill เฉพาะ — ตอบแบบทั่วไป')));
                         if (others.length) {
                             const extra = document.createElement('span');
                             extra.className = 'skill-badge-src';
@@ -327,19 +344,19 @@
             const active = s.id === State.currentSessionId ? 'active' : '';
             const isFav  = (s.isFavorite || s.is_favorite) ? 'is-favorite' : '';
             const favLabel = (s.isFavorite || s.is_favorite) ? t('u.sess.unfavorite') : t('u.sess.favorite');
-            const favIcon  = (s.isFavorite || s.is_favorite) ? '★' : '☆';
+            const favIcon  = ICON.star;
             const renameLabel = t('u.sess.rename'), exportLabel = t('u.sess.exportMd'), delLabel = t('btn.deletePlain');
             return `<div class="session-item ${active} ${isFav}" data-sid="${s.id}"
                 onclick="loadSession(${s.id})"
                 onkeydown="handleSessionKey(event,${s.id})"
                 role="button" tabindex="0" aria-label="${esc(s.title)}">
-                <span class="session-emoji">💬</span>
+                <span class="session-emoji">${ICON.chat}</span>
                 <span class="session-title" title="${esc(s.title)}" ondblclick="enterRenameMode(event,${s.id})">${esc(s.title)}</span>
                 <div class="session-actions">
                     <button class="session-act-btn session-fav" onclick="toggleFavorite(event,${s.id})" title="${favLabel}" aria-label="${favLabel}" aria-pressed="${!!(s.isFavorite || s.is_favorite)}">${favIcon}</button>
-                    <button class="session-act-btn" onclick="enterRenameMode(event,${s.id})" title="${renameLabel}" aria-label="${renameLabel}">✎</button>
-                    <button class="session-act-btn" onclick="exportSession(event,${s.id})" title="${exportLabel}" aria-label="Export">⬇</button>
-                    <button class="session-act-btn session-del" onclick="deleteSession(event,${s.id})" title="${delLabel}" aria-label="${delLabel}">×</button>
+                    <button class="session-act-btn" onclick="enterRenameMode(event,${s.id})" title="${renameLabel}" aria-label="${renameLabel}">${ICON.pencil}</button>
+                    <button class="session-act-btn" onclick="exportSession(event,${s.id})" title="${exportLabel}" aria-label="Export">${ICON.download}</button>
+                    <button class="session-act-btn session-del" onclick="deleteSession(event,${s.id})" title="${delLabel}" aria-label="${delLabel}">${ICON.trash}</button>
                 </div>
             </div>`;
         }
@@ -351,14 +368,14 @@
                 if (searching) {
                     list.innerHTML =
                         '<div class="history-empty no-result">' +
-                            '<div class="he-icon">🔍</div>' +
+                            '<div class="he-icon">' + ICON.search + '</div>' +
                             '<div class="he-title">' + esc(t('u.sess.searchNoResultsTitle')) + '</div>' +
                             '<div class="he-sub">' + esc(t('u.sess.searchNoResultsSub')) + '</div>' +
                         '</div>';
                 } else {
                     list.innerHTML =
                         '<div class="history-empty">' +
-                            '<div class="he-icon">💬</div>' +
+                            '<div class="he-icon">' + ICON.chat + '</div>' +
                             '<div class="he-title">' + esc(t('u.history.emptyTitle')) + '</div>' +
                             '<div class="he-sub">' + esc(t('u.history.emptySub')) + '</div>' +
                             '<button type="button" class="he-cta" onclick="newChat()">' + esc(t('u.history.startFirst')) + '</button>' +
@@ -680,20 +697,22 @@
                             skillBadgeEl ? skillBadgeEl.nextSibling : responseMsgEl.firstChild);
                     }
                     ragBadgeEl.className = 'rag-badge searching';
-                    ragBadgeEl.textContent = '🔍 ' + t('chat.ragSearching', 'กำลังค้นเอกสาร') + (ragQuery ? ': "' + ragQuery + '"' : '') + '…';
+                    ragBadgeEl.innerHTML = ICON.book;
+                    ragBadgeEl.appendChild(document.createTextNode(t('chat.ragSearching', 'กำลังค้นเอกสาร') + (ragQuery ? ': "' + ragQuery + '"' : '') + '…'));
                     scrollToBottom(area);
                 } else if (ev.type === 'tool_result' && ev.name === 'search_knowledge' && ragBadgeEl) {
                     ragBadgeEl.className = 'rag-badge';
-                    ragBadgeEl.textContent = '';
+                    ragBadgeEl.innerHTML = '';
                     const head = document.createElement('div');
                     head.className = 'rag-badge-head';
-                    head.textContent = '🔍 ' + t('chat.ragSearched', 'ค้นเอกสาร') + (ragQuery ? ': "' + ragQuery + '"' : '');
+                    head.innerHTML = ICON.book;
+                    head.appendChild(document.createTextNode(t('chat.ragSearched', 'ค้นเอกสาร') + (ragQuery ? ': "' + ragQuery + '"' : '')));
                     ragBadgeEl.appendChild(head);
                     if (ev.found && Array.isArray(ev.files) && ev.files.length) {
                         for (const f of ev.files) {
                             const line = document.createElement('div');
                             line.className = 'rag-badge-file';
-                            line.textContent = '📄 ' + f;
+                            line.textContent = f;
                             ragBadgeEl.appendChild(line);
                         }
                     } else {
@@ -714,10 +733,10 @@
                     skillBadgeEl.className = 'skill-badge';
                     responseMsgEl.insertBefore(skillBadgeEl, responseMsgEl.firstChild);
                 }
-                skillBadgeEl.textContent = '';
+                skillBadgeEl.innerHTML = ICON.sparkle;
                 if (ev.skillId) {
                     skillBadgeEl.appendChild(document.createTextNode(
-                        '🎯 ' + t('chat.skillMatched', 'ใช้ Skill') + ': ' + (ev.skillLabel || ev.skillId)));
+                        t('chat.skillMatched', 'ใช้ Skill') + ': ' + (ev.skillLabel || ev.skillId)));
                     const srcKey = ev.source === 'code-shape' ? 'chat.skillSrcCode'
                                  : ev.source === 'catch-all'  ? 'chat.skillSrcCatchAll'
                                  : ev.source === 'llm'        ? 'chat.skillSrcLlm' : null;
@@ -735,8 +754,8 @@
                         skillBadgeEl.appendChild(extra);
                     }
                 } else {
-                    skillBadgeEl.textContent =
-                        '🎯 ' + t('chat.skillNone', 'ไม่ได้ใช้ Skill เฉพาะ — ตอบแบบทั่วไป');
+                    skillBadgeEl.appendChild(document.createTextNode(
+                        t('chat.skillNone', 'ไม่ได้ใช้ Skill เฉพาะ — ตอบแบบทั่วไป')));
                 }
                 scrollToBottom(area);
             };
@@ -1085,7 +1104,7 @@
             reader.onload = ev => {
                 State.attachedFile = { name: file.name, content: ev.target.result };
                 document.getElementById('attached-file-display').innerHTML =
-                    '<div class="attached-file">📄 ' + esc(file.name) + '<button onclick="removeFile()">×</button></div>';
+                    '<div class="attached-file">' + ICON.file + esc(file.name) + '<button type="button" onclick="removeFile()" aria-label="Remove file">' + ICON.x + '</button></div>';
             };
             reader.onerror = () => {
                 showToast(t('u.file.readFailed'), 'error');
@@ -1217,7 +1236,7 @@
             btn.type = 'button';
             btn.className = 'msg-action-btn msg-action-regen';
             btn.setAttribute('aria-label', t('u.regen.ariaLabel'));
-            btn.innerHTML = '<span class="msg-action-icon">↻</span><span class="msg-action-label">Regenerate</span>';
+            btn.innerHTML = '<span class="msg-action-icon">' + ICON.refresh + '</span><span class="msg-action-label">Regenerate</span>';
             btn.addEventListener('click', regenerateLast);
             actionsEl.appendChild(btn);
         }
