@@ -5,15 +5,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — Admin Dashboard</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.16.0" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.16.0" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.16.0" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.15.1" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.15.1" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.15.1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <!-- tokens.css MUST load before style.css — defines --sidebar-w, --surface-0, --accent, etc. -->
-    <link rel="stylesheet" href="css/tokens.css?v=1.16.0" />
+    <link rel="stylesheet" href="css/tokens.css?v=1.3.8.1" />
 
     <!-- Apply the saved theme before first paint (no flash); same key and default as chat. -->
     <script>
@@ -51,9 +51,8 @@
         // Sync icon/label once DOM is ready (the buttons aren't in <head>)
         document.addEventListener('DOMContentLoaded', _refreshThemeUI);
     </script>
-    <link rel="stylesheet" href="css/components.css?v=1.16.0" />
-    <link rel="stylesheet" href="css/style.css?v=1.16.0" />
-    <link rel="stylesheet" href="css/admin.css?v=1.16.0" />
+    <link rel="stylesheet" href="css/components.css?v=phase19-5" />
+    <link rel="stylesheet" href="css/style.css?v=1.3.8.1" />
     <style>
         /* ── Admin extras ─────────────────────────── */
         .admin-badge {
@@ -128,10 +127,567 @@
             transform: translateY(-1px);
         }
 
-        .tx-export-menu { display: none; position: absolute; right: 0; top: calc(100% + 4px); background: var(--surface-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 4px; z-index: 30; min-width: 150px; }
+        /* tables */
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 11px 14px;
+            text-align: left;
+            font-size: .83rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .user-table th {
+            color: var(--text-3);
+            font-weight: 600;
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .user-table td {
+            color: var(--text-3);
+        }
+
+        .user-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .user-table tr:hover td {
+            background: var(--surface-3);
+        }
+
+        .user-table .val {
+            color: var(--text-1);
+            font-weight: 500;
+        }
+
+        .plan-badge {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 100px;
+            font-size: .7rem;
+            font-weight: 600;
+            background: var(--surface-3);
+            color: var(--text-2);
+        }
+
+        .plan-badge.pro {
+            border: 1px solid var(--border-strong);
+            color: var(--text-1);
+        }
+
+        /* log */
+        .log-entry {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: .82rem;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-user {
+            font-weight: 600;
+            color: var(--text-1);
+            margin-bottom: 2px;
+        }
+
+        .log-skill {
+            color: var(--text-3);
+        }
+
+        .log-cost {
+            color: var(--text-2);
+            font-family: var(--font-mono);
+            font-size: .78rem;
+            white-space: nowrap;
+            margin-left: 12px;
+        }
+
+        .log-time {
+            color: var(--text-3);
+            font-size: .74rem;
+        }
+
+        /* project cards */
+        .proj-card {
+            margin-bottom: 14px;
+        }
+
+        /* ── Transaction by Date section ── */
+        .tx-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .tx-subtitle {
+            font-size: .76rem;
+            color: var(--text-3);
+            margin-top: 4px;
+        }
+        .tx-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .tx-range {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            background: var(--surface-3);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+        }
+        .tx-date-input {
+            background: transparent;
+            border: none;
+            color: var(--text-1);
+            font-family: var(--font-mono);
+            font-size: .82rem;
+            padding: 4px 4px;
+            outline: none;
+            color-scheme: dark;
+        }
+        .tx-date-input::-webkit-calendar-picker-indicator {
+            filter: invert(.6);
+            cursor: pointer;
+        }
+        .tx-range-sep {
+            color: var(--text-3);
+            font-size: .85rem;
+        }
+        .tx-toggle {
+            display: inline-flex;
+            background: var(--surface-3);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+        }
+        .tx-toggle-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-3);
+            font-family: inherit;
+            font-size: .78rem;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .tx-toggle-btn:hover { color: var(--text-1); }
+        .tx-toggle-btn.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 1px 4px rgba(37, 99, 235, .35);
+        }
+
+        /* Export dropdown — sits next to the Day/Month toggle */
+        .tx-export {
+            position: relative;
+            display: inline-flex;
+        }
+        .tx-export-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--surface-3);
+            color: var(--text-2);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-family: inherit;
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s, color .15s, border-color .15s;
+        }
+        .tx-export-btn:hover {
+            color: var(--text-1);
+            border-color: var(--accent);
+            background: var(--surface-2);
+        }
+        .tx-export-btn .caret {
+            font-size: .65rem;
+            opacity: .7;
+            margin-left: 2px;
+        }
+        .tx-export-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            min-width: 180px;
+            background: var(--surface-1);
+            border: 1px solid var(--border-default);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+            padding: 6px;
+            display: none;
+            z-index: 30;
+        }
         .tx-export-menu.open { display: block; }
-        .tx-export-menu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 13px; background: none; border: 0; color: var(--text-1); cursor: pointer; font-family: inherit; }
-        .tx-export-menu button:hover { background: var(--surface-3); }
+        .tx-export-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: .82rem;
+            color: var(--text-1);
+            text-align: left;
+            cursor: pointer;
+            transition: background .12s;
+        }
+        .tx-export-item:hover { background: var(--surface-2); }
+        .tx-export-item .ic {
+            width: 22px; height: 22px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 5px;
+            font-size: .72rem;
+            font-weight: 700;
+            color: #fff;
+            flex: 0 0 22px;
+        }
+        .tx-export-item .ic.csv  { background: #475569; }
+        .tx-export-item .ic.xlsx { background: #16a34a; }
+        .tx-export-item .sub {
+            color: var(--text-3);
+            font-size: .7rem;
+            font-weight: 400;
+            margin-left: auto;
+        }
+
+        /* ── Quota Requests card ── */
+        .qr-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+        .qr-subtitle {
+            color: var(--text-3);
+            font-size: .82rem;
+            margin-top: 4px;
+        }
+        .qr-pending-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 7px;
+            margin-left: 6px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 11px;
+            font-size: .7rem;
+            font-weight: 700;
+            vertical-align: middle;
+        }
+        .qr-list-wrap {
+            border: 1px solid var(--border-default);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--surface-2);
+        }
+        .qr-loading, .qr-empty {
+            padding: 36px;
+            text-align: center;
+            color: var(--text-3);
+        }
+        .qr-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-soft, var(--border-default));
+            transition: background .12s;
+        }
+        .qr-row:last-child { border-bottom: 0; }
+        .qr-row:hover { background: var(--surface-3); }
+        .qr-row.pending { background: rgba(245, 158, 11, .06); }
+        .qr-row.pending:hover { background: rgba(245, 158, 11, .12); }
+        .qr-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+        .qr-line1 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: .9rem;
+            color: var(--text-1);
+        }
+        .qr-amount {
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent);
+        }
+        .qr-reason {
+            font-size: .8rem;
+            color: var(--text-2);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .qr-meta {
+            font-size: .72rem;
+            color: var(--text-3);
+            display: flex;
+            gap: 12px;
+        }
+        .qr-status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: .68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+        .qr-status-badge.pending  { background: rgba(245, 158, 11, .15); color: #d97706; }
+        .qr-status-badge.approved { background: rgba(22, 163, 74, .15);  color: #16a34a; }
+        .qr-status-badge.denied   { background: rgba(220, 38, 38, .15);  color: #dc2626; }
+        .qr-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .qr-btn {
+            padding: 7px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--border-default);
+            background: var(--surface-3);
+            color: var(--text-1);
+            font-family: inherit;
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .12s, border-color .12s;
+        }
+        .qr-btn:hover { background: var(--surface-2); }
+        .qr-btn.approve {
+            background: #16a34a;
+            color: #fff;
+            border-color: #16a34a;
+        }
+        .qr-btn.approve:hover { background: #15803d; }
+        .qr-btn.deny {
+            background: transparent;
+            color: #dc2626;
+            border-color: rgba(220, 38, 38, .3);
+        }
+        .qr-btn.deny:hover { background: rgba(220, 38, 38, .08); }
+
+        .tx-table-wrap {
+            border: 1px solid var(--border-default);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--surface-2);
+        }
+        .tx-loading,
+        .tx-empty {
+            padding: 36px;
+            text-align: center;
+            color: var(--text-3);
+            font-size: .85rem;
+        }
+        .tx-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .85rem;
+        }
+        .tx-table thead th {
+            background: var(--surface-3);
+            color: var(--text-3);
+            font-weight: 700;
+            font-size: .7rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            padding: 11px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-default);
+            white-space: nowrap;
+        }
+        .tx-table tbody td {
+            padding: 11px 14px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-1);
+            vertical-align: middle;
+        }
+        .tx-table tbody tr:last-child td { border-bottom: none; }
+        .tx-table tbody tr {
+            transition: background .12s;
+        }
+        .tx-table tbody tr:hover {
+            background: rgba(37, 99, 235, .05);
+        }
+        .tx-cell-mono {
+            font-family: var(--font-mono);
+            font-size: .8rem;
+            color: var(--text-2);
+        }
+        .tx-cell-amount {
+            font-family: var(--font-mono);
+            font-size: .88rem;
+            font-weight: 700;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .tx-cell-amount.in  { color: #16a34a; }
+        .tx-cell-amount.out { color: #ef4444; }
+
+        .tx-type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 100px;
+            font-size: .68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+        .tx-type-badge.topup {
+            background: rgba(22, 163, 74, .14);
+            color: #16a34a;
+        }
+        .tx-type-badge.usage {
+            background: rgba(239, 68, 68, .14);
+            color: #ef4444;
+        }
+        .tx-type-badge.adjustment {
+            background: rgba(217, 119, 6, .14);
+            color: #d97706;
+        }
+        .tx-type-badge.refund {
+            background: rgba(8, 145, 178, .14);
+            color: #0891b2;
+        }
+
+        .tx-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--surface-3);
+            border-top: 1px solid var(--border-default);
+            font-size: .74rem;
+            color: var(--text-3);
+        }
+
+        .tx-pagination {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            padding: 10px 14px;
+            background: var(--surface-2);
+            border-top: 1px solid var(--border-subtle);
+        }
+        .tx-page-btn {
+            min-width: 30px;
+            height: 30px;
+            padding: 0 8px;
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            background: var(--surface-3);
+            color: var(--text-2);
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .12s, color .12s;
+        }
+        .tx-page-btn:hover { background: rgba(37, 99, 235, .08); }
+        .tx-page-btn.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: transparent;
+        }
+
+        @media (max-width: 720px) {
+            .tx-controls { width: 100%; }
+            .tx-range, .tx-toggle { flex: 1 0 auto; }
+            .tx-table thead th,
+            .tx-table tbody td { padding: 8px; font-size: .78rem; }
+        }
+
+        /* overview: auto-fit so 5 cards never leave a lone orphan; min 220px keeps each readable */
+        .overview-mini {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .mini-card {
+            background: var(--surface-3);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .mini-card-label {
+            font-size: .72rem;
+            color: var(--text-3);
+            margin-bottom: 6px;
+        }
+
+        .mini-card-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-1);
+        }
+
+        .mini-card-sub {
+            font-size: .72rem;
+            color: var(--text-3);
+            margin-top: 3px;
+        }
+
+        .app-version { text-align: center; font: 400 11px var(--font-mono); color: var(--text-3); user-select: none; }
+
+        /* flash */
+        .flash {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--surface-3);
+            border: 1px solid var(--border-default);
+            color: var(--text-1);
+            padding: 12px 18px;
+            border-radius: 10px;
+            font-size: .85rem;
+            transform: translateX(120%);
+            transition: transform .3s ease;
+            z-index: 2000;
+        }
+
+        .flash.show {
+            transform: translateX(0);
+        }
 
         /* ── MODAL ───────────────────────────────── */
         .modal-overlay {
@@ -358,6 +914,274 @@
             transform: translateY(-1px);
         }
 
+        /* ── USAGE ANALYTICS ─────────────────────── */
+        .usage-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        @media(max-width:900px) {
+            .usage-summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media(max-width:540px) {
+            .usage-summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .usage-user-card {
+            background: var(--surface-3);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all .18s;
+        }
+
+        .usage-user-card:hover {
+            border-color: var(--border-default);
+            background: var(--surface-3);
+        }
+
+        .usage-user-card.expanded {
+            border-color: var(--border-strong);
+        }
+
+        .usage-user-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .usage-user-name {
+            font-weight: 700;
+            color: var(--text-1);
+            font-size: .9rem;
+        }
+
+        .usage-user-meta {
+            font-size: .75rem;
+            color: var(--text-3);
+            margin-top: 3px;
+        }
+
+        .usage-user-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        @media(max-width:640px) {
+            .usage-user-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .usage-stat-box {
+            background: var(--surface-3);
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+
+        .usage-stat-label {
+            font-size: .68rem;
+            color: var(--text-3);
+            margin-bottom: 4px;
+        }
+
+        .usage-stat-val {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-1);
+            font-family: var(--font-mono);
+        }
+
+        .usage-bar-wrap {
+            margin-top: 10px;
+        }
+
+        .usage-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: .72rem;
+            color: var(--text-3);
+            margin-bottom: 4px;
+        }
+
+        .usage-bar-track {
+            height: 5px;
+            background: var(--surface-3);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .usage-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #38bdf8);
+            border-radius: 99px;
+            transition: width .4s ease;
+        }
+
+        .usage-history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: .78rem;
+        }
+
+        .usage-history-table th {
+            color: var(--text-3);
+            font-weight: 600;
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            padding: 6px 10px;
+            text-align: left;
+        }
+
+        .usage-history-table td {
+            padding: 7px 10px;
+            color: var(--text-3);
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .usage-history-table td.val {
+            color: var(--text-2);
+            font-family: var(--font-mono);
+        }
+
+        .usage-history-table tbody tr:hover td {
+            background: rgba(37, 99, 235, .06);
+        }
+
+        .usage-detail-section {
+            display: none;
+            padding-top: 4px;
+        }
+
+        .usage-detail-section.open {
+            display: block;
+        }
+
+        @media(max-width:540px) {
+            .modal-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Activity Log sub-tabs ───────────────────────── */
+        .audit-tabs {
+            display: flex;
+            gap: 4px;
+            margin: 0 0 16px;
+            border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+            flex-wrap: wrap;
+        }
+        .audit-tab {
+            background: transparent;
+            color: var(--text-3, #9ca3af);
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 10px 16px;
+            font-size: .85rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            transition: color .15s ease, border-color .15s ease, background .15s ease;
+            border-radius: 6px 6px 0 0;
+            min-height: 40px;
+        }
+        .audit-tab:hover { color: var(--text-1, #f4f4f7); background: var(--surface-3); }
+        .audit-tab.active {
+            color: var(--accent, #818cf8);
+            border-bottom-color: var(--accent, #818cf8);
+            background: rgba(99,102,241,0.08);
+        }
+        .audit-tab:focus-visible { outline: 2px solid var(--accent, #818cf8); outline-offset: 2px; }
+        .audit-pane.hidden { display: none; }
+
+        /* Audit table */
+        .audit-table-wrap { overflow-x: auto; }
+        .audit-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .85rem;
+        }
+        .audit-table thead th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--text-3, #9ca3af);
+            border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+            background: var(--surface-3);
+            position: sticky;
+            top: 0;
+        }
+        .audit-table tbody td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-2, #d1d5db);
+            vertical-align: middle;
+        }
+        .audit-table tbody tr:hover { background: var(--surface-3); }
+        .audit-table tbody tr:last-child td { border-bottom: none; }
+        .audit-name { color: var(--text-1, #f4f4f7); font-weight: 600; }
+        .audit-username { color: var(--text-3, #9ca3af); font-family: var(--font-mono); font-size: .78rem; }
+        .audit-duration { color: var(--accent, #818cf8); font-family: var(--font-mono); font-size: .82rem; }
+        .audit-empty { text-align: center; padding: 32px; color: var(--text-3, #9ca3af); font-size: .85rem; }
+        .audit-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: .7rem;
+            font-weight: 600;
+            background: rgba(99,102,241,0.15);
+            color: var(--accent, #818cf8);
+        }
+
+        /* Mobile — collapse table to cards */
+        @media (max-width: 720px) {
+            .audit-table thead { display: none; }
+            .audit-table, .audit-table tbody, .audit-table tr, .audit-table td {
+                display: block; width: 100%;
+            }
+            .audit-table tr {
+                border: 1px solid var(--border, rgba(255,255,255,0.08));
+                border-radius: 8px;
+                margin-bottom: 10px;
+                padding: 8px;
+                background: var(--surface-3);
+            }
+            .audit-table td {
+                padding: 6px 8px;
+                border: none;
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .audit-table td::before {
+                content: attr(data-label);
+                font-size: .7rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: .06em;
+                color: var(--text-3, #9ca3af);
+                flex-shrink: 0;
+            }
+        }
     </style>
 </head>
 
@@ -389,16 +1213,6 @@
         <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
         <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 4.4-1"/></symbol>
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></symbol>
-        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
-        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
-        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
-        <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M15 8l2 2M18 5l2 2"/></symbol>
-        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-        <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21 11-9.2 9.2a5.5 5.5 0 0 1-7.8-7.8L13.2 3.2a3.7 3.7 0 0 1 5.2 5.2L9.2 17.6a1.8 1.8 0 0 1-2.6-2.6L15 6.6"/></symbol>
-        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
-        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
     </svg>
 
     <aside class="sidebar" id="sidebar">
@@ -488,259 +1302,568 @@
 
         <!-- OVERVIEW -->
         <div class="view" id="view-overview">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.overview.title">Overview</h2>
-                <span class="ad-grow"></span>
-                <div id="overview-picker"></div>
-                <button class="ad-btn sm primary" onclick="admin.openTopup()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="btn.topupShort">Top up</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.overview.title">Overview</h2>
+                    <p class="page-subtitle" data-i18n="page.overview.sub">ภาพรวมระบบทั้งหมด</p>
+                </div>
+                <span class="admin-badge"><svg class="ic sm"><use href="#i-shield"/></svg>Admin Mode</span>
             </div>
-            <div class="ad-page">
-                <div class="ad-head"><div><h3 id="overview-greeting">Overview</h3><p id="overview-meta" data-i18n="page.overview.sub">ภาพรวมระบบทั้งหมด</p></div></div>
-                <div class="ad-attention" id="overview-attention"></div>
-                <div class="ad-kpis" id="overview-mini"></div>
-                <div class="ad-cols">
-                    <div class="ad-stack">
-                        <div class="ad-card" id="tx-chart-card">
-                            <div class="ad-card-head"><h4 data-i18n="tx.chartTitle">Daily spend vs top-ups</h4><span class="ad-sub" id="tx-chart-sub"></span><span class="ad-grow"></span><div class="ad-legend"><span><i style="background:var(--accent)"></i>Usage</span><span><i style="background:var(--success)"></i>Top-up</span></div></div>
-                            <div class="ad-chart" id="tx-chart"></div>
+            <div class="overview-mini" id="overview-mini"></div>
+            <div class="glass-card">
+                <h3 class="card-title">Users &amp; Projects</h3>
+                <div id="overview-user-list" style="margin-top:14px"></div>
+            </div>
+
+            <!-- Transaction by Date — per-event journal + monthly rollup -->
+            <div class="glass-card" id="tx-card" style="margin-top:18px">
+                <div class="tx-header">
+                    <div>
+                        <h3 class="card-title" style="margin:0">Transaction by Date</h3>
+                        <div class="tx-subtitle" id="tx-subtitle" data-i18n="tx.subDay">ประวัติการเติม credit และการใช้งาน</div>
+                    </div>
+                    <div class="tx-controls">
+                        <div class="tx-range">
+                            <input type="date" id="tx-from" class="tx-date-input" />
+                            <span class="tx-range-sep">→</span>
+                            <input type="date" id="tx-to"   class="tx-date-input" />
                         </div>
-                        <div class="ad-card" id="tx-card">
-                            <div class="ad-card-head">
-                                <h4 data-i18n="tx.title">Transactions</h4><span class="ad-sub" id="tx-subtitle"></span>
-                                <span class="ad-grow"></span>
-                                <input type="date" class="ad-input" id="tx-from" style="height:28px;font-size:12.5px" />
-                                <input type="date" class="ad-input" id="tx-to" style="height:28px;font-size:12.5px" />
-                                <div class="ad-seg"><button type="button" class="tx-toggle-btn active" data-mode="day" aria-selected="true" onclick="admin.setTxMode('day')">Day</button><button type="button" class="tx-toggle-btn" data-mode="month" aria-selected="false" onclick="admin.setTxMode('month')">Month</button></div>
-                                <div id="tx-export" style="position:relative">
-                                    <button type="button" class="ad-btn sm tx-export-btn" aria-haspopup="menu" aria-expanded="false" onclick="admin.toggleTxExport(event)"><svg class="ic sm"><use href="#i-download"/></svg>Export</button>
-                                    <div class="tx-export-menu" id="tx-export-menu"><button type="button" onclick="admin.exportTransactions('csv')">CSV</button><button type="button" onclick="admin.exportTransactions('xlsx')">Excel (.xlsx)</button></div>
-                                </div>
+                        <div class="tx-toggle" role="tablist" aria-label="View mode">
+                            <button type="button" class="tx-toggle-btn active" data-mode="day"
+                                onclick="admin.setTxMode('day')" role="tab" aria-selected="true">Day</button>
+                            <button type="button" class="tx-toggle-btn"        data-mode="month"
+                                onclick="admin.setTxMode('month')" role="tab" aria-selected="false">Month</button>
+                        </div>
+                        <div class="tx-export" id="tx-export">
+                            <button type="button" class="tx-export-btn"
+                                onclick="admin.toggleTxExport(event)" aria-haspopup="menu"
+                                aria-expanded="false" title="Export current view">
+                                <span>⬇ Export</span><span class="caret">▾</span>
+                            </button>
+                            <div class="tx-export-menu" id="tx-export-menu" role="menu">
+                                <button type="button" class="tx-export-item" role="menuitem"
+                                    onclick="admin.exportTransactions('csv')">
+                                    <span class="ic csv">CSV</span>
+                                    <span>Download as CSV</span>
+                                    <span class="sub">.csv</span>
+                                </button>
+                                <button type="button" class="tx-export-item" role="menuitem"
+                                    onclick="admin.exportTransactions('xlsx')">
+                                    <span class="ic xlsx">XLS</span>
+                                    <span>Download as Excel</span>
+                                    <span class="sub">.xlsx</span>
+                                </button>
                             </div>
-                            <div id="tx-table-wrap"></div>
-                        </div>
-                        <div class="ad-card" id="proj-detail-card"><div id="proj-detail"></div></div>
-                    </div>
-                    <div class="ad-stack">
-                        <div class="ad-card" id="qr-card">
-                            <div class="ad-card-head"><h4 data-i18n="qr.title">Quota requests</h4><span class="ad-badge-n" id="qr-pending-badge" style="display:none">0</span><span class="ad-grow"></span><button class="ad-btn icon sm ghost" onclick="admin.renderQuotaRequests()" aria-label="Refresh"><svg class="ic sm"><use href="#i-refresh"/></svg></button></div>
-                            <div id="qr-list-wrap"></div>
-                        </div>
-                        <div class="ad-card" id="overview-projects-card">
-                            <div class="ad-card-head"><h4 data-i18n="nav.project">Projects</h4><span class="ad-sub" data-i18n="proj.balanceAndBurn">balance and burn</span><span class="ad-grow"></span><button class="ad-btn sm ghost" onclick="admin.navigate('projects')" data-i18n="btn.manage">Manage</button></div>
-                            <div id="overview-user-list"></div>
                         </div>
                     </div>
+                </div>
+                <div id="tx-table-wrap" class="tx-table-wrap">
+                    <div class="tx-loading"><span data-i18n="common.loading">⏳ กำลังโหลด…</span></div>
+                </div>
+            </div>
+
+            <!-- Quota Requests — pending first, then resolved -->
+            <div class="glass-card" id="qr-card" style="margin-top:18px">
+                <div class="qr-header">
+                    <div>
+                        <h3 class="card-title" style="margin:0">
+                            <span data-i18n="qr.title">Quota Requests</span>
+                            <span id="qr-pending-badge" class="qr-pending-badge" style="display:none">0</span>
+                        </h3>
+                        <div class="qr-subtitle" data-i18n="qr.sub">คำขอเพิ่มโควต้ารายวันจาก user</div>
+                    </div>
+                    <button type="button" class="btn-action btn-secondary-sm" onclick="admin.renderQuotaRequests()"
+                        style="padding:7px 14px;font-size:.78rem">Refresh</button>
+                </div>
+                <div id="qr-list-wrap" class="qr-list-wrap">
+                    <div class="qr-loading"><span data-i18n="common.loading">⏳ กำลังโหลด…</span></div>
                 </div>
             </div>
         </div>
 
-        <!-- USERS -->
+        <!-- USER MANAGEMENT -->
         <div class="view hidden" id="view-users">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.users.title">User Management</h2><span class="ad-sub" id="users-count"></span>
-                <span class="ad-grow"></span>
-                <button class="ad-btn sm primary" onclick="admin.openAddUser()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="btn.addUser">Add User</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.users.title">User Management</h2>
+                    <p class="page-subtitle" data-i18n="page.users.sub">เพิ่ม ลบ แก้ไข credit และ project ของ user</p>
+                </div>
+                <button class="btn-action btn-primary-sm" style="padding:9px 20px;font-size:.875rem"
+                    onclick="admin.openAddUser()" data-i18n="btn.addUser">+ Add User</button>
             </div>
-            <div class="ad-page">
-                <div class="ad-toolbar" id="users-toolbar"></div>
-                <div class="ad-card scroll" id="user-table"></div>
-            </div>
+            <!-- renderUsers produces div-based row-cards, not <tr><td> -->
+            <div id="user-table"></div>
         </div>
 
         <!-- PROJECTS -->
         <div class="view hidden" id="view-projects">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.projects.title">Projects</h2><span class="ad-sub" id="projects-count"></span>
-                <span class="ad-grow"></span>
-                <button class="ad-btn sm primary" onclick="admin.openAddProject()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="btn.addProject">Add Project</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.projects.title">Projects</h2>
+                    <p class="page-subtitle" data-i18n="page.projects.sub">จัดการ Project และ rate ของแต่ละ project</p>
+                </div>
+                <button class="btn-action btn-primary-sm" style="padding:9px 20px;font-size:.875rem"
+                    onclick="admin.openAddProject()">+ Add Project</button>
             </div>
-            <div class="ad-page">
-                <div class="ad-card scroll" id="project-list"></div>
-                <div class="ad-card" id="project-detail-card" style="display:none"><div id="project-detail"></div></div>
-            </div>
+            <div id="project-list"></div>
         </div>
 
-        <!-- ACTIVITY LOG (chat / admin actions) and LOGIN HISTORY share this view -->
+        <!-- ACTIVITY LOG -->
         <div class="view hidden" id="view-activity">
-            <div class="ad-topbar">
-                <h2 id="activity-page-title" data-i18n="page.activity.title">Activity Log</h2><span class="ad-sub" id="activity-page-subtitle"></span>
-                <span class="ad-grow"></span>
-                <div class="ad-seg" id="activity-tabs" role="tablist" aria-label="Activity log sub-tabs">
-                    <button type="button" class="audit-tab active" data-tab="chat" role="tab" aria-selected="true" onclick="admin.switchActivityTab('chat')" data-i18n="tab.chatHistory">Chat History</button>
-                    <button type="button" class="audit-tab" data-tab="action" role="tab" aria-selected="false" onclick="admin.switchActivityTab('action')" data-i18n="tab.adminActions">Admin Actions</button>
+            <!-- navigate() swaps title/subtitle: 'activity' → Activity Log (tabs visible),
+                 'login-history' → Login History (audit only) -->
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" id="activity-page-title">Activity Log</h2>
+                    <p class="page-subtitle" id="activity-page-subtitle">ประวัติการใช้งานของผู้ใช้ · chat / admin actions</p>
                 </div>
-                <button class="ad-btn icon sm ghost" onclick="admin.refreshActivityTab()" aria-label="Refresh"><svg class="ic sm"><use href="#i-refresh"/></svg></button>
-                <button id="activity-clear-btn" class="ad-btn sm danger" onclick="admin.clearAllHistory()"><svg class="ic sm"><use href="#i-trash"/></svg><span data-i18n="btn.clearChatLog">ล้าง Chat Log</span></button>
-            </div>
-            <div class="ad-page">
-                <div class="audit-pane" id="pane-chat"><div class="ad-card" id="activity-log"></div></div>
-                <div class="audit-pane hidden" id="pane-audit">
-                    <div class="ad-card scroll">
-                        <table class="ad-table" id="audit-log-table">
-                            <thead><tr><th>User</th><th data-i18n="col.login">เข้าสู่ระบบ</th><th data-i18n="col.logout">ออกจากระบบ</th><th class="num" data-i18n="col.duration">ระยะเวลา</th></tr></thead>
-                            <tbody id="audit-log-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="audit-pane hidden" id="pane-action">
-                    <div class="ad-toolbar">
-                        <input type="hidden" id="action-log-filter-type" />
-                        <button type="button" class="ad-btn sm" id="action-log-filter-type-trigger" onclick="admin.openActionFilterTypeDropdown(event)"><span id="action-log-filter-type-label" data-i18n="filter.allAction">ทุก Action</span><svg class="ic sm"><use href="#i-chevron"/></svg></button>
-                        <input type="hidden" id="action-log-filter-target" />
-                        <button type="button" class="ad-btn sm" id="action-log-filter-target-trigger" onclick="admin.openActionFilterTargetDropdown(event)"><span id="action-log-filter-target-label" data-i18n="filter.allTarget">ทุก Target</span><svg class="ic sm"><use href="#i-chevron"/></svg></button>
-                        <span class="ad-grow"></span>
-                        <span id="action-log-count" style="color:var(--text-3);font-size:12.5px"></span>
-                    </div>
-                    <div class="ad-card scroll">
-                        <table class="ad-table" id="action-log-table">
-                            <thead><tr><th>Admin</th><th>Action</th><th>Target</th><th data-i18n="col.detail">รายละเอียด (before → after)</th><th data-i18n="col.datetime">วันที่/เวลา</th></tr></thead>
-                            <tbody id="action-log-body"></tbody>
-                        </table>
-                    </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-action btn-save" onclick="admin.refreshActivityTab()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
+                    <button id="activity-clear-btn" class="btn-action btn-danger" onclick="admin.clearAllHistory()"><span data-i18n="btn.clearChatLog">ล้าง Chat Log</span></button>
                 </div>
             </div>
+
+            <!-- Sub-tabs (chat / action) — hidden entirely when entering as Login History -->
+            <div class="audit-tabs" id="activity-tabs" role="tablist" aria-label="Activity log sub-tabs">
+                <button type="button" class="audit-tab active" data-tab="chat"   role="tab" aria-selected="true"  onclick="admin.switchActivityTab('chat')" data-i18n="tab.chatHistory">Chat History</button>
+                <button type="button" class="audit-tab"        data-tab="action" role="tab" aria-selected="false" onclick="admin.switchActivityTab('action')" data-i18n="tab.adminActions">Admin Actions</button>
+            </div>
+
+            <!-- Chat history (existing) -->
+            <div class="glass-card audit-pane" id="pane-chat">
+                <div id="activity-log"></div>
+            </div>
+
+            <!-- Login / Logout (tbl_audit_log) -->
+            <div class="glass-card audit-pane hidden" id="pane-audit">
+                <div class="audit-table-wrap">
+                    <table class="audit-table" id="audit-log-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Username</th>
+                                <th data-i18n="col.login">เข้าสู่ระบบ</th>
+                                <th data-i18n="col.logout">ออกจากระบบ</th>
+                                <th data-i18n="col.duration">ระยะเวลา</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-log-body">
+                            <tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem"><span data-i18n="common.loading">⏳ กำลังโหลด...</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Admin actions (tbl_action_admin) -->
+            <div class="glass-card audit-pane hidden" id="pane-action">
+                <!-- filters for drill-down (custom dropdowns) -->
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+                    <input type="hidden" id="action-log-filter-type" />
+                    <button type="button" class="dd-trigger" id="action-log-filter-type-trigger"
+                            style="min-width:200px"
+                            onclick="admin.openActionFilterTypeDropdown(event)">
+                        <span class="dd-trigger-label" id="action-log-filter-type-label" data-i18n="filter.allAction">ทุก Action</span>
+                        <svg class="dd-trigger-chevron" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
+                    <input type="hidden" id="action-log-filter-target" />
+                    <button type="button" class="dd-trigger" id="action-log-filter-target-trigger"
+                            style="min-width:160px"
+                            onclick="admin.openActionFilterTargetDropdown(event)">
+                        <span class="dd-trigger-label" id="action-log-filter-target-label" data-i18n="filter.allTarget">ทุก Target</span>
+                        <svg class="dd-trigger-chevron" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
+                    <button type="button" class="btn-action btn-save" onclick="admin.renderActionLog()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
+                    <span id="action-log-count" style="color:var(--text-3);font-size:.82rem;margin-left:auto"></span>
+                </div>
+                <div class="audit-table-wrap">
+                    <table class="audit-table" id="action-log-table">
+                        <thead>
+                            <tr>
+                                <th style="width:140px">Admin</th>
+                                <th style="width:160px">Action</th>
+                                <th style="width:180px">Target</th>
+                                <th data-i18n="col.detail">รายละเอียด (before → after)</th>
+                                <th style="width:140px" data-i18n="col.datetime">วันที่/เวลา</th>
+                            </tr>
+                        </thead>
+                        <tbody id="action-log-body">
+                            <tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem"><span data-i18n="common.loading">⏳ กำลังโหลด...</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- inline styling for the audit detail diff -->
+            <style>
+                .action-label {
+                    display: inline-flex; align-items: center; gap: 4px;
+                    font-size: .78rem; font-weight: 600;
+                    padding: 3px 8px; border-radius: 999px;
+                    background: rgba(129, 140, 248, 0.12);
+                    color: #b8c0ff; border: 1px solid rgba(129, 140, 248, 0.25);
+                    white-space: nowrap;
+                }
+                .action-label.danger { background: rgba(255,77,77,.10); color:#ff9a9a; border-color: rgba(255,77,77,.25); }
+                .action-label.success { background: rgba(74,222,128,.10); color:#86efac; border-color: rgba(74,222,128,.25); }
+                .action-label.warn { background: rgba(251,191,36,.10); color:#fcd34d; border-color: rgba(251,191,36,.25); }
+                .action-target-code {
+                    display: inline-block;
+                    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+                    font-size: .75rem; color: var(--text-2);
+                    background: var(--surface-3);
+                    padding: 2px 6px; border-radius: 4px;
+                    border: 1px solid var(--border-subtle);
+                }
+                .diff-summary {
+                    font-size: .82rem; line-height: 1.55;
+                    max-width: 480px;
+                }
+                .diff-row {
+                    display: inline-flex; align-items: center; gap: 6px;
+                    margin-right: 10px;
+                    white-space: nowrap;
+                }
+                .diff-key { color: var(--text-2); font-weight: 500; font-size: .76rem; }
+                .diff-val-before {
+                    color: #ff9a9a;
+                    text-decoration: line-through;
+                    font-family: ui-monospace, monospace;
+                    font-size: .76rem;
+                    background: rgba(255,77,77,.08);
+                    padding: 1px 4px; border-radius: 3px;
+                    max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+                }
+                .diff-val-after {
+                    color: #86efac;
+                    font-family: ui-monospace, monospace;
+                    font-size: .76rem;
+                    background: rgba(74,222,128,.08);
+                    padding: 1px 4px; border-radius: 3px;
+                    max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+                }
+                .diff-arrow { color: var(--text-3); font-size: .7rem; }
+                .diff-extra {
+                    display: block; margin-top: 4px; font-size: .76rem; color: var(--text-2);
+                }
+                .diff-extra b { color: #fbbf24; font-weight: 600; }
+                .diff-raw {
+                    cursor: pointer; font-size: .72rem; color: var(--text-3);
+                    margin-top: 6px; user-select: none;
+                }
+                .diff-raw[open] summary { color: var(--text-2); }
+                .diff-raw pre {
+                    background: rgba(0,0,0,.3); padding: 10px; border-radius: 6px;
+                    font-size: .72rem; line-height: 1.4; margin: 6px 0 0;
+                    max-height: 220px; overflow: auto;
+                    white-space: pre-wrap; word-break: break-word;
+                    color: var(--text-1);
+                }
+                .diff-none { color: var(--text-3); font-style: italic; font-size: .8rem; }
+            </style>
         </div>
 
-        <!-- CAP & USAGE — Cap Management + Usage Analytics -->
+        <!-- CREDITS — 2 sub-tabs: Credit Management + Usage Analytics -->
         <div class="view hidden" id="view-usage">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.cap.title">Cap &amp; Usage</h2>
-                <span class="ad-grow"></span>
-                <div class="ad-seg" role="tablist" aria-label="Credits sub-tabs">
-                    <button type="button" class="audit-tab active" data-tab="credit" role="tab" aria-selected="true" onclick="admin.switchCreditsTab('credit')" data-i18n="tab.capManagement">Cap Management</button>
-                    <button type="button" class="audit-tab" data-tab="usage" role="tab" aria-selected="false" onclick="admin.switchCreditsTab('usage')" data-i18n="tab.usageAnalytics">Usage Analytics</button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.cap.title">Cap & Usage</h2>
+                    <p class="page-subtitle" data-i18n="page.cap.sub">ตั้งโควต้าการใช้ต่อวันของแต่ละ user · ติดตามการใช้งานแบบ real-time</p>
                 </div>
-                <button class="ad-btn icon sm ghost" onclick="admin.refreshCreditsTab()" aria-label="Refresh"><svg class="ic sm"><use href="#i-refresh"/></svg></button>
+                <button class="btn-action btn-save" onclick="admin.refreshCreditsTab()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
             </div>
-            <div class="ad-page">
-                <div class="audit-pane" id="pane-credit">
-                    <div class="ad-stack">
-                        <div class="ad-kpis" id="cap-kpis"></div>
-                        <div class="ad-card scroll"><table class="ad-table" id="credit-table"></table></div>
-                    </div>
+
+            <!-- Sub-tabs; default on first navigation = Credit Management -->
+            <div class="audit-tabs" role="tablist" aria-label="Credits sub-tabs">
+                <button type="button" class="audit-tab active" data-tab="credit"
+                        role="tab" aria-selected="true"
+                        onclick="admin.switchCreditsTab('credit')" data-i18n="tab.capManagement">Cap Management</button>
+                <button type="button" class="audit-tab"        data-tab="usage"
+                        role="tab" aria-selected="false"
+                        onclick="admin.switchCreditsTab('usage')" data-i18n="tab.usageAnalytics">Usage Analytics</button>
+            </div>
+
+            <!-- Pane 1: Credit Management -->
+            <div class="glass-card audit-pane" id="pane-credit" style="overflow-x:auto">
+                <table class="user-table" id="credit-table"></table>
+            </div>
+
+            <!-- Pane 2: Usage Analytics — project filter row with custom dropdown -->
+            <div class="audit-pane hidden" id="pane-usage">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+                    <label style="color:var(--text-2);font-size:.85rem;font-weight:600">Project:</label>
+                    <!-- Custom dropdown trigger — looks like an input, opens a styled popup. -->
+                    <button type="button" class="dd-trigger" id="usage-filter-trigger"
+                            onclick="admin.toggleUsageProjectDropdown(event)">
+                        <span class="dd-trigger-label" id="usage-filter-label" data-i18n="filter.allProject">— ทุก Project —</span>
+                        <svg class="dd-trigger-chevron" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
+                    <span id="usage-filter-meta" style="color:var(--text-3);font-size:.78rem"></span>
                 </div>
-                <div class="audit-pane hidden" id="pane-usage">
-                    <div class="ad-stack">
-                        <div class="ad-toolbar">
-                            <button type="button" class="ad-btn sm" id="usage-filter-trigger" onclick="admin.toggleUsageProjectDropdown(event)"><svg class="ic sm"><use href="#i-folder"/></svg><span id="usage-filter-label" data-i18n="filter.allProject">— ทุก Project —</span><svg class="ic sm"><use href="#i-chevron"/></svg></button>
-                            <span id="usage-filter-meta" style="color:var(--text-3);font-size:12.5px"></span>
-                        </div>
-                        <div id="usage-project-banner" class="hidden"></div>
-                        <div class="ad-kpis" id="usage-summary-grid"></div>
-                        <div class="ad-card scroll">
-                            <div class="ad-card-head"><h4 id="usage-user-list-title" data-i18n="usage.perUser">การใช้งานรายผู้ใช้</h4></div>
-                            <div id="usage-user-list"></div>
-                        </div>
-                    </div>
+
+                <!-- Project-specific banner (visible only when a project is selected) -->
+                <div id="usage-project-banner" class="hidden" style="margin-bottom:14px"></div>
+
+                <!-- Summary cards -->
+                <div class="usage-summary-grid" id="usage-summary-grid"></div>
+
+                <!-- Per-user cards -->
+                <div class="glass-card">
+                    <h3 class="card-title" style="margin-bottom:16px" id="usage-user-list-title" data-i18n="usage.perUser">การใช้งานรายผู้ใช้</h3>
+                    <div id="usage-user-list"></div>
                 </div>
             </div>
         </div>
 
         <!-- BALANCE & TOP-UP -->
         <div class="view hidden" id="view-balance">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.balance.title">Balance &amp; Top-up</h2>
-                <span class="ad-grow"></span>
-                <button class="ad-btn icon sm ghost" onclick="admin.renderBalance()" aria-label="Refresh"><svg class="ic sm"><use href="#i-refresh"/></svg></button>
-                <button class="ad-btn sm primary" onclick="admin.openTopup()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="btn.topupShort">Top up</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.balance.title">Balance &amp; Top-up</h2>
+                    <p class="page-subtitle" data-i18n="page.balance.sub">ดูยอด credit ของแต่ละ project และเติมเงิน</p>
+                </div>
+                <button class="btn-action btn-save" onclick="admin.renderBalance()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
             </div>
-            <div class="ad-page">
-                <div class="ad-cols even">
-                    <div class="ad-card scroll"><div class="ad-card-head"><h4>Balance</h4><span class="ad-sub" data-i18n="page.balance.sub">ดูยอด credit ของแต่ละ project และเติมเงิน</span></div><table class="ad-table" id="balance-table"></table></div>
-                    <div class="ad-card scroll"><div class="ad-card-head"><h4>Top-up History</h4></div><table class="ad-table" id="topup-history-table"></table></div>
+
+            <!-- Section 1: current balance per project -->
+            <div class="glass-card" style="margin-bottom:18px">
+                <h3 class="card-title" style="margin-bottom:16px">Balance</h3>
+                <div style="overflow-x:auto">
+                    <table class="user-table" id="balance-table"></table>
+                </div>
+            </div>
+
+            <!-- Section 2: top-up history -->
+            <div class="glass-card">
+                <h3 class="card-title" style="margin-bottom:16px">Top-up History</h3>
+                <div style="overflow-x:auto">
+                    <table class="user-table" id="topup-history-table"></table>
                 </div>
             </div>
         </div>
 
-        <!-- SKILL PROMPTS -->
+        <!-- SKILL PROMPTS — read-only view of skill-prompts.json -->
         <div class="view hidden" id="view-skills">
-            <div class="ad-topbar">
-                <h2>Skill Prompts</h2><span class="ad-sub" id="skills-status"></span>
-                <span class="ad-grow"></span>
-                <button class="ad-btn icon sm ghost" onclick="admin.renderSkills()" aria-label="Refresh"><svg class="ic sm"><use href="#i-refresh"/></svg></button>
-                <button class="ad-btn sm" onclick="admin.reloadSkills()">Reload from file</button>
-                <button class="ad-btn sm primary" onclick="admin.openAddSkill()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="skills.add">เพิ่ม Skill</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Skill Prompts</h2>
+                    <p class="page-subtitle"><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span>
+                        · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span>
+                        · <span data-i18n="page.skills.testHint">ทดสอบ prompt ได้ที่แท็บ Prompt Lab</span></p>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-action btn-save" onclick="admin.renderSkills()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.openAddSkill()">➕ <span data-i18n="skills.add">เพิ่ม Skill</span></button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.reloadSkills()">Reload from file</button>
+                </div>
             </div>
-            <div class="ad-page">
-                <div class="ad-head"><div><h3>Skill prompts</h3><p><span data-i18n="page.skills.sub">รายการ prompt ที่ AI router เลือกใช้อัตโนมัติตามคำถามของผู้ใช้</span> · <span data-i18n="page.skills.sub2">เพิ่ม/แก้ไขได้จากหน้านี้เลย (บันทึกแล้วมีผลทันที)</span> · <span data-i18n="page.skills.testHint">ทดสอบ prompt ได้ที่แท็บ Prompt Lab</span></p></div></div>
-                <div class="ad-card" id="skills-list"></div>
-            </div>
+
+            <!-- Header card: load status -->
+            <div class="glass-card" id="skills-status" style="margin-bottom:18px"></div>
+
+            <!-- Skill list -->
+            <div id="skills-list"></div>
         </div>
 
-        <!-- PROMPT LAB -->
+        <!-- PROMPT LAB — pick a skill, run a question, judge the answer, browse past runs.
+             Logic in admin.js (renderLab / labRun / loadTestHistory / showVerdictBar). -->
         <div class="view hidden" id="view-lab">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.lab.title">Prompt Lab</h2><span class="ad-sub" id="lab-stats"></span>
-                <span class="ad-grow"></span>
-                <button class="ad-btn sm" onclick="admin.labNewTest()"><svg class="ic sm"><use href="#i-plus"/></svg><span data-i18n="lab.newTest">ทดสอบใหม่</span></button>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.lab.title">Prompt Lab</h2>
+                    <p class="page-subtitle" data-i18n="page.lab.sub">ทดสอบคำถามกับ system prompt ของแต่ละ skill → ให้ senior อนุมัติคำตอบ → สะสมเป็นชุดเฉลย (golden dataset)</p>
+                </div>
             </div>
-            <div class="ad-page">
-                <div class="ad-lab">
-                    <div class="ad-stack">
-                        <div class="ad-card">
-                            <div class="ad-card-head"><h4 data-i18n="lab.setup">Setup</h4></div>
-                            <div class="ad-card-body ad-stack" style="gap:12px">
-                                <div class="ad-field"><label data-i18n="lab.skillLabel">Skill ที่ทดสอบ</label><select class="ad-input" id="lab-skill" onchange="admin.onLabSkillChange()"></select></div>
-                                <div class="ad-form-grid">
-                                    <div class="ad-field"><label data-i18n="modal.testSkill.modelLabel">โมเดล</label><select class="ad-input" id="lab-model" onchange="admin.onLabModelChange(this.value)"><option value="gpt-6-astra">GPT-6 Astra</option><option value="gpt-5.6-sol">GPT-5.6 Sol</option><option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option><option value="gpt-5.6-luna">GPT-5.6 Luna</option><option value="gpt-5.5">GPT-5.5</option></select></div>
-                                    <div class="ad-field" id="lab-effort-field"><label data-i18n="modal.testSkill.effortLabel">ระดับการคิด (effort)</label><select class="ad-input" id="lab-effort"><option value="none">none</option><option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></div>
-                                </div>
-                                <div class="ad-field"><label data-i18n="lab.questionLabel">โจทย์ (วางโค้ด ABAP หรือคำถาม)</label>
-                                    <textarea class="ad-input" id="lab-question" rows="12" wrap="off" style="white-space:pre;overflow-x:auto;tab-size:4" data-i18n-ph="lab.questionPh" placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..." oninput="admin._labUpdateCharCount()"></textarea>
-                                    <div style="display:flex;justify-content:space-between;gap:8px"><div class="modal-error" id="lab-error" style="margin:0"></div><span id="lab-char-count" style="font-size:11.5px;color:var(--text-3);white-space:nowrap"></span></div>
-                                </div>
-                                <input type="file" id="lab-file-input" multiple style="display:none" accept=".abap,.txt,.md,.cds,.ddls,.sql,.js,.ts,.xml,.json,.csv,.yaml,.yml,.log,.properties,.ini,.conf,.text" onchange="admin.labAttachFiles(event)" />
-                                <div style="display:flex;gap:8px"><button class="ad-btn primary ad-grow" id="lab-run-btn" onclick="admin.labRun()"><svg class="ic sm"><use href="#i-arrow"/></svg><span data-i18n="btn.run">Run</span></button><button class="ad-btn icon" title="แนบไฟล์" onclick="document.getElementById('lab-file-input').click()"><svg class="ic sm"><use href="#i-paperclip"/></svg></button></div>
-                                <details><summary id="lab-prompt-summary" style="cursor:pointer;font-size:12.5px;color:var(--text-3)">System prompt</summary><pre class="ad-pre" id="lab-prompt-preview" style="margin-top:8px"></pre></details>
-                            </div>
-                        </div>
-                        <div class="ad-card" id="lab-history-card">
-                            <div class="ad-card-head"><h4 data-i18n="lab.historyLabel">ประวัติการทดสอบ</h4><span class="ad-grow"></span>
-                                <select class="ad-input" id="lab-filter" style="height:28px;font-size:12.5px" onchange="admin.loadTestHistory()"><option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option><option value="pending" data-i18n="modal.testHistory.filterPending">ยังไม่อนุมัติ</option><option value="correct" data-i18n="modal.testHistory.filterCorrect">ถูกต้อง</option><option value="partial" data-i18n="modal.testHistory.filterPartial">เกือบถูก</option><option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">ผิด</option></select>
-                            </div>
-                            <div class="modal-error" id="lab-hist-error" style="padding:0 16px"></div>
-                            <div id="lab-list" style="max-height:360px;overflow:auto"></div>
-                            <div id="lab-detail" style="display:none;padding:14px 16px;border-top:1px solid var(--border-default)"></div>
-                        </div>
+
+            <!-- Controls: which skill + which model/effort to test on -->
+            <div class="glass-card" style="margin-bottom:14px">
+                <div class="modal-row">
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="lab.skillLabel">Skill ที่ทดสอบ</label>
+                        <select class="modal-input" id="lab-skill" onchange="admin.onLabSkillChange()"></select>
                     </div>
-                    <div class="ad-card">
-                        <div class="ad-card-head"><h4 data-i18n="modal.testSkill.answerLabel">คำตอบ AI</h4><span class="ad-grow"></span><span id="lab-meta" class="ad-mono" style="font-size:12px;color:var(--text-3)"></span></div>
-                        <pre class="ad-answer" id="lab-answer"></pre>
-                        <div id="lab-verdict" style="display:none"></div>
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.modelLabel">โมเดล</label>
+                        <select class="modal-input" id="lab-model" onchange="admin.onLabModelChange(this.value)">
+                            <option value="gpt-6-astra">GPT-6 Astra</option>
+                            <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                            <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
+                            <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                            <option value="gpt-5.5">GPT-5.5</option>
+                        </select>
+                    </div>
+                    <div class="modal-field" id="lab-effort-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.effortLabel">ระดับการคิด (effort)</label>
+                        <select class="modal-input" id="lab-effort">
+                            <option value="none">none</option>
+                            <option value="low">low</option>
+                            <option value="medium" selected>medium</option>
+                            <option value="high">high</option>
+                            <option value="xhigh">xhigh</option>
+                            <option value="max">max</option>
+                        </select>
                     </div>
                 </div>
+                <details style="margin-top:8px">
+                    <summary id="lab-prompt-summary" style="cursor:pointer;font-size:.76rem;color:var(--text-3);font-weight:600;user-select:none">System prompt</summary>
+                    <pre id="lab-prompt-preview" style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.74rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto"></pre>
+                </details>
+            </div>
+
+            <!-- Question / Answer workspace -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:14px">
+                <div class="glass-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                        <label class="modal-label" style="margin:0" data-i18n="lab.questionLabel">โจทย์ (วางโค้ด ABAP หรือคำถาม)</label>
+                        <div style="display:flex;gap:8px">
+                            <!-- attach Z-program source files — read client-side and appended into the textarea -->
+                            <!-- one-click fresh test -->
+                            <button class="btn-action" style="padding:8px 14px" onclick="admin.labNewTest()">➕ <span data-i18n="lab.newTest">ทดสอบใหม่</span></button>
+                            <button class="btn-action" style="padding:8px 14px" onclick="document.getElementById('lab-file-input').click()">📎 <span data-i18n="lab.attachFile">แนบไฟล์</span></button>
+                            <button class="btn-action btn-primary-sm" id="lab-run-btn" style="padding:8px 22px" onclick="admin.labRun()">▶ <span data-i18n="btn.run">Run</span></button>
+                        </div>
+                    </div>
+                    <input type="file" id="lab-file-input" multiple style="display:none"
+                        accept=".abap,.txt,.md,.cds,.ddls,.sql,.js,.ts,.xml,.json,.csv,.yaml,.yml,.log,.properties,.ini,.conf,.text"
+                        onchange="admin.labAttachFiles(event)" />
+                    <!-- wrap="off" + white-space:pre: long ABAP lines scroll horizontally instead of wrapping;
+                         resize stays vertical-only -->
+                    <textarea class="modal-input" id="lab-question" rows="14" wrap="off"
+                        style="font-family:var(--font-mono);font-size:.8rem;white-space:pre;overflow-x:auto;min-height:180px;tab-size:4"
+                        data-i18n-ph="lab.questionPh"
+                        placeholder="วางโค้ด ECC6 หรือพิมพ์คำถามที่จะยิงเข้า skill นี้..."
+                        oninput="admin._labUpdateCharCount()"></textarea>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;gap:8px">
+                        <div class="modal-error" id="lab-error" style="margin:0"></div>
+                        <span id="lab-char-count" style="font-size:.7rem;color:var(--text-3);white-space:nowrap"></span>
+                    </div>
+                </div>
+                <div class="glass-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <label class="modal-label" style="margin:0" data-i18n="modal.testSkill.answerLabel">คำตอบ AI</label>
+                        <span id="lab-meta" style="font-size:.72rem;color:var(--text-3)"></span>
+                    </div>
+                    <pre id="lab-answer" style="margin:0;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.8rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;min-height:120px;max-height:420px;overflow:auto"></pre>
+                    <div id="lab-verdict" style="display:none;margin-top:10px"></div>
+                </div>
+            </div>
+
+            <!-- History: every past run of the selected skill, judge-able -->
+            <div class="glass-card" id="lab-history-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <label class="modal-label" style="margin:0" data-i18n="lab.historyLabel">ประวัติการทดสอบ</label>
+                        <span id="lab-stats" style="font-size:.78rem;color:var(--text-2)"></span>
+                    </div>
+                    <select class="modal-input" id="lab-filter" style="max-width:190px" onchange="admin.loadTestHistory()">
+                        <option value="" data-i18n="modal.testHistory.filterAll">ทั้งหมด</option>
+                        <option value="pending" data-i18n="modal.testHistory.filterPending">⏳ ยังไม่อนุมัติ</option>
+                        <option value="correct" data-i18n="modal.testHistory.filterCorrect">ถูกต้อง</option>
+                        <option value="partial" data-i18n="modal.testHistory.filterPartial">เกือบถูก</option>
+                        <option value="incorrect" data-i18n="modal.testHistory.filterIncorrect">ผิด</option>
+                    </select>
+                </div>
+                <div class="modal-error" id="lab-hist-error"></div>
+                <div id="lab-list" style="max-height:280px;overflow:auto;border:1px solid var(--border-subtle);border-radius:6px"></div>
+                <div id="lab-detail" style="display:none;margin-top:10px"></div>
             </div>
         </div>
 
-        <!-- EVALS -->
+        <!-- EVALS — exam the skill prompt against the golden dataset.
+             Logic in admin.js (renderEvals / startEvalRun / loadEvalRuns / openEvalRunDetail). -->
         <div class="view hidden" id="view-evals">
-            <div class="ad-topbar">
-                <h2 data-i18n="page.evals.title">Evals</h2><span class="ad-sub" id="ev-ready"></span>
-                <span class="ad-grow"></span>
-                <select class="ad-input" id="ev-skill" style="height:30px;font-size:12.5px" onchange="admin.onEvalSkillChange()"></select>
-                <select class="ad-input" id="ev-model" style="height:30px;font-size:12.5px" onchange="admin.onEvalModelChange(this.value)"><option value="gpt-6-astra">GPT-6 Astra</option><option value="gpt-5.6-sol">GPT-5.6 Sol</option><option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option><option value="gpt-5.6-luna">GPT-5.6 Luna</option><option value="gpt-5.5">GPT-5.5</option></select>
-                <span id="ev-effort-field"><select class="ad-input" id="ev-effort" style="height:30px;font-size:12.5px"><option value="none">none</option><option value="low">low</option><option value="medium" selected>medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></span>
-                <button class="ad-btn sm primary" id="ev-run-btn" onclick="admin.startEvalRun()"><svg class="ic sm"><use href="#i-arrow"/></svg><span data-i18n="evals.run">Run Eval</span></button>
-            </div>
-            <div class="ad-page">
-                <div class="ad-head"><div><h3>Evals</h3><p data-i18n="page.evals.sub">สอบ AI ด้วยชุดข้อสอบ ที่ senior ยืนยันแล้ว — วัดว่า prompt/model เวอร์ชันไหนตอบแม่นแค่ไหน</p></div></div>
-                <div class="modal-error" id="ev-error"></div>
-                <div class="ad-card" id="ev-progress" style="display:none">
-                    <div class="ad-card-head"><h4 data-i18n="evals.running">Run in progress</h4><span class="ad-grow"></span><button class="ad-btn sm danger" onclick="admin.cancelEvalRun()"><span data-i18n="evals.cancel">หยุด</span></button></div>
-                    <div class="ad-card-body ad-progress"><span id="ev-progress-text" class="ad-mono"></span><div class="ad-bar"><i id="ev-progress-bar" style="width:0%"></i></div></div>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title" data-i18n="page.evals.title">Evals</h2>
+                    <p class="page-subtitle" data-i18n="page.evals.sub">สอบ AI ด้วยชุดข้อสอบ ที่ senior ยืนยันแล้ว — วัดว่า prompt/model เวอร์ชันไหนตอบแม่นแค่ไหน</p>
                 </div>
-                <div id="ev-summary" style="display:none"></div>
-                <div class="ad-runs" id="ev-runs"></div>
-                <div class="ad-card" id="ev-run-detail" style="display:none"></div>
+            </div>
+
+            <!-- Controls: which skill to examine + which model sits the exam -->
+            <div class="glass-card" style="margin-bottom:14px">
+                <div class="modal-row">
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="lab.skillLabel">Skill ที่ทดสอบ</label>
+                        <select class="modal-input" id="ev-skill" onchange="admin.onEvalSkillChange()"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.modelLabel">โมเดล</label>
+                        <select class="modal-input" id="ev-model" onchange="admin.onEvalModelChange(this.value)">
+                            <option value="gpt-6-astra">GPT-6 Astra</option>
+                            <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                            <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
+                            <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                            <option value="gpt-5.5">GPT-5.5</option>
+                        </select>
+                    </div>
+                    <div class="modal-field" id="ev-effort-field">
+                        <label class="modal-label" data-i18n="modal.testSkill.effortLabel">ระดับการคิด (effort)</label>
+                        <select class="modal-input" id="ev-effort">
+                            <option value="none">none</option>
+                            <option value="low">low</option>
+                            <option value="medium" selected>medium</option>
+                            <option value="high">high</option>
+                            <option value="xhigh">xhigh</option>
+                            <option value="max">max</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+                    <span id="ev-ready" style="font-size:.8rem;color:var(--text-2)"></span>
+                    <button class="btn-action btn-primary-sm" id="ev-run-btn" style="padding:9px 22px" onclick="admin.startEvalRun()">▶ <span data-i18n="evals.run">Run Eval</span></button>
+                </div>
+                <!-- live progress while a run is going -->
+                <div id="ev-progress" style="display:none;margin-top:12px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+                        <span id="ev-progress-text" style="font-size:.78rem;color:var(--text-2)"></span>
+                        <button class="btn-action" style="padding:4px 12px;font-size:.75rem" onclick="admin.cancelEvalRun()">⏹ <span data-i18n="evals.cancel">หยุด</span></button>
+                    </div>
+                    <div style="height:8px;background:var(--surface-3);border-radius:5px;overflow:hidden">
+                        <div id="ev-progress-bar" style="height:100%;width:0%;background:var(--accent);transition:width .4s"></div>
+                    </div>
+                </div>
+                <div class="modal-error" id="ev-error"></div>
+            </div>
+
+            <!-- Latest-score summary (filled by JS once a run exists) -->
+            <div class="glass-card" id="ev-summary" style="display:none;margin-bottom:14px"></div>
+
+            <!-- Run history + per-run report -->
+            <div class="glass-card">
+                <label class="modal-label" data-i18n="evals.historyLabel">ประวัติรอบสอบ</label>
+                <div id="ev-runs" style="border:1px solid var(--border-subtle);border-radius:6px;max-height:240px;overflow:auto;margin-top:6px"></div>
+                <div id="ev-run-detail" style="display:none;margin-top:10px"></div>
             </div>
         </div>
 
-        <!-- SYNC STATUS — hidden from the nav; kept wired -->
+        <!-- SYNC STATUS — monitors the OpenAI usage sync job -->
         <div class="view hidden" id="view-sync">
-            <div class="ad-topbar"><h2>Sync Status</h2><span class="ad-grow"></span><button class="ad-btn sm" onclick="admin.renderSync()"><span data-i18n="btn.refresh">รีเฟรช</span></button><button class="ad-btn sm primary" onclick="admin.syncNow()">Sync Now</button></div>
-            <div class="ad-page">
-                <div class="ad-card ad-card-body" id="sync-health"></div>
-                <div class="ad-card"><div class="ad-card-head"><h4 data-i18n="sync.perProject">การ Sync รายโปรเจค (7 วันล่าสุด)</h4></div><div class="ad-card-body" id="sync-projects"></div></div>
+            <div class="page-header">
+                <div>
+                    <h2 class="page-title">Sync Status</h2>
+                    <p class="page-subtitle" data-i18n="page.sync.sub">สถานะการ sync ข้อมูล usage จาก OpenAI (ทุก 15 นาที)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-action btn-save" onclick="admin.renderSync()"><span data-i18n="btn.refresh">รีเฟรช</span></button>
+                    <button class="btn-action btn-primary-sm" style="padding:9px 18px" onclick="admin.syncNow()">Sync Now</button>
+                </div>
+            </div>
+
+            <!-- Top-level health card -->
+            <div class="glass-card" id="sync-health" style="margin-bottom:18px"></div>
+
+            <!-- Per-project drift table -->
+            <div class="glass-card">
+                <h3 class="card-title" style="margin-bottom:16px"><span data-i18n="sync.perProject">การ Sync รายโปรเจค (7 วันล่าสุด)</span></h3>
+                <div id="sync-projects"></div>
             </div>
         </div>
 

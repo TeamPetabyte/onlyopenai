@@ -7,8 +7,8 @@ export default {
     var self = this;
     var statusEl = document.getElementById('skills-status');
     var listEl   = document.getElementById('skills-list');
-    if (statusEl) statusEl.innerHTML = '';
-    if (listEl)   listEl.innerHTML = '<div class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</div>';
+    if (statusEl) statusEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3)">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
+    if (listEl)   listEl.innerHTML = '';
 
     fetch(BASE + '/api/skills', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
@@ -29,38 +29,86 @@ export default {
     var el = document.getElementById('skills-status');
     if (!el) return;
     var loadedAt = status && status.loadedAt ? formatDateStd(status.loadedAt) : '—';
-    var configured = (skills || []).filter(function (s) { return !s.isPlaceholder; }).length;
-    var total = (skills || []).length;
-    el.innerHTML = status && status.error
-      ? '<span class="ad-chip bad"><span class="dot"></span>Load error</span>'
-      : '<span class="ad-chip ' + (configured === total ? 'ok' : 'warn') + '"><span class="dot"></span>' + configured + ' / ' + total + ' configured · loaded ' + escapeHtml(loadedAt) + '</span>';
-    if (status && status.error) el.title = status.error;
+    var configuredCount = (skills || []).filter(function (s) { return !s.isPlaceholder; }).length;
+    var totalCount = (skills || []).length;
+    var hasError = status && status.error;
+
+    var statusPill = hasError
+      ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(220,53,69,0.10);color:#e25563;border:1px solid rgba(220,53,69,0.35);font-size:.82rem;font-weight:600">Load error</span>'
+      : configuredCount === totalCount
+        ? '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.35);font-size:.82rem;font-weight:600">All configured</span>'
+        : '<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.82rem;font-weight:600">🟡 ' + configuredCount + '/' + totalCount + ' configured</span>';
+
+    var blocks = [
+      { label: 'Status',     value: statusPill },
+      { label: 'Total',      value: '<span style="font-family:var(--font-mono)">' + totalCount + ' skills</span>' },
+      { label: 'Configured', value: '<span style="font-family:var(--font-mono);color:#3fa64d">' + configuredCount + '</span>' },
+      { label: 'Placeholder',value: '<span style="font-family:var(--font-mono);color:#e6a14a">' + (totalCount - configuredCount) + '</span>' },
+      { label: 'Last Loaded',value: '<span style="font-family:var(--font-mono);font-size:.82rem">' + loadedAt + '</span>' },
+    ];
+
+    el.innerHTML =
+        '<h3 class="card-title" style="margin-bottom:14px">Registry Status</h3>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">'
+      +   blocks.map(function (b) {
+            return '<div style="padding:10px 14px;background:var(--surface-3);'
+              + 'border:1px solid var(--border-subtle);border-radius:8px">'
+              + '<div style="font-size:.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">' + b.label + '</div>'
+              + '<div style="font-size:.95rem;font-weight:600">' + b.value + '</div>'
+              + '</div>';
+          }).join('')
+      + '</div>'
+      + (hasError
+          ? '<div style="margin-top:14px;padding:12px 14px;background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.30);border-radius:8px;color:#e25563;font-size:.82rem;font-family:var(--font-mono)">'
+            + '<b>Load error:</b> ' + escapeHtml(status.error) + '</div>'
+          : '');
   },
 
   _renderSkillsList: function (skills) {
     var el = document.getElementById('skills-list');
     if (!el) return;
     if (!skills || skills.length === 0) {
-      el.innerHTML = '<div class="ad-empty">' + t('empty.noSkillsYetHtml', 'ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b>') + '</div>';
+      el.innerHTML = '<div class="glass-card" style="padding:32px;text-align:center;color:var(--text-3)">'
+        + t('empty.noSkillsYetHtml', 'ยังไม่มี skill ในไฟล์ — แก้ <code>server/config/skill-prompts.json</code> แล้วกด <b>Reload</b>') + '</div>';
       return;
     }
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
-    var head = '<div class="ad-skill head"><span></span><span>Skill</span><span>' + TT('col.description', 'What it does') + '</span><span>' + TT('col.status', 'Status') + '</span><span></span></div>';
-    var rows = skills.map(function (s) {
+    var cards = skills.map(function (s) {
+      var statusBadge = s.isPlaceholder
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(240,160,64,0.10);color:#e6a14a;border:1px solid rgba(240,160,64,0.35);font-size:.7rem;font-weight:600">Placeholder</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;background:rgba(55,179,74,0.10);color:#3fa64d;border:1px solid rgba(55,179,74,0.30);font-size:.7rem;font-weight:600">Configured</span>';
+      var openaiPill = s.openaiPromptId
+        ? '<span style="font-family:var(--font-mono);font-size:.7rem;padding:2px 7px;background:var(--accent-soft-bg);color:var(--accent);border:1px solid var(--accent-soft-border);border-radius:5px">' + escapeHtml(s.openaiPromptId) + '</span>'
+        : '<span style="color:var(--text-3);font-size:.72rem;font-style:italic">no openai ref</span>';
+
       var idJs = "'" + String(s.id).replace(/'/g, "\\'") + "'";
-      var status = s.isPlaceholder ? '<span class="ad-chip warn">Placeholder</span>' : '<span class="ad-chip ok"><span class="dot"></span>Configured</span>';
-      return '<div class="ad-skill"' + (s.isPlaceholder ? ' style="opacity:.7"' : '') + '>'
-        + '<span class="ad-skill-icn"><svg class="ic sm"><use href="#i-sparkle"/></svg></span>'
-        + '<div><b>' + escapeHtml(s.label) + '</b><span class="sid">' + escapeHtml(s.id) + (s.openaiPromptId ? ' · ' + escapeHtml(s.openaiPromptId) : '') + ' · ' + (s.contentLength || 0).toLocaleString() + ' chars</span></div>'
-        + '<div class="desc">' + escapeHtml(s.description || '—') + '</div>'
-        + '<div>' + status + '</div>'
-        + '<div class="ad-acts show" style="justify-content:flex-end">'
-        +   '<button class="ad-btn icon sm ghost" title="' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '" onclick="admin.openEditSkill(' + idJs + ')"><svg class="ic sm"><use href="#i-pencil"/></svg></button>'
-        +   '<button class="ad-btn icon sm ghost danger" title="' + escapeHtml(TT('btn.deletePlain', 'ลบ')) + '" onclick="admin.deleteSkillPrompt(' + idJs + ')"><svg class="ic sm"><use href="#i-trash"/></svg></button>'
+      return '<div class="glass-card" style="margin-bottom:14px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
+        +   '<div style="flex:1;min-width:240px">'
+        +     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
+        +       '<div style="font-size:1.05rem;font-weight:700;color:var(--text-1)">' + escapeHtml(s.label) + '</div>'
+        +       statusBadge
+        +     '</div>'
+        +     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+        +       '<span style="font-family:var(--font-mono);font-size:.74rem;color:var(--text-3)">id: <b style="color:var(--text-2)">' + escapeHtml(s.id) + '</b></span>'
+        +       openaiPill
+        +     '</div>'
+        +     '<div style="font-size:.86rem;color:var(--text-2);line-height:1.5">' + escapeHtml(s.description || '—') + '</div>'
+        +   '</div>'
+        +   '<div style="display:flex;gap:8px;flex-shrink:0">'
+        +     '<button class="btn-action btn-save" style="padding:7px 14px" onclick="admin.openEditSkill(' + idJs + ')">✏️ ' + escapeHtml(TT('btn.edit', 'แก้ไข')) + '</button>'
+        +     '<button class="btn-action" style="padding:7px 12px;color:#e25563;border-color:rgba(220,53,69,0.35)" onclick="admin.deleteSkillPrompt(' + idJs + ')">🗑</button>'
+        +   '</div>'
         + '</div>'
+        + '<details style="margin-top:10px">'
+        +   '<summary style="cursor:pointer;font-size:.74rem;color:var(--text-3);font-weight:600;user-select:none">'
+        +     'Content preview (' + s.contentLength + ' chars)</summary>'
+        +   '<pre style="margin-top:8px;padding:12px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.75rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto">'
+        +     escapeHtml(s.contentPreview) + '</pre>'
+        + '</details>'
         + '</div>';
     }).join('');
-    el.innerHTML = head + rows;
+    el.innerHTML = cards;
   },
 
   reloadSkills: function () {
@@ -174,7 +222,7 @@ export default {
     if (id === 'auto') {
       var sum = document.getElementById('lab-prompt-summary');
       var pre = document.getElementById('lab-prompt-preview');
-      if (sum) sum.textContent = t('lab.autoSummary', 'Auto — AI เลือก prompt จากคำถามอัตโนมัติ');
+      if (sum) sum.textContent = '🤖 ' + t('lab.autoSummary', 'Auto — AI เลือก prompt จากคำถามอัตโนมัติ');
       if (pre) pre.textContent = t('lab.autoPreview',
         'โหมด Auto: ระบบใช้ router ตัวเดียวกับหน้าแชทจริงเลือก skill prompt ที่เหมาะกับคำถาม\nผลรันและประวัติจะแสดงว่าจับคู่กับ prompt ตัวไหน');
       return;
@@ -185,7 +233,7 @@ export default {
         if (!d.ok || !d.skill) return;
         var sum = document.getElementById('lab-prompt-summary');
         var pre = document.getElementById('lab-prompt-preview');
-        if (sum) sum.textContent = t('lab.promptSummary', 'System prompt ที่ใช้ทดสอบ')
+        if (sum) sum.textContent = '📄 ' + t('lab.promptSummary', 'System prompt ที่ใช้ทดสอบ')
           + ' — ' + (d.skill.label || d.skill.id) + ' (' + (d.skill.content || '').length.toLocaleString() + ' chars)';
         if (pre) pre.textContent = d.skill.content || '';
       })
@@ -203,7 +251,7 @@ export default {
     errEl.textContent = '';
 
     var btn = g('lab-run-btn');
-    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.querySelector('span').textContent = t('common.running', 'กำลังรัน...'); }
+    if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = t('common.running', 'กำลังรัน...'); }
     var ans = g('lab-answer'); if (ans) ans.textContent = '';
     var meta = g('lab-meta');  if (meta) meta.textContent = '';
     this.showVerdictBar('lab', null);
@@ -223,14 +271,14 @@ export default {
         if (ans) ans.textContent = d.answer || t('msg.emptyResponse', '(empty response)');
         if (meta) meta.textContent = (d.inputTokens + d.outputTokens).toLocaleString() + ' tokens'
           + (d.model ? ' · ' + d.model : '')
-          + (d.routed ? ' · ' + (d.routed.label || d.routed.skillId || '') : '');   // which prompt Auto matched
+          + (d.routed ? ' · 🎯 ' + (d.routed.label || d.routed.skillId || '') : '');   // which prompt Auto matched
         self.showVerdictBar('lab', d.logId || null);
         // The run itself created a (pending) history row — refresh the list.
         self.loadTestHistory(true);
       })
       .catch(function (e) { errEl.textContent = t('err.networkError', 'เครือข่ายขัดข้อง: ') + e.message; })
       .finally(function () {
-        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.querySelector('span').textContent = t('btn.run', 'Run'); }
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '▶ ' + t('btn.run', 'Run'); }
       });
   },
 
@@ -295,9 +343,9 @@ export default {
   _verdictPick:   {},   // prefix → selected verdict value
 
   _VERDICTS: [
-    { v: 'correct',   cls: 'ok',   key: 'modal.testSkill.vCorrect',   fb: 'ถูกต้อง' },
-    { v: 'partial',   cls: 'warn', key: 'modal.testSkill.vPartial',   fb: 'เกือบถูก' },
-    { v: 'incorrect', cls: 'bad',  key: 'modal.testSkill.vIncorrect', fb: 'ผิด' },
+    { v: 'correct',   icon: '✅', key: 'modal.testSkill.vCorrect',   fb: 'ถูกต้อง' },
+    { v: 'partial',   icon: '⚠️', key: 'modal.testSkill.vPartial',   fb: 'เกือบถูก' },
+    { v: 'incorrect', icon: '❌', key: 'modal.testSkill.vIncorrect', fb: 'ผิด' },
   ],
 
   // Render the judgement bar into #<prefix>-verdict; `existing` (a full log record) prefills a past verdict.
@@ -308,22 +356,36 @@ export default {
     var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     this._verdictLogIds[prefix] = logId;
     this._verdictPick[prefix]   = null;
+
     var btns = this._VERDICTS.map(function (d) {
-      return '<button type="button" class="ad-btn sm ' + d.cls + '" id="' + prefix + '-v-' + d.v + '" aria-pressed="false" onclick="admin.pickVerdict(\'' + prefix + '\',\'' + d.v + '\')">' + escapeHtml(TT(d.key, d.fb)) + '</button>';
+      return '<button type="button" class="btn-action" id="' + prefix + '-v-' + d.v + '" style="padding:6px 13px"'
+        + ' onclick="admin.pickVerdict(\'' + prefix + '\',\'' + d.v + '\')">'
+        + d.icon + ' ' + escapeHtml(TT(d.key, d.fb)) + '</button>';
     }).join('');
+
     box.innerHTML =
-        '<div class="ad-verdict">'
-      +   '<span style="font-weight:600;margin-right:4px">' + escapeHtml(TT('modal.testSkill.verdictLabel', 'Verdict')) + '</span>' + btns
-      +   '<input class="ad-input ad-grow" id="' + prefix + '-vnote" style="height:28px;min-width:200px;font-size:12.5px" placeholder="' + escapeHtml(TT('modal.testSkill.noteLabel', 'Note (optional)')) + '" />'
-      +   '<input class="ad-input" id="' + prefix + '-category" style="height:28px;width:110px;font-size:12.5px" placeholder="' + escapeHtml(TT('modal.testSkill.categoryLabel', 'FI / MM / SD')) + '" />'
-      +   '<span id="' + prefix + '-verdict-msg" style="font-size:12px;color:var(--success)"></span>'
-      +   '<button type="button" class="ad-btn sm primary" id="' + prefix + '-verdict-save" onclick="admin.saveVerdict(\'' + prefix + '\')">' + escapeHtml(TT('modal.testSkill.saveVerdict', 'Save verdict')) + '</button>'
-      + '</div>'
-      + '<div id="' + prefix + '-corrected-wrap" style="display:none;padding:12px 16px;border-top:1px solid var(--border-default)">'
-      +   '<div class="ad-field"><label>' + escapeHtml(TT('modal.testSkill.correctedLabel', 'เฉลยที่ถูกต้อง')) + '</label>'
-      +   '<textarea class="ad-input" id="' + prefix + '-corrected" rows="4" style="min-height:100px" placeholder="' + escapeHtml(TT('modal.testSkill.correctedPh', 'วางคำตอบที่ถูกต้อง — จะกลายเป็นเฉลยใน golden dataset')) + '"></textarea></div>'
+        '<div style="padding:11px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--surface-3)">'
+      +   '<label class="modal-label" style="margin-bottom:6px">' + escapeHtml(TT('modal.testSkill.verdictLabel', 'การอนุมัติ (senior)')) + '</label>'
+      +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' + btns + '</div>'
+      +   '<div id="' + prefix + '-corrected-wrap" style="display:none;margin-bottom:8px">'
+      +     '<label class="modal-label">' + escapeHtml(TT('modal.testSkill.correctedLabel', 'เฉลยที่ถูกต้อง')) + '</label>'
+      +     '<textarea class="modal-input" id="' + prefix + '-corrected" rows="4" placeholder="'
+      +       escapeHtml(TT('modal.testSkill.correctedPh', 'วางคำตอบที่ถูกต้อง — จะกลายเป็นเฉลยใน golden dataset')) + '"></textarea>'
+      +   '</div>'
+      +   '<div class="modal-row">'
+      +     '<div class="modal-field"><label class="modal-label">' + escapeHtml(TT('modal.testSkill.categoryLabel', 'หมวด (ไม่บังคับ)')) + '</label>'
+      +       '<input class="modal-input" id="' + prefix + '-category" placeholder="FI / MM / SD / ..." /></div>'
+      +     '<div class="modal-field"><label class="modal-label">' + escapeHtml(TT('modal.testSkill.noteLabel', 'โน้ต (ไม่บังคับ)')) + '</label>'
+      +       '<input class="modal-input" id="' + prefix + '-vnote" /></div>'
+      +   '</div>'
+      +   '<div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:8px">'
+      +     '<span id="' + prefix + '-verdict-msg" style="font-size:.75rem;color:#3fa64d"></span>'
+      +     '<button type="button" class="btn-modal-submit" id="' + prefix + '-verdict-save" onclick="admin.saveVerdict(\'' + prefix + '\')">💾 '
+      +       escapeHtml(TT('modal.testSkill.saveVerdict', 'บันทึกการอนุมัติ')) + '</button>'
+      +   '</div>'
       + '</div>';
     box.style.display = '';
+
     if (existing) {
       if (existing.verdict) this.pickVerdict(prefix, existing.verdict);
       var c = document.getElementById(prefix + '-corrected'); if (c) c.value = existing.corrected_answer || '';
@@ -336,7 +398,12 @@ export default {
     this._verdictPick[prefix] = v;
     this._VERDICTS.forEach(function (d) {
       var b = document.getElementById(prefix + '-v-' + d.v);
-      if (b) b.setAttribute('aria-pressed', String(d.v === v));
+      if (!b) return;
+      var on = d.v === v;
+      b.style.background  = on ? 'var(--accent-soft-bg)' : '';
+      b.style.borderColor = on ? 'var(--accent-soft-border)' : '';
+      b.style.color       = on ? 'var(--accent)' : '';
+      b.style.fontWeight  = on ? '700' : '';
     });
     // The corrected-answer box only matters when the AI got it (partly) wrong.
     var wrap = document.getElementById(prefix + '-corrected-wrap');
@@ -366,7 +433,7 @@ export default {
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) { if (msg) { msg.style.color = '#e25563'; msg.textContent = d.error || t('err.saveFailed', 'บันทึกไม่สำเร็จ'); } return; }
-        if (msg) { msg.style.color = 'var(--success)'; msg.textContent = t('modal.testSkill.verdictSaved', 'บันทึกแล้ว'); }
+        if (msg) { msg.style.color = '#3fa64d'; msg.textContent = '✓ ' + t('modal.testSkill.verdictSaved', 'บันทึกแล้ว'); }
         // refresh list ให้ badge/สถิติตรงกับ verdict ที่เพิ่งบันทึก
         if (prefix === 'lab' || prefix === 'lh') self.loadTestHistory(true);
       })
@@ -397,30 +464,41 @@ export default {
       .catch(function (e) { if (errEl) errEl.textContent = e.message; });
   },
 
-  _verdictDot: function (v) {
-    var cls = v === 'correct' ? 'ok' : v === 'partial' ? 'mid' : v === 'incorrect' ? 'bad' : '';
-    return '<span class="ad-vdot ' + cls + '"></span>';
-  },
-  _verdictChip: function (r) {
-    if (r.verdict === 'correct') return '<span class="ad-chip ok">' + t('modal.testSkill.vCorrect', 'ถูกต้อง') + (r.is_eval_case ? ' · ' + t('evals.inSetShort', 'in eval set') : '') + '</span>';
-    if (r.verdict === 'partial') return '<span class="ad-chip warn">' + t('modal.testSkill.vPartial', 'เกือบถูก') + '</span>';
-    if (r.verdict === 'incorrect') return '<span class="ad-chip bad">' + t('modal.testSkill.vIncorrect', 'ผิด') + '</span>';
-    return '<span class="ad-chip warn">' + t('lbl.pending', 'Pending') + '</span>';
+  _verdictBadge: function (v) {
+    if (v === 'correct')   return '<span style="font-weight:700">✅</span>';
+    if (v === 'partial')   return '<span style="font-weight:700">⚠️</span>';
+    if (v === 'incorrect') return '<span style="font-weight:700">❌</span>';
+    return '<span style="color:var(--text-3)">⏳</span>';
   },
 
   _renderTestHistory: function (rows, stats) {
     var listEl  = document.getElementById('lab-list');
     var statsEl = document.getElementById('lab-stats');
-    if (statsEl) statsEl.textContent = (stats.pending || 0) + ' ' + t('lab.waitingVerdict', 'waiting for a verdict') + ' · ' + (stats.eval_cases || 0) + ' ' + t('evals.inSetShort', 'in eval set') + ' · ' + (stats.total || 0) + ' ' + t('lbl.total', 'total');
+    if (statsEl) statsEl.innerHTML = t('modal.testHistory.total', 'รวม') + ' <b>' + (stats.total || 0) + '</b>'
+      + ' · ✅ ' + (stats.correct || 0) + ' · ⚠️ ' + (stats.partial || 0)
+      + ' · ❌ ' + (stats.incorrect || 0) + ' · ⏳ ' + (stats.pending || 0)
+      + ' · ⭐ ' + (stats.eval_cases || 0);
     if (!listEl) return;
-    if (!rows.length) { listEl.innerHTML = '<div class="ad-empty">' + t('modal.testHistory.empty', 'ยังไม่มีการทดสอบ') + '</div>'; return; }
-    var self = this;
+    if (!rows.length) {
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);font-size:.8rem">'
+        + t('modal.testHistory.empty', 'ยังไม่มีการทดสอบ skill นี้') + '</div>';
+      return;
+    }
     listEl.innerHTML = rows.map(function (r) {
-      var dt = new Date(r.created_at);
-      var when = dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return '<div class="ad-hist" onclick="admin.openTestLogDetail(' + r.log_id + ')">' + self._verdictDot(r.verdict)
-        + '<div class="q">' + escapeHtml(r.question_preview || '') + '<span>' + escapeHtml(r.model || '') + ' · ' + when + (r.skill_label ? ' · ' + escapeHtml(r.skill_label) : '') + (r.category ? ' · ' + escapeHtml(r.category) : '') + '</span></div>'
-        + self._verdictChip(r) + '</div>';
+      var dt   = new Date(r.created_at);
+      var when = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return '<div onclick="admin.openTestLogDetail(' + r.log_id + ')"'
+        + ' style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer"'
+        + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
+        + admin._verdictBadge(r.verdict)
+        + (r.is_eval_case ? '<span title="อยู่ในชุดข้อสอบ">⭐</span>' : '')
+        + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
+        + '<span style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-3);white-space:nowrap">' + escapeHtml(r.model || '') + '</span>'
+        // which skill/prompt this run tested
+        + (r.skill_label ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--surface-3);border:1px solid var(--border-subtle);color:var(--text-2);white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(r.skill_label) + '</span>' : '')
+        + (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
+        + '<span style="flex:1;font-size:.78rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
+        + '</div>';
     }).join('');
   },
 
@@ -445,21 +523,34 @@ export default {
   _renderTestLogDetail: function (log) {
     var det = document.getElementById('lab-detail');
     if (!det) return;
-    var pre = function (label, text) { return '<div class="ad-field" style="margin-top:8px"><label>' + escapeHtml(label) + '</label><pre class="ad-pre">' + escapeHtml(text || '') + '</pre></div>'; };
+    var pre = function (label, text) {
+      return '<label class="modal-label" style="margin-top:8px">' + escapeHtml(label) + '</label>'
+        + '<pre style="margin:0;padding:10px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.76rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto">'
+        + escapeHtml(text || '') + '</pre>';
+    };
+    // promote/demote into the exam set; the backend enforces verdict + golden reference, this only hints.
     var canStar = log.verdict === 'correct' || (log.corrected_answer || '').trim();
     var starBtn = log.verdict
-      ? '<button type="button" class="ad-btn sm' + (log.is_eval_case ? ' primary' : '') + '" onclick="admin.toggleEvalCase(' + log.log_id + ',' + (!log.is_eval_case) + ')"'
-        + (canStar ? '' : ' disabled title="' + escapeHtml(t('evals.needGolden', 'ต้องมีเฉลย หรืออนุมัติ = ถูกต้อง ก่อน')) + '"') + '>'
-        + (log.is_eval_case ? escapeHtml(t('evals.inSet', 'In eval set — click to remove')) : escapeHtml(t('evals.addToSet', 'Add to eval set'))) + '</button>'
+      ? '<button type="button" class="btn-action" style="padding:4px 12px;font-size:.75rem'
+        + (log.is_eval_case ? ';background:var(--accent-soft-bg);border-color:var(--accent-soft-border);color:var(--accent)' : '')
+        + '" onclick="admin.toggleEvalCase(' + log.log_id + ',' + (!log.is_eval_case) + ')"'
+        + (canStar ? '' : ' disabled title="' + escapeHtml(t('evals.needGolden', 'ต้องมีเฉลย หรืออนุมัติ = ถูกต้อง ก่อน')) + '"')
+        + '>' + (log.is_eval_case
+            ? '⭐ ' + escapeHtml(t('evals.inSet', 'อยู่ในชุดข้อสอบ — กดเพื่อเอาออก'))
+            : '☆ ' + escapeHtml(t('evals.addToSet', 'เข้าชุดข้อสอบ')))
+        + '</button>'
       : '';
     det.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
-      +   '<span class="ad-mono" style="font-size:12px;color:var(--text-3)">#' + log.log_id + (log.skill_label ? ' · ' + escapeHtml(log.skill_label) : '') + ' · ' + escapeHtml(log.model || '') + (log.effort ? ' / ' + escapeHtml(log.effort) : '') + ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</span>'
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:2px;flex-wrap:wrap">'
+      +   '<span style="font-size:.72rem;color:var(--text-3)">#' + log.log_id
+      +     (log.skill_label ? ' · ' + escapeHtml(log.skill_label) : '') + ' · ' + escapeHtml(log.model || '')
+      +     (log.effort ? ' / ' + escapeHtml(log.effort) : '')
+      +     ' · ' + ((log.input_tokens || 0) + (log.output_tokens || 0)).toLocaleString() + ' tokens</span>'
       +   starBtn
       + '</div>'
       + pre(t('modal.testHistory.question', 'โจทย์'), log.question)
       + pre(t('modal.testSkill.answerLabel', 'คำตอบ AI'), log.answer)
-      + '<div id="lh-verdict" style="display:none;margin-top:10px;border:1px solid var(--border-default);border-radius:var(--radius-md);overflow:hidden"></div>';
+      + '<div id="lh-verdict" style="display:none;margin-top:10px"></div>';
     det.style.display = '';
     this.showVerdictBar('lh', log.log_id, log);
     det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -520,7 +611,8 @@ export default {
         var s = document.getElementById('ev-ready');
         if (!s) return;
         var n = (d.ok && d.stats && d.stats.eval_cases) || 0;
-        s.textContent = n + ' ' + t('evals.readyCount', 'cases in the set') + ' · ' + t('evals.judgeInfo', 'judge: GPT-5.6 Terra / high');
+        s.innerHTML = '⭐ <b>' + n + '</b> ' + t('evals.readyCount', 'ข้อสอบพร้อมสอบ')
+          + ' · ' + t('evals.judgeInfo', 'ผู้ตรวจ: GPT-5.6 Terra / high');
         var btn = document.getElementById('ev-run-btn');
         if (btn) btn.disabled = n === 0;
       })
@@ -579,7 +671,8 @@ export default {
         var txt = document.getElementById('ev-progress-text');
         var bar = document.getElementById('ev-progress-bar');
         var pct = run.total_cases ? Math.round((run.done_cases / run.total_cases) * 100) : 0;
-        if (txt) txt.textContent = run.done_cases + ' / ' + run.total_cases + ' · ' + run.pass_cases + ' ' + t('evals.passed', 'passed');
+        if (txt) txt.textContent = t('evals.progress', 'กำลังสอบ') + ' ' + run.done_cases + '/' + run.total_cases
+          + ' · ✅ ' + run.pass_cases;
         if (bar) bar.style.width = pct + '%';
         if (run.status === 'running') {
           self._evalPollTimer = setTimeout(function () { self._pollEvalRun(); }, 2500);
@@ -630,36 +723,55 @@ export default {
     var done = runs.filter(function (r) { return r.status === 'done'; });
     if (!done.length) { card.style.display = 'none'; return; }
     var cur = done[0], prev = done[1];
-    var delta = prev != null && prev.score_pct != null ? (Number(cur.score_pct) - Number(prev.score_pct)) : null;
-    card.innerHTML = '<div class="ad-att ' + (delta === null ? 'info' : delta >= 0 ? 'ok' : 'warn') + '"><div class="icn"><svg class="ic"><use href="#i-chart"/></svg></div><div>'
-      + '<b>' + escapeHtml(t('evals.latestScore', 'Latest score')) + ' ' + Number(cur.score_pct).toFixed(1) + '%'
-      + (delta === null ? '' : ' <span style="color:' + (delta >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' ' + t('evals.vsPrevious', 'vs previous run') + '</span>') + '</b>'
-      + '<p>run #' + cur.run_id + ' · ' + escapeHtml(cur.model) + (cur.effort ? '/' + escapeHtml(cur.effort) : '') + ' · ' + cur.pass_cases + ' / ' + cur.total_cases + ' ' + escapeHtml(t('evals.casesPassed', 'cases passed'))
-      + ' · ' + escapeHtml(t('evals.trend', 'trend')) + ' ' + done.slice(0, 6).reverse().map(function (r) { return Number(r.score_pct).toFixed(0) + '%'; }).join(' → ') + '</p>'
-      + '</div></div>';
+    var delta = prev != null && prev.score_pct != null
+      ? (Number(cur.score_pct) - Number(prev.score_pct)) : null;
+    var deltaHtml = delta === null ? ''
+      : delta >= 0
+        ? '<span style="color:#3fa64d;font-weight:700"> ⬆ +' + delta.toFixed(1) + '</span>'
+        : '<span style="color:#e25563;font-weight:700"> ⬇ ' + delta.toFixed(1) + '</span>';
+    var trend = done.slice(0, 6).reverse().map(function (r) { return Number(r.score_pct).toFixed(0) + '%'; }).join(' → ');
+    card.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">'
+      +   '<div>'
+      +     '<div style="font-size:.72rem;color:var(--text-3);font-weight:600;letter-spacing:.4px">' + escapeHtml(t('evals.latestScore', 'คะแนนล่าสุด')) + ' · run #' + cur.run_id + ' · ' + escapeHtml(cur.model) + (cur.effort ? '/' + escapeHtml(cur.effort) : '') + '</div>'
+      +     '<div style="font-size:2rem;font-weight:800;color:var(--text-1)">' + Number(cur.score_pct).toFixed(1) + '%' + deltaHtml + '</div>'
+      +     '<div style="font-size:.76rem;color:var(--text-2)">✅ ' + cur.pass_cases + ' / ' + cur.total_cases + ' ' + escapeHtml(t('evals.casesPassed', 'เคสผ่าน')) + '</div>'
+      +   '</div>'
+      +   '<div style="text-align:right">'
+      +     '<div style="font-size:.72rem;color:var(--text-3);font-weight:600">' + escapeHtml(t('evals.trend', 'แนวโน้ม')) + '</div>'
+      +     '<div style="font-family:var(--font-mono);font-size:.85rem;color:var(--text-2)">' + trend + '</div>'
+      +   '</div>'
+      + '</div>';
     card.style.display = '';
   },
 
   _renderEvalRuns: function (runs) {
     var el = document.getElementById('ev-runs');
     if (!el) return;
-    if (!runs.length) { el.innerHTML = '<div class="ad-card ad-empty" style="grid-column:1/-1">' + t('evals.noRuns', 'ยังไม่เคยสอบ skill นี้ — กด Run Eval เพื่อเริ่มรอบแรก') + '</div>'; return; }
-    var best = runs.filter(function (r) { return r.status === 'done' && r.score_pct != null; }).sort(function (a, b) { return Number(b.score_pct) - Number(a.score_pct); })[0];
-    var chip = function (s) {
-      if (s === 'done') return ''; if (s === 'running') return '<span class="ad-chip accent">running…</span>';
-      if (s === 'cancelled') return '<span class="ad-chip warn">cancelled</span>'; return '<span class="ad-chip bad">failed</span>';
+    if (!runs.length) {
+      el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-3);font-size:.8rem">'
+        + t('evals.noRuns', 'ยังไม่เคยสอบ skill นี้ — กด ▶ Run Eval เพื่อเริ่มรอบแรก') + '</div>';
+      return;
+    }
+    var badge = function (s) {
+      if (s === 'done')      return '<span style="color:#3fa64d;font-weight:600">done</span>';
+      if (s === 'running')   return '<span style="color:var(--accent);font-weight:600">running…</span>';
+      if (s === 'cancelled') return '<span style="color:#e6a14a;font-weight:600">cancelled</span>';
+      return '<span style="color:#e25563;font-weight:600">failed</span>';
     };
-    el.innerHTML = runs.slice(0, 9).map(function (r) {
+    el.innerHTML = runs.map(function (r) {
       var dt = new Date(r.started_at);
-      var when = dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-      var isBest = best && r.run_id === best.run_id;
-      var pass = Number(r.pass_cases) || 0, total = Number(r.total_cases) || 0, fail = Math.max(0, total - pass);
-      var cells = ''; for (var i = 0; i < Math.min(total, 60); i++) cells += '<i class="' + (i < pass ? '' : 'f') + '"></i>';
-      return '<div class="ad-run' + (isBest ? ' best' : '') + '" onclick="admin.openEvalRunDetail(' + r.run_id + ')">'
-        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + (isBest ? '<span class="ad-chip accent">Best</span>' : '') + '<span class="ad-chip">#' + r.run_id + ' · ' + escapeHtml(r.model) + (r.effort ? ' · ' + escapeHtml(r.effort) : '') + '</span>' + chip(r.status) + '</div>'
-        + '<div class="score">' + (r.score_pct != null ? Number(r.score_pct).toFixed(1) + '%' : '—') + ' <small>' + pass + ' / ' + total + '</small></div>'
-        + '<div class="ad-cases">' + cells + '</div>'
-        + '<div class="ad-kv"><span>' + when + ' · ' + ((r.input_tokens || 0) + (r.output_tokens || 0)).toLocaleString() + ' tokens</span><b>' + fail + ' ' + t('evals.failed', 'failed') + '</b></div>'
+      var when = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return '<div onclick="admin.openEvalRunDetail(' + r.run_id + ')"'
+        + ' style="display:flex;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer"'
+        + ' onmouseover="this.style.background=\'var(--surface-3)\'" onmouseout="this.style.background=\'\'">'
+        + '<b style="font-size:.78rem;color:var(--text-2);white-space:nowrap">#' + r.run_id + '</b>'
+        + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap">' + when + '</span>'
+        + '<span style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-3)">' + escapeHtml(r.model) + (r.effort ? '/' + escapeHtml(r.effort) : '') + '</span>'
+        + badge(r.status)
+        + '<span style="flex:1"></span>'
+        + (r.score_pct != null ? '<b style="font-size:.85rem;color:var(--text-1)">' + Number(r.score_pct).toFixed(1) + '%</b>' : '')
+        + '<span style="font-size:.72rem;color:var(--text-3)">' + r.pass_cases + '/' + r.total_cases + '</span>'
         + '</div>';
     }).join('');
   },
@@ -678,27 +790,47 @@ export default {
   _renderEvalRunDetail: function (run, results) {
     var det = document.getElementById('ev-run-detail');
     if (!det) return;
+    // Per-category pass rate (computed client-side — 30ish rows max).
     var byCat = {};
-    results.forEach(function (r) { var c = r.category || '—'; byCat[c] = byCat[c] || { total: 0, pass: 0 }; byCat[c].total++; if (r.passed) byCat[c].pass++; });
+    results.forEach(function (r) {
+      var c = r.category || '—';
+      byCat[c] = byCat[c] || { total: 0, pass: 0 };
+      byCat[c].total++;
+      if (r.passed) byCat[c].pass++;
+    });
     var catHtml = Object.keys(byCat).sort().map(function (c) {
-      var v = byCat[c]; var pct = Math.round((v.pass / v.total) * 100);
-      return '<div class="ad-cap" style="min-width:0"><span style="min-width:70px;font-size:12.5px">' + escapeHtml(c) + '</span><div class="ad-bar ' + (pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad') + '"><i style="width:' + pct + '%"></i></div><span class="t">' + v.pass + '/' + v.total + '</span></div>';
+      var v = byCat[c];
+      var pct = Math.round((v.pass / v.total) * 100);
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:.76rem;margin-bottom:4px">'
+        + '<span style="min-width:90px;color:var(--text-2)">' + escapeHtml(c) + '</span>'
+        + '<div style="flex:1;height:7px;background:var(--surface-3);border-radius:4px;overflow:hidden">'
+        +   '<div style="height:100%;width:' + pct + '%;background:' + (pct >= 70 ? '#3fa64d' : pct >= 40 ? '#e6a14a' : '#e25563') + '"></div>'
+        + '</div>'
+        + '<span style="min-width:70px;text-align:right;color:var(--text-3)">' + v.pass + '/' + v.total + ' (' + pct + '%)</span>'
+        + '</div>';
     }).join('');
-    var failed = results.filter(function (r) { return !r.passed; });
-    var rowsHtml = (failed.length ? failed : results).map(function (r) {
-      var mark = r.error ? '<span class="ad-chip warn">error</span>' : (r.passed ? '<span class="ad-chip ok">pass</span>' : '<span class="ad-chip bad">fail</span>');
-      return '<tr class="click" onclick="admin._toggleEvalCaseDetail(' + r.result_id + ')">'
-        + '<td>' + mark + '</td>'
-        + '<td>' + (r.category ? '<span class="ad-chip">' + escapeHtml(r.category) + '</span> ' : '') + escapeHtml(r.question_preview || '') + '</td>'
-        + '<td class="muted">' + escapeHtml(r.judge_reason || r.error || '') + '</td>'
-        + '<td class="num"' + (r.passed ? '' : ' style="color:var(--danger)"') + '>' + (r.score != null ? Number(r.score).toFixed(1) + ' / 10' : '—') + '</td></tr>'
-        + '<tr id="ev-case-' + r.result_id + '" style="display:none"><td colspan="4" style="background:var(--surface-3)"></td></tr>';
+    var rowsHtml = results.map(function (r) {
+      return '<div onclick="admin._toggleEvalCaseDetail(' + r.result_id + ')"'
+        + ' style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);cursor:pointer">'
+        + '<div style="display:flex;gap:10px;align-items:center">'
+        +   (r.error ? '<span title="' + escapeHtml(r.error) + '">🟡</span>' : (r.passed ? '<span>✅</span>' : '<span>❌</span>'))
+        +   (r.category ? '<span style="font-size:.68rem;padding:1px 7px;border-radius:10px;background:var(--accent-soft-bg);color:var(--accent)">' + escapeHtml(r.category) + '</span>' : '')
+        +   '<span style="flex:1;font-size:.76rem;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(r.question_preview || '') + '</span>'
+        +   (r.score != null ? '<b style="font-size:.76rem;color:var(--text-1)">' + Number(r.score).toFixed(1) + '/10</b>' : '')
+        + '</div>'
+        + '<div style="font-size:.72rem;color:var(--text-3);margin-top:2px;padding-left:26px">' + escapeHtml(r.judge_reason || r.error || '') + '</div>'
+        + '<div id="ev-case-' + r.result_id + '" style="display:none;margin-top:8px"></div>'
+        + '</div>';
     }).join('');
     det.innerHTML =
-        '<div class="ad-card-head"><h4>' + (failed.length ? failed.length + ' ' + t('evals.failedCases', 'failed cases') : t('evals.allPassed', 'All cases passed')) + ' · run #' + run.run_id + '</h4>'
-      +   '<span class="ad-sub">' + escapeHtml(run.model) + (run.effort ? '/' + escapeHtml(run.effort) : '') + ' · ' + t('evals.judgedBy', 'judged by') + ' ' + escapeHtml(run.judge_model || '') + ' · ' + ((run.input_tokens || 0) + (run.output_tokens || 0)).toLocaleString() + ' tokens' + (run.error ? ' · <span style="color:var(--danger)">' + escapeHtml(run.error) + '</span>' : '') + '</span></div>'
-      + (catHtml ? '<div class="ad-card-body ad-stack" style="gap:6px">' + catHtml + '</div>' : '')
-      + '<table class="ad-table"><thead><tr><th></th><th>' + t('col.case', 'Case') + '</th><th>' + t('evals.judgeSaid', 'Judge said') + '</th><th class="num">' + t('col.score', 'Score') + '</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+        '<div style="font-size:.75rem;color:var(--text-3);margin-bottom:6px">run <b>#' + run.run_id + '</b> · '
+      +   escapeHtml(run.model) + (run.effort ? '/' + escapeHtml(run.effort) : '')
+      +   ' · ' + t('evals.judgedBy', 'ตรวจโดย') + ' ' + escapeHtml(run.judge_model)
+      +   ' · ' + ((run.input_tokens || 0) + (run.output_tokens || 0)).toLocaleString() + ' tokens'
+      +   (run.error ? ' · <span style="color:#e25563">' + escapeHtml(run.error) + '</span>' : '')
+      + '</div>'
+      + (catHtml ? '<div style="margin-bottom:10px">' + catHtml + '</div>' : '')
+      + '<div style="border:1px solid var(--border-subtle);border-radius:6px;max-height:420px;overflow:auto">' + rowsHtml + '</div>';
     det.style.display = '';
     this._evalResults = {};
     var self = this;
@@ -708,14 +840,21 @@ export default {
 
   // Expand one exam case inline: question / golden reference / fresh answer.
   _toggleEvalCaseDetail: function (resultId) {
-    var row = document.getElementById('ev-case-' + resultId);
+    var box = document.getElementById('ev-case-' + resultId);
     var r = (this._evalResults || {})[resultId];
-    if (!row || !r) return;
-    if (row.style.display !== 'none') { row.style.display = 'none'; return; }
-    var pre = function (label, text) { return '<div class="ad-field"><label>' + escapeHtml(label) + '</label><pre class="ad-pre">' + escapeHtml(text || '') + '</pre></div>'; };
+    if (!box || !r) return;
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    var pre = function (label, text) {
+      return '<label class="modal-label" style="margin-top:6px">' + escapeHtml(label) + '</label>'
+        + '<pre style="margin:0;padding:9px;background:var(--surface-3);border:1px solid var(--border-subtle);border-radius:6px;font-family:var(--font-mono);font-size:.72rem;color:var(--text-2);white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto">'
+        + escapeHtml(text || '') + '</pre>';
+    };
     var golden = (r.corrected_answer || '').trim() || r.old_answer;
-    row.firstElementChild.innerHTML = '<div class="ad-form-grid" style="grid-template-columns:1fr 1fr 1fr;padding:12px 0">' + pre(t('modal.testHistory.question', 'โจทย์'), r.question) + pre(t('evals.golden', 'เฉลย (golden)'), golden) + pre(t('evals.freshAnswer', 'คำตอบรอบสอบนี้'), r.answer) + '</div>';
-    row.style.display = '';
+    box.innerHTML =
+        pre(t('modal.testHistory.question', 'โจทย์'), r.question)
+      + pre(t('evals.golden', 'เฉลย (golden)'), golden)
+      + pre(t('evals.freshAnswer', 'คำตอบรอบสอบนี้'), r.answer);
+    box.style.display = '';
   },
 
   openAddSkill: function () {

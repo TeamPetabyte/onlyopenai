@@ -231,7 +231,7 @@ export default {
     var listTitle = document.getElementById('usage-user-list-title');
     var banner = document.getElementById('usage-project-banner');
     var metaEl = document.getElementById('usage-filter-meta');
-    if (grid) grid.innerHTML = '<div class="ad-kpi" style="grid-column:1/-1"><span class="d">' + t('common.loading', 'กำลังโหลด...') + '</span></div>';
+    if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-3);font-size:.85rem">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     if (list) list.innerHTML = '';
     this.fetchUsersFromDB().then(function (users) {
       // ไม่แสดง admin ใน Usage Analytics
@@ -269,10 +269,38 @@ export default {
             return s + u.history.reduce(function (ss, h) { return ss + (h.cost || 0); }, 0);
           }, 0);
           banner.classList.remove('hidden');
-          banner.innerHTML = '<div class="ad-att info" style="display:flex"><div class="icn"><svg class="ic"><use href="#i-folder"/></svg></div><div><b>' + escapeHtml(selectedProj.name) + '</b><p>'
-            + users.length + ' users · ' + users.reduce(function (s, u) { return s + u.history.length; }, 0) + ' requests · '
-            + (projTokens >= 1000 ? (projTokens / 1000).toFixed(1) + 'K' : projTokens) + ' tokens · ' + formatTHB(projSpent) + ' spent'
-            + (selectedProj.desc ? ' · ' + escapeHtml(selectedProj.desc) : '') + '</p></div></div>';
+          banner.innerHTML =
+              '<div style="padding:14px 18px;border-radius:10px;'
+            +   'background:linear-gradient(135deg,rgba(99,102,241,0.10),rgba(168,85,247,0.06));'
+            +   'border:1px solid rgba(99,102,241,0.25);'
+            +   'display:flex;align-items:center;gap:18px;flex-wrap:wrap">'
+            +   '<div style="font-size:1.5rem"><svg class="ic sm" aria-hidden="true"><use href="#i-folder"/></svg></div>'
+            +   '<div style="flex:1;min-width:160px">'
+            +     '<div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">PROJECT</div>'
+            +     '<div style="font-weight:700;color:var(--text-1);font-size:1.05rem">' + escapeHtml(selectedProj.name) + '</div>'
+            +     (selectedProj.desc ? '<div style="font-size:.78rem;color:var(--text-3);margin-top:2px">' + escapeHtml(selectedProj.desc) + '</div>' : '')
+            +   '</div>'
+            +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">USERS</div>'
+            +     '<div style="font-weight:700;color:var(--accent);font-size:1.4rem">' + users.length + '</div>'
+            +   '</div>'
+            +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">REQUESTS</div>'
+            +     '<div style="font-weight:700;color:var(--text-1);font-size:1.4rem">'
+            +       users.reduce(function (s, u) { return s + u.history.length; }, 0)
+            +     '</div>'
+            +   '</div>'
+            +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">TOKENS</div>'
+            +     '<div style="font-weight:700;color:var(--text-1);font-size:1.4rem">'
+            +       (projTokens >= 1000 ? (projTokens / 1000).toFixed(1) + 'K' : projTokens)
+            +     '</div>'
+            +   '</div>'
+            +   '<div style="text-align:center;padding:0 14px;border-left:1px solid var(--border-subtle)">'
+            +     '<div style="font-size:.7rem;color:var(--text-3)">SPENT</div>'
+            +     '<div style="font-weight:700;color:var(--accent);font-size:1.4rem">' + formatTHB(projSpent) + '</div>'
+            +   '</div>'
+            + '</div>';
         } else {
           banner.classList.add('hidden');
           banner.innerHTML = '';
@@ -299,12 +327,22 @@ export default {
       });
 
       if (grid) {
-        var kpi = function (k, v, d) { return '<div class="ad-kpi"><span class="k">' + k + '</span><span class="v">' + v + '</span><span class="d">' + d + '</span></div>'; };
         grid.innerHTML =
-            kpi('Requests', totalRequests.toLocaleString(), selectedProj ? tf('lbl.inProject', { project: escapeHtml(selectedProj.name) }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน'))
-          + kpi('Tokens', totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens, 'input + output')
-          + kpi('Spent', formatTHB(totalCost), t('lbl.spentAlready', 'เงินที่ถูกหักไปแล้ว'))
-          + kpi('Active users', users.filter(function (u) { return u.history.length > 0; }).length + ' / ' + users.length, t('lbl.hasUsageHistory', 'มีประวัติการใช้งาน'));
+          '<div class="mini-card"><div class="mini-card-label">Total Requests</div>' +
+          '<div class="mini-card-value">' + totalRequests.toLocaleString() + '</div>' +
+          '<div class="mini-card-sub">' + (selectedProj ? tf('lbl.inProject', { project: selectedProj.name }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน')) + '</div></div>' +
+
+          '<div class="mini-card"><div class="mini-card-label">Total Tokens</div>' +
+          '<div class="mini-card-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +
+          '<div class="mini-card-sub">input + output tokens</div></div>' +
+
+          '<div class="mini-card"><div class="mini-card-label">Total Spent</div>' +
+          '<div class="mini-card-value" style="color:var(--accent)">' + formatTHB(totalCost) + '</div>' +
+          '<div class="mini-card-sub">' + t('lbl.spentAlready', 'เงินที่ถูกหักไปแล้ว') + '</div></div>' +
+
+          '<div class="mini-card"><div class="mini-card-label">Active Users</div>' +
+          '<div class="mini-card-value">' + users.filter(function (u) { return u.history.length > 0; }).length + ' / ' + users.length + '</div>' +
+          '<div class="mini-card-sub">' + t('lbl.hasUsageHistory', 'มีประวัติการใช้งาน') + '</div></div>';
       }
 
       if (!list) return;
@@ -313,7 +351,7 @@ export default {
         var msg = selectedProj
           ? t('empty.noUsersInProject', 'ไม่มี user ใน project นี้')
           : t('empty.noUsersSystem', 'ยังไม่มี User ในระบบ');
-        list.innerHTML = '<div class="ad-empty">' + msg + '</div>';
+        list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3)">' + msg + '</div>';
         return;
       }
 
@@ -329,40 +367,66 @@ export default {
         return Math.max(m, t);
       }, 1);
 
-      var html = '<table class="ad-table"><thead><tr><th>User</th><th class="num">Requests</th><th class="num">Tokens</th><th class="num">Spent</th><th style="width:28%">Share</th><th></th></tr></thead><tbody>';
+      var html = '';
       users.forEach(function (u, idx) {
         var proj = projects.find(function (p) { return p.id === u.projectId; });
         var tokens = u.history.reduce(function (s, h) { return s + (h.inputTokens || 0) + (h.outputTokens || 0); }, 0);
         var spent = u.history.reduce(function (s, h) { return s + (h.cost || 0); }, 0);
         var requests = u.history.length;
         var pct = maxTokens > 0 ? Math.max(1, Math.round((tokens / maxTokens) * 100)) : 0;
-        var initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
+
         var last20 = u.history.slice(0, 20);
+        // escape skillName+prompt ก่อน inline — prompt คือข้อความที่ user พิมพ์ ปลูก XSS ได้
         var histRows = last20.length === 0
-          ? '<tr><td colspan="5" class="muted" style="text-align:center">' + t('empty.noUsageHistoryRow', 'ยังไม่มีประวัติการใช้งาน') + '</td></tr>'
+          ? '<tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:16px">' + t('empty.noUsageHistoryRow', 'ยังไม่มีประวัติการใช้งาน') + '</td></tr>'
           : last20.map(function (h, hIdx) {
-            return '<tr class="click" title="' + escapeHtml(t('vt.clickToView', 'คลิกเพื่อดูข้อความเต็ม')) + '" onclick="admin.openViewTurn(' + idx + ',' + hIdx + ')">'
-              + '<td>' + escapeHtml(h.skillName || '—') + '</td>'
-              + '<td class="num">' + (h.inputTokens || 0).toLocaleString() + ' / ' + (h.outputTokens || 0).toLocaleString() + '</td>'
-              + '<td class="num">' + formatTHB(h.cost || 0) + '</td>'
-              + '<td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(h.prompt || '—') + '</td>'
-              + '<td class="muted ad-mono" style="white-space:nowrap">' + formatDate(h.timestamp) + '</td></tr>';
+            var skill  = escapeHtml(h.skillName || '—');
+            var emoji  = escapeHtml(h.skillEmoji || '🤖');
+            var prompt = escapeHtml(h.prompt || '—');
+            // the whole row opens the full prompt+response modal; the truncated cell is only a preview.
+            return '<tr style="cursor:pointer" title="' + escapeHtml(t('vt.clickToView', 'คลิกเพื่อดูข้อความเต็ม')) + '" onclick="admin.openViewTurn(' + idx + ',' + hIdx + ')">' +
+              '<td>' + emoji + ' ' + skill + '</td>' +
+              '<td class="val">' + (h.inputTokens || 0) + ' / ' + (h.outputTokens || 0) + '</td>' +
+              '<td class="val">' + formatTHB(h.cost || 0) + '</td>' +
+              '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-3)">' + prompt + '</td>' +
+              '<td style="color:var(--text-3);white-space:nowrap">' + formatDate(h.timestamp) + '</td>' +
+              '</tr>';
           }).join('');
+
         html +=
-            '<tr class="click" id="ucard-' + idx + '" onclick="admin.toggleUsageDetail(' + idx + ')">'
-          +   '<td><div class="ad-who"><span class="ad-avatar">' + escapeHtml(initial) + '</span><div><b>' + escapeHtml(u.displayName || u.username || '') + '</b><span>' + escapeHtml(u.username || '') + (proj ? ' · ' + escapeHtml(proj.name || '') : '') + '</span></div></div></td>'
-          +   '<td class="num">' + requests + '</td>'
-          +   '<td class="num">' + (tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'K' : tokens) + '</td>'
-          +   '<td class="num">' + formatTHB(spent) + '</td>'
-          +   '<td><div class="ad-cap"><div class="ad-bar"><i style="width:' + pct + '%"></i></div><span class="t">' + pct + '%</span></div></td>'
-          +   '<td class="num"><span class="muted" id="ucard-arrow-' + idx + '">▸</span></td>'
-          + '</tr>'
-          + '<tr class="usage-detail-row" id="udetail-' + idx + '" style="display:none"><td colspan="6" style="padding:0;background:var(--surface-3)">'
-          +   '<table class="ad-table" style="font-size:12.5px"><thead><tr><th>Skill</th><th class="num">Tokens in / out</th><th class="num">' + t('col.cost', 'ค่าใช้จ่าย') + '</th><th>Prompt</th><th>' + t('col.time', 'เวลา') + '</th></tr></thead><tbody>' + histRows + '</tbody></table>'
-          +   (u.history.length > 20 ? '<div class="ad-card-foot">' + tf('lbl.showingRecent', { n: u.history.length }, 'แสดง 20 รายการล่าสุด (ทั้งหมด {n} รายการ)') + '</div>' : '')
-          + '</td></tr>';
+          '<div class="usage-user-card" id="ucard-' + idx + '">' +
+          '<div class="usage-user-header" onclick="admin.toggleUsageDetail(' + idx + ')">' +
+          '<div>' +
+          '<div class="usage-user-name">' + escapeHtml(u.displayName || u.username || '') + '</div>' +
+          '<div class="usage-user-meta">' + escapeHtml(u.username || '') + (proj ? ' · ' + escapeHtml(proj.name || '') : '') + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-family:var(--font-mono);font-size:.8rem;color:var(--text-3)">' + formatTHB(spent) + '</span>' +
+          '<span style="color:var(--text-3);font-size:1.1rem" id="ucard-arrow-' + idx + '">▸</span>' +
+          '</div>' +
+          '</div>' +
+
+          '<div class="usage-user-stats">' +
+          '<div class="usage-stat-box"><div class="usage-stat-label">Requests</div><div class="usage-stat-val">' + requests + '</div></div>' +
+          '<div class="usage-stat-box"><div class="usage-stat-label">Total Tokens</div><div class="usage-stat-val">' + (tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'K' : tokens) + '</div></div>' +
+          '<div class="usage-stat-box"><div class="usage-stat-label">Total Spent</div><div class="usage-stat-val" style="color:var(--accent)">' + formatTHB(spent) + '</div></div>' +
+          '<div class="usage-stat-box"><div class="usage-stat-label">Balance Left</div><div class="usage-stat-val" style="color:#34d399">' + formatTHB(u.balance) + '</div></div>' +
+          '</div>' +
+
+          '<div class="usage-bar-wrap">' +
+          '<div class="usage-bar-label"><span>Token usage relative</span><span>' + pct + '%</span></div>' +
+          '<div class="usage-bar-track"><div class="usage-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '</div>' +
+
+          '<div class="usage-detail-section" id="udetail-' + idx + '">' +
+          '<table class="usage-history-table">' +
+          '<thead><tr><th>Skill</th><th>Tokens (In/Out)</th><th>' + t('col.cost', 'ค่าใช้จ่าย') + '</th><th>Prompt</th><th>' + t('col.time', 'เวลา') + '</th></tr></thead>' +
+          '<tbody>' + histRows + '</tbody>' +
+          '</table>' +
+          (u.history.length > 20 ? '<div style="text-align:center;color:var(--text-3);font-size:.75rem;padding:8px">' + tf('lbl.showingRecent', { n: u.history.length }, 'แสดง 20 รายการล่าสุด (ทั้งหมด {n} รายการ)') + '</div>' : '') +
+          '</div>' +
+          '</div>';
       });
-      html += '</tbody></table>';
       list.innerHTML = html;
       // เก็บ list ที่ render แล้ว — คลิกแถวเปิด prompt เต็มโดยไม่ fetch/escape ซ้ำ
       self._usageRenderedUsers = users;
@@ -393,57 +457,76 @@ export default {
     var card = document.getElementById('ucard-' + idx);
     var arrow = document.getElementById('ucard-arrow-' + idx);
     if (!detail) return;
-    var isOpen = detail.style.display !== 'none';
-    detail.style.display = isOpen ? 'none' : '';
-    if (card) card.classList.toggle('selected', !isOpen);
+    var isOpen = detail.classList.contains('open');
+    detail.classList.toggle('open', !isOpen);
+    if (card) card.classList.toggle('expanded', !isOpen);
     if (arrow) arrow.textContent = isOpen ? '▸' : '▾';
   },
 
   // --- Quota Requests (admin approve/deny) ---
-  renderQuotaRequests: function (preloaded) {
+  renderQuotaRequests: function () {
     var self = this;
     var wrap = document.getElementById('qr-list-wrap');
     if (!wrap) return;
-    var paint = function (rows) {
-      var pending = rows.filter(function (r) { return r.status === 'pending'; }).length;
-      var badge = document.getElementById('qr-pending-badge');
-      if (badge) { badge.textContent = pending; badge.style.display = pending > 0 ? 'inline-grid' : 'none'; }
-      if (rows.length === 0) { wrap.innerHTML = '<div class="ad-empty">' + t('empty.noQuotaRequests', 'ยังไม่มีคำขอเพิ่มโควต้า') + '</div>'; return; }
-      self._cachedQuota = rows;
-      var pend = rows.filter(function (r) { return r.status === 'pending'; });
-      var done = rows.filter(function (r) { return r.status !== 'pending'; }).slice(0, 5);
-      wrap.innerHTML = pend.concat(done).map(function (r) { return self._renderQuotaRow(r); }).join('')
-        + '<div class="ad-card-foot"><span>' + rows.length + ' ' + t('lbl.requestsTotal', 'requests') + ' · ' + pending + ' ' + t('lbl.pending', 'pending') + '</span></div>';
-    };
-    if (Array.isArray(preloaded)) { paint(preloaded); return; }
-    wrap.innerHTML = '<div class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</div>';
+    wrap.innerHTML = '<div class="qr-loading">' + t('common.loading', '⏳ กำลังโหลด...') + '</div>';
     fetch(BASE + '/api/quota-requests?limit=50', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) { wrap.innerHTML = '<div class="ad-error">' + escapeHtml(d.error || 'Failed') + '</div>'; return; }
-        paint(d.requests || []);
+        if (!d.ok) {
+          wrap.innerHTML = '<div class="qr-empty">⚠ ' + escapeHtml(d.error || 'Failed') + '</div>';
+          return;
+        }
+        var rows = d.requests || [];
+        var pending = rows.filter(function (r) { return r.status === 'pending'; }).length;
+        var badge = document.getElementById('qr-pending-badge');
+        if (badge) {
+          badge.textContent = pending;
+          badge.style.display = pending > 0 ? 'inline-flex' : 'none';
+        }
+        if (rows.length === 0) {
+          wrap.innerHTML = '<div class="qr-empty">' + t('empty.noQuotaRequests', 'ยังไม่มีคำขอเพิ่มโควต้า') + '</div>';
+          return;
+        }
+        self._cachedQuota = rows;   // so the resolve modal can read details
+        wrap.innerHTML = rows.map(function (r) { return self._renderQuotaRow(r); }).join('');
       })
-      .catch(function (e) { wrap.innerHTML = '<div class="ad-error">' + escapeHtml(e.message) + '</div>'; });
+      .catch(function (e) {
+        wrap.innerHTML = '<div class="qr-empty">⚠ ' + escapeHtml(e.message) + '</div>';
+      });
   },
 
   _renderQuotaRow: function (r) {
+    var statusClass = 'qr-status-badge ' + r.status;
+    var rowClass    = 'qr-row' + (r.status === 'pending' ? ' pending' : '');
     var dt = new Date(r.created_at);
-    var dtStr = dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    var initial = (r.user_display || '?').charAt(0).toUpperCase();
-    var status = r.status === 'pending' ? '<span class="ad-chip warn">' + t('qr.pending', 'Pending') + '</span>'
-      : r.status === 'approved' ? '<span class="ad-chip ok">' + t('qr.approved', 'Approved') + '</span>'
-      : '<span class="ad-chip bad">' + t('qr.denied', 'Denied') + '</span>';
-    var act = r.status === 'pending'
-      ? '<div class="act"><button class="ad-btn sm primary" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'approve\')"><svg class="ic sm"><use href="#i-check"/></svg>' + escapeHtml(t('qr.btnApprove', 'อนุมัติ')) + '</button>'
-        + '<button class="ad-btn sm ghost" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'deny\')">' + escapeHtml(t('qr.btnDeny', 'ปฏิเสธ')) + '</button></div>'
-      : '';
-    return '<div class="ad-req">'
-      + '<div class="top"><span class="ad-avatar">' + escapeHtml(initial) + '</span><b>' + escapeHtml(r.user_display) + '</b>' + status
-      +   '<span class="amt">+<b>฿' + Number(r.requested_extra).toFixed(0) + '</b> ' + escapeHtml(t('lbl.today', 'วันนี้')) + '</span></div>'
-      + (r.reason ? '<div class="why">' + escapeHtml(r.reason) + '</div>' : '')
-      + '<div class="meta">' + (r.project_name ? escapeHtml(r.project_name) + ' · ' : '') + dtStr
-      +   (r.resolved_by_display ? ' · ' + escapeHtml(t('lbl.resolvedByPrefix', 'by ')) + escapeHtml(r.resolved_by_display) : '') + '</div>'
-      + act
+    var dtStr = dt.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+    var actions;
+    if (r.status === 'pending') {
+      actions =
+        '<button class="qr-btn approve" onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'approve\')">Approve</button>' +
+        '<button class="qr-btn deny"    onclick="admin.resolveQuotaRequest(' + r.request_id + ',\'deny\')">Deny</button>';
+    } else {
+      var resolver = r.resolved_by_display ? t('lbl.resolvedByPrefix', ' โดย ') + escapeHtml(r.resolved_by_display) : '';
+      actions = '<span class="' + statusClass + '">' + r.status + '</span>' +
+                '<span class="qr-meta" style="margin-left:10px">' + resolver + '</span>';
+    }
+    return ''
+      + '<div class="' + rowClass + '">'
+      +   '<div class="qr-info">'
+      +     '<div class="qr-line1">'
+      +       (r.status === 'pending' ? '<span class="qr-status-badge pending">pending</span>' : '')
+      +       '<strong>' + escapeHtml(r.user_display) + '</strong>'
+      +       '<span style="color:var(--text-3);font-size:.82rem">' + escapeHtml(t('lbl.requestedIncrease', 'ขอเพิ่ม')) + '</span>'
+      +       '<span class="qr-amount">฿' + Number(r.requested_extra).toFixed(2) + '</span>'
+      +       '<span style="color:var(--text-3);font-size:.82rem">' + escapeHtml(t('lbl.today', 'วันนี้')) + '</span>'
+      +     '</div>'
+      +     (r.reason ? '<div class="qr-reason" title="' + escapeHtml(r.reason) + '">' + escapeHtml(t('lbl.reasonPrefix', 'เหตุผล: ')) + escapeHtml(r.reason) + '</div>' : '')
+      +     '<div class="qr-meta">'
+      +       '<span>' + dtStr + '</span>'
+      +       (r.project_name ? '<span>' + escapeHtml(r.project_name) + '</span>' : '')
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="qr-actions">' + actions + '</div>'
       + '</div>';
   },
 

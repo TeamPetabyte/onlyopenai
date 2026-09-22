@@ -1,5 +1,5 @@
 // credits.js — หน้า Credit / daily cap
-import { escapeHtml, jsArg, flash, formatMoney, hideModal, showModal } from './helpers.js';
+import { escapeHtml, jsArg, flash, hideModal, showModal } from './helpers.js';
 
 export default {
   // เรนเดอร์จาก cache ทันทีถ้ามี แล้ว fetch สดมาทับ — หน้าจอไม่ว่างเปล่า
@@ -11,9 +11,9 @@ export default {
     if (this._cachedDBProjects && this._cachedDBProjects.length) {
       this._renderBalanceTable(this._cachedDBProjects);
     } else if (balEl) {
-      balEl.innerHTML = '<tbody><tr><td class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</td></tr></tbody>';
+      balEl.innerHTML = '<tbody><tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:24px">⏳ กำลังโหลด...</td></tr></tbody>';
     }
-    if (hisEl) hisEl.innerHTML = '<tbody><tr><td class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</td></tr></tbody>';
+    if (hisEl) hisEl.innerHTML = '<tbody><tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:24px">⏳ กำลังโหลด...</td></tr></tbody>';
 
     Promise.all([
       this.fetchProjectsFromDB().catch(function (e) {
@@ -42,34 +42,65 @@ export default {
   _renderBalanceTable: function (projects) {
     var el = document.getElementById('balance-table');
     if (!el) return;
-    if (!projects.length) { el.innerHTML = '<tbody><tr><td class="ad-empty">' + t('empty.noProjectsTable', 'ยังไม่มี project') + '</td></tr></tbody>'; return; }
-    var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
-    var total = 0;
+    if (!projects.length) {
+      el.innerHTML = '<tbody><tr><td colspan="3" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noProjectsTable', 'ยังไม่มี project') + '</td></tr></tbody>';
+      return;
+    }
+    var self = this;
     var rows = projects.map(function (p) {
-      var bal = nz(p.balance != null ? p.balance : p.totalTopUp); total += bal;
-      var life = nz(p.lifetimeAmount);
-      var note = life > 0 && bal <= 0 ? '<span style="color:var(--danger)">' + t('proj.depleted', 'out of credit') + '</span>' : (p.desc ? escapeHtml(p.desc) : escapeHtml(t('proj.lifetimeTopup', 'Lifetime top-up')) + ' ' + formatMoney(life));
-      return '<tr><td><b>' + escapeHtml(p.name) + '</b><span style="display:block;font-size:11.5px;color:var(--text-3)">' + note + '</span></td>'
-        + '<td class="num"' + (life > 0 && bal <= 0 ? ' style="color:var(--danger)"' : '') + '>' + formatMoney(bal) + '</td>'
-        + '<td class="num"><button class="ad-btn sm" onclick="admin.openTopup(\'' + jsArg(p.id) + '\')"><svg class="ic sm"><use href="#i-plus"/></svg>' + t('btn.topupShort', 'Top up') + '</button></td></tr>';
+      var bal = parseFloat(p.totalTopUp || 0);
+      return '<tr>'
+        + '<td><b>' + escapeHtml(p.name) + '</b>'
+            + (p.desc ? '<div style="font-size:.72rem;color:var(--text-3);margin-top:2px">' + escapeHtml(p.desc) + '</div>' : '')
+        + '</td>'
+        + '<td class="val" style="font-weight:700;color:var(--text-1)">' + self._formatBahtFmt(bal) + '</td>'
+        + '<td style="text-align:right">'
+            + '<button class="btn-action btn-primary-sm" style="padding:4px 12px;font-size:1rem;line-height:1" '
+            + 'title="Top up" onclick="admin.openTopup(\'' + jsArg(p.id) + '\')">+</button>'
+        + '</td>'
+        + '</tr>';
     }).join('');
-    el.innerHTML = '<thead><tr><th>' + t('col.project', 'Project') + '</th><th class="num">' + t('col.balance', 'Balance') + '</th><th></th></tr></thead><tbody>' + rows
-      + '<tr><td><b>' + t('lbl.total', 'Total') + '</b></td><td class="num"><b>' + formatMoney(total) + '</b></td><td></td></tr></tbody>';
+    el.innerHTML =
+        '<thead><tr>'
+      +   '<th>Project Name</th>'
+      +   '<th>Project Credit</th>'
+      +   '<th style="text-align:right">Top up</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody>';
   },
 
   _renderTopupHistoryTable: function (history) {
     var el = document.getElementById('topup-history-table');
     if (!el) return;
-    if (!history.length) { el.innerHTML = '<tbody><tr><td class="ad-empty">' + t('empty.noTopupHistory', 'ยังไม่มีประวัติการเติมเงิน') + '</td></tr></tbody>'; return; }
+    if (!history.length) {
+      el.innerHTML = '<tbody><tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noTopupHistory', 'ยังไม่มีประวัติการเติมเงิน') + '</td></tr></tbody>';
+      return;
+    }
+    var self = this;
     var rows = history.map(function (h) {
       var d = new Date(h.createdAt);
-      var when = isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return '<tr><td class="ad-mono muted" style="white-space:nowrap">' + when + '</td>'
-        + '<td>' + escapeHtml(h.projectName || h.projectId || '—') + (h.note ? '<span style="display:block;font-size:11.5px;color:var(--text-3)">' + escapeHtml(h.note) + '</span>' : '') + '</td>'
-        + '<td class="muted">' + escapeHtml(h.userName || ('user#' + h.userId)) + '</td>'
-        + '<td class="num"><span class="pos">+' + formatMoney(h.amount) + '</span></td></tr>';
+      var when = isNaN(d.getTime()) ? '—'
+        : (d.getDate().toString().padStart(2, '0') + '/'
+         + (d.getMonth() + 1).toString().padStart(2, '0') + '/'
+         + d.getFullYear() + ' '
+         + d.getHours().toString().padStart(2, '0') + ':'
+         + d.getMinutes().toString().padStart(2, '0'));
+      var amount = parseFloat(h.amount || 0);
+      var details = 'Top up ' + self._formatBahtFmt(amount)
+        + (h.note ? '<div style="font-size:.72rem;color:var(--text-3);margin-top:2px;font-style:italic">' + escapeHtml(h.note) + '</div>' : '');
+      return '<tr>'
+        + '<td>' + when + '</td>'
+        + '<td>' + details + '</td>'
+        + '<td>' + escapeHtml(h.projectName || h.projectId || '—') + '</td>'
+        + '<td>' + escapeHtml(h.userName || ('user#' + h.userId)) + '</td>'
+        + '</tr>';
     }).join('');
-    el.innerHTML = '<thead><tr><th>' + t('col.date', 'Date') + '</th><th>' + t('col.project', 'Project') + '</th><th>' + t('col.by', 'By') + '</th><th class="num">' + t('col.amount', 'Amount') + '</th></tr></thead><tbody>' + rows + '</tbody>';
+    el.innerHTML =
+        '<thead><tr>'
+      +   '<th>Date &amp; Time</th>'
+      +   '<th>Details</th>'
+      +   '<th>Project</th>'
+      +   '<th>User</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody>';
   },
 
   // Credits page: สองแท็บ Credit Management + Usage Analytics
@@ -123,13 +154,13 @@ export default {
     if (!tableEl) return;
     // silent=true (poll refresh): keep current rows on screen, no spinner flicker.
     if (!silent) {
-      tableEl.innerHTML = '<tbody><tr><td class="ad-empty">' + t('common.loading', 'กำลังโหลด...') + '</td></tr></tbody>';
+      tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('common.loading', '⏳ กำลังโหลด...') + '</td></tr></tbody>';
     }
     fetch(BASE + '/api/credits', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.credits)) {
-          tableEl.innerHTML = '<tbody><tr><td class="ad-empty">' + t('empty.noDataFound', 'ไม่พบข้อมูล') + '</td></tr></tbody>';
+          tableEl.innerHTML = '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noDataFound', 'ไม่พบข้อมูล') + '</td></tr></tbody>';
           return;
         }
         self._cachedCredits = d.credits;
@@ -143,54 +174,79 @@ export default {
   // ตาราง Cap — เงินอยู่ที่ pool, daily_cap ของ user คือเพดาน
   _renderCreditTable: function (rows) {
     var el = document.getElementById('credit-table');
-    var kp = document.getElementById('cap-kpis');
     if (!el) return;
-    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
-    var nz = function (v) { var n = Number(v); return isFinite(n) ? n : 0; };
-    var spentToday = rows.reduce(function (s, r) { return s + nz(r.spentToday); }, 0);
-    var withCap = rows.filter(function (r) { return r.projectId && r.dailyCap != null; });
-    var near = withCap.filter(function (r) { var cap = nz(r.dailyCap) + nz(r.bonusBalance); return cap > 0 && nz(r.spentToday) / cap >= 0.8 && nz(r.spentToday) < cap; }).length;
-    var blocked = withCap.filter(function (r) { var cap = nz(r.dailyCap) + nz(r.bonusBalance); return cap > 0 && nz(r.spentToday) >= cap; }).length;
-    var active = rows.filter(function (r) { return nz(r.spentToday) > 0; }).length;
-    var kpi = function (k, v, d, color) { return '<div class="ad-kpi"><span class="k">' + k + '</span><span class="v"' + (color ? ' style="color:' + color + '"' : '') + '>' + v + '</span><span class="d">' + d + '</span></div>'; };
-    if (kp) kp.innerHTML = kpi(TT('cap.spentToday', 'Spent today'), formatMoney(spentToday), active + ' ' + TT('lbl.of', 'of') + ' ' + rows.length + ' ' + TT('lbl.usersActive', 'users active'))
-      + kpi(TT('cap.withCap', 'Users with a cap'), withCap.length, (rows.length - withCap.length) + ' ' + TT('cap.unlimited', 'unlimited'))
-      + kpi(TT('cap.nearCap', 'Near cap (≥80%)'), near, TT('cap.nearCapSub', 'the chat warns them at 80%'), near ? 'var(--warning)' : '')
-      + kpi(TT('cap.blocked', 'Blocked today'), blocked, TT('cap.blockedSub', 'sends refused at 100%'), blocked ? 'var(--danger)' : '');
     if (!rows.length) {
-      el.innerHTML = '<tbody><tr><td class="ad-empty">' + t('empty.noUsersShort', 'ยังไม่มี user') + '</td></tr></tbody>';
+      el.innerHTML = '<thead><tr><th>' + t('col.username', 'Username') + '</th><th>' + t('col.project', 'Project') + '</th><th>' + t('col.projectPool', 'Project Pool') + '</th><th>' + t('col.dailyCap', 'Daily Cap') + '</th><th>' + t('col.usedTodayCap', 'ใช้วันนี้ / Cap') + '</th><th></th></tr></thead>'
+        + '<tbody><tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:24px">' + t('empty.noUsersShort', 'ยังไม่มี user') + '</td></tr></tbody>';
       return;
     }
+    var fmt = function (n) {
+      return 'THB ' + parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    var fmtB = function (n) {
+      return '฿' + parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+    var TTc = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     var tbody = rows.map(function (r) {
       var noProject = !r.projectId;
       var hasCap = !(r.dailyCap === null || r.dailyCap === undefined);
-      var base = hasCap ? nz(r.dailyCap) : null;
-      var bonus = nz(r.bonusBalance);
+      var base = hasCap ? parseFloat(r.dailyCap) : null;
+      var bonus = parseFloat(r.bonusBalance || 0);
       var effective = hasCap ? base + bonus : null;
-      var spent = nz(r.spentToday);
-      var initial = (r.displayName || r.username || '?').charAt(0).toUpperCase();
+      var spent = parseFloat(r.spentToday || 0);
+
+      var capCell = !hasCap
+        ? '<span style="opacity:.45;font-style:italic">' + TTc('val.unlimited','ไม่จำกัด') + '</span>'
+        : '<b style="color:var(--text-1)">' + fmtB(base) + '</b>'
+          + (bonus > 0 ? '<span style="color:#16a34a;font-size:.7rem" title="bonus คงเหลือ"> +' + fmtB(bonus) + ' bonus</span>' : '')
+          + '<span style="color:var(--text-3);font-size:.72rem"> ' + TTc('unit.perDay','/วัน') + '</span>';
+
       var usedCell;
-      if (noProject) usedCell = '<span class="muted">—</span>';
-      else if (!hasCap) usedCell = '<div class="ad-cap"><div class="ad-bar"><i style="width:0"></i></div><span class="t">' + formatMoney(spent) + ' · ' + TT('val.unlimited', 'ไม่จำกัด') + '</span></div>';
-      else {
+      if (!hasCap) {
+        usedCell = '<span style="font-family:var(--font-mono);color:var(--text-2)">' + fmtB(spent) + '</span>'
+                 + '<span style="color:var(--text-3);font-size:.7rem"> ' + TTc('lbl.used','ใช้แล้ว') + '</span>';
+      } else {
         var ratio = effective > 0 ? Math.min(1, spent / effective) : (spent > 0 ? 1 : 0);
         var pct = Math.round(ratio * 100);
-        usedCell = '<div class="ad-cap"><div class="ad-bar ' + (ratio >= 1 ? 'bad' : ratio >= 0.8 ? 'warn' : '') + '"><i style="width:' + pct + '%"></i></div><span class="t">' + formatMoney(spent) + ' · ' + pct + '%</span></div>';
+        var barColor = ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#16a34a';
+        usedCell =
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:120px">'
+          +   '<div style="font-family:var(--font-mono);font-size:.8rem">'
+          +     '<b style="color:' + barColor + '">' + fmtB(spent) + '</b>'
+          +     '<span style="color:var(--text-3)"> / ' + fmtB(effective) + '</span>'
+          +     '<span style="color:var(--text-3);font-size:.7rem"> · ' + pct + '%</span>'
+          +   '</div>'
+          +   '<div style="height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden">'
+          +     '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';transition:width .3s"></div>'
+          +   '</div>'
+          + '</div>';
       }
-      var capCell = !hasCap ? '<span class="muted">' + TT('val.unlimited', 'ไม่จำกัด') + '</span>' : formatMoney(base);
-      var bonusCell = bonus > 0 ? '<span class="ad-chip ok">+' + formatMoney(bonus) + ' ' + TT('lbl.today', 'today') + '</span>' : '<span class="muted">—</span>';
+
       return '<tr>'
-        + '<td><div class="ad-who"><span class="ad-avatar">' + escapeHtml(initial) + '</span><div><b>' + escapeHtml(r.displayName || r.username) + '</b><span>' + escapeHtml(r.username) + (r.projectName ? ' · ' + escapeHtml(r.projectName) : '') + '</span></div></div></td>'
-        + '<td style="width:30%">' + usedCell + '</td>'
-        + '<td class="num">' + capCell + '</td>'
-        + '<td>' + bonusCell + '</td>'
-        + '<td class="num">' + (noProject ? '—' : formatMoney(r.projectBalance)) + '</td>'
-        + '<td><div class="ad-acts"><button class="ad-btn sm" ' + (noProject ? 'disabled' : '') + ' onclick="admin.openEditCap(' + r.userId + ')"><svg class="ic sm"><use href="#i-pencil"/></svg>' + escapeHtml(TT('tt.setDailyCap', 'ตั้ง Daily Cap')) + '</button></div></td>'
+        + '<td><b>' + escapeHtml(r.displayName || r.username) + '</b>'
+            + '<div style="font-size:.7rem;color:var(--text-3);margin-top:2px">@' + escapeHtml(r.username) + '</div></td>'
+        + '<td>' + escapeHtml(r.projectName || '—') + '</td>'
+        + '<td class="val">' + (noProject ? '—' : fmt(r.projectBalance)) + '</td>'
+        + '<td class="val">' + capCell + '</td>'
+        + '<td>' + (noProject ? '—' : usedCell) + '</td>'
+        + '<td style="text-align:right">'
+            + '<button class="btn-icon-edit" title="' + escapeHtml(t('tt.setDailyCap', 'ตั้ง Daily Cap')) + '" ' + (noProject ? 'disabled style="opacity:.4;cursor:not-allowed"' : '')
+            + ' onclick="admin.openEditCap(' + r.userId + ')">'
+            + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+            + '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
+            + '</button></td>'
         + '</tr>';
     }).join('');
+    var TT = function (k, f) { return (typeof I18N !== 'undefined') ? I18N.t(k, f) : f; };
     el.innerHTML =
-        '<thead><tr><th>' + TT('col.user', 'User') + '</th><th>' + TT('col.usedToday', 'Used today') + '</th><th class="num">' + TT('col.dailyCap', 'Daily Cap') + '</th><th>' + TT('col.bonus', 'Bonus') + '</th><th class="num">' + TT('col.projectPool', 'Project pool') + '</th><th></th></tr></thead>'
-      + '<tbody>' + tbody + '</tbody>';
+        '<thead><tr>'
+      +   '<th>' + TT('col.username','Username') + '</th>'
+      +   '<th>' + TT('col.project','Project') + '</th>'
+      +   '<th>' + TT('col.projectPool','Project Pool') + '</th>'
+      +   '<th>' + TT('col.dailyCap','Daily Cap') + '</th>'
+      +   '<th>' + TT('col.usedTodayCap','ใช้วันนี้ / Cap') + '</th>'
+      +   '<th></th>'
+      + '</tr></thead><tbody>' + tbody + '</tbody>';
   },
 
   // Open the Daily Cap editor for a user.

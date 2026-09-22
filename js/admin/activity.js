@@ -1,38 +1,41 @@
 // activity.js — Activity log (audit + action)
-import { escapeHtml, flash, formatDateStd, formatTHB, hideModal, showModal } from './helpers.js';
+import { escapeHtml, flash, formatDate, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
   // Chat activity (per-user history)
   renderActivity: function () {
     var container = document.getElementById('activity-log');
-    container.innerHTML = '<div class="ad-empty">' + t('common.loadingFromDbData', 'กำลังโหลดข้อมูลจาก DB...') + '</div>';
+    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-3);font-size:.85rem">' + t('common.loadingFromDbData', '⏳ กำลังโหลดข้อมูลจาก DB...') + '</div>';
     this.fetchUsersFromDB().then(function (users) {
       var allLogs = [];
       users.forEach(function (u) {
-        u.history.forEach(function (h) { allLogs.push(Object.assign({}, h, { username: u.username, displayName: u.displayName })); });
+        u.history.forEach(function (h) {
+          allLogs.push(Object.assign({}, h, { username: u.username, displayName: u.displayName }));
+        });
       });
       allLogs.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-      if (allLogs.length === 0) { container.innerHTML = '<div class="ad-empty">' + t('empty.noActivity', 'ยังไม่มี activity ใดๆ') + '</div>'; return; }
-      var dayKey = function (d) { return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); };
-      var today = dayKey(new Date()), yesterday = dayKey(new Date(Date.now() - 86400000));
-      var html = '', lastDay = null;
-      allLogs.slice(0, 200).forEach(function (h) {
-        var d = new Date(h.timestamp); var k = dayKey(d);
-        if (k !== lastDay) {
-          lastDay = k;
-          html += '<div class="ad-day">' + (k === today ? t('date.today', 'Today') : k === yesterday ? t('date.yesterday', 'Yesterday') : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })) + '</div>';
-        }
-        html += '<div class="ad-tl">'
-          + '<span class="time">' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>'
-          + '<span class="icn accent"><svg class="ic sm"><use href="#i-sparkle"/></svg></span>'
-          + '<div class="what"><b>' + escapeHtml(h.displayName || h.username || '') + '</b> <span>chat · </span>' + escapeHtml(h.skillName || '—')
-          +   ' <span>· ' + (h.inputTokens || 0).toLocaleString() + ' in / ' + (h.outputTokens || 0).toLocaleString() + ' out tokens</span></div>'
-          + '<span class="right">' + formatTHB(h.cost) + '</span>'
+
+      if (allLogs.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>' + t('empty.noActivity', 'ยังไม่มี activity ใดๆ') + '</p></div>';
+        return;
+      }
+      // escape ทุกสตริงจาก DB — displayName ตั้งเองได้ ไม่ escape = stored XSS ในหน้า admin
+      container.innerHTML = allLogs.map(function (h) {
+        var emoji = escapeHtml(h.skillEmoji || '🤖');
+        var name  = escapeHtml(h.displayName || h.username || '');
+        var uname = escapeHtml(h.username || '');
+        var skill = escapeHtml(h.skillName || '—');
+        return '<div class="log-entry">'
+          + '<div>'
+          + '<div class="log-user">' + emoji + ' ' + name + ' <span style="color:var(--text-3);font-weight:400">(@' + uname + ')</span></div>'
+          + '<div class="log-skill">' + skill + ' · ' + (h.inputTokens || 0).toLocaleString() + ' in / ' + (h.outputTokens || 0).toLocaleString() + ' out tokens</div>'
+          + '<div class="log-time">' + formatDate(h.timestamp) + '</div>'
+          + '</div>'
+          + '<div class="log-cost">' + formatTHB(h.cost) + '</div>'
           + '</div>';
-      });
-      container.innerHTML = html + (allLogs.length > 200 ? '<div class="ad-card-foot"><span>' + t('lbl.showing200', 'Showing the latest 200 of') + ' ' + allLogs.length + '</span></div>' : '');
+      }).join('');
     }).catch(function () {
-      container.innerHTML = '<div class="ad-error">' + t('empty.loadFailedServer', 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่') + '</div>';
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>' + t('empty.loadFailedServer', 'ไม่สามารถโหลดข้อมูลได้ — ตรวจสอบว่า server กำลังรันอยู่') + '</p></div>';
     });
   },
 
@@ -65,16 +68,16 @@ export default {
   renderAuditLog: function () {
     var body = document.getElementById('audit-log-body');
     if (!body) return;
-    body.innerHTML = '<tr><td colspan="4" class="ad-empty">' + t('common.loadingFromDb', 'กำลังโหลดจาก DB...') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('common.loadingFromDb', '⏳ กำลังโหลดจาก DB...') + '</td></tr>';
     fetch(BASE + '/api/audit-log?event=login_ok', { headers: Auth.authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="4" class="ad-empty">' + t('empty.noAuditData', 'ไม่พบข้อมูล audit log') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noAuditData', 'ไม่พบข้อมูล audit log') + '</td></tr>';
           return;
         }
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="4" class="ad-empty">' + t('empty.noLoginHistory', 'ยังไม่มีประวัติการเข้าออกระบบ') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noLoginHistory', 'ยังไม่มีประวัติการเข้าออกระบบ') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
@@ -89,23 +92,23 @@ export default {
               ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm'
               : (mins > 0 ? mins + 'm ' + secs + 's' : secs + 's');
           }
-          var fmt = function (d) { return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
-          var inFmt  = inDt ? fmt(inDt) : '—';
-          var outFmt = outDt ? fmt(outDt) : '<span class="muted">—</span>';
-          var live = inDt && !outDt && (Date.now() - inDt.getTime()) < 8 * 3600000;
-          var status = live ? '<span class="ad-chip ok"><span class="dot"></span>' + t('lbl.activeNow', 'Active now') + '</span>' : '<span class="ad-chip"><span class="dot"></span>' + t('lbl.loggedOut', 'Logged out') + '</span>';
+          var inFmt  = inDt  ? formatDate(inDt.toISOString())  : '—';
+          // log_out_time NULL = ยังไม่บันทึก logout — โชว์ "—" ไม่ใช่ "ยังออนไลน์"
+          var outFmt = outDt ? formatDate(outDt.toISOString()) : '<span style="color:var(--text-3)">—</span>';
+          // escape user-provided fields before inlining into HTML.
           var safeName  = escapeHtml(l.display_name || l.name || '—');
           var safeUname = escapeHtml(l.username || '—');
-          var initial = (l.display_name || l.name || l.username || '?').charAt(0).toUpperCase();
-          return '<tr>'
-            + '<td><div class="ad-who"><span class="ad-avatar">' + escapeHtml(initial) + '</span><div><b>' + safeName + '</b><span>' + safeUname + '</span></div></div></td>'
-            + '<td class="ad-mono">' + inFmt + ' ' + status + '</td>'
-            + '<td class="ad-mono">' + outFmt + '</td>'
-            + '<td class="num">' + dur + '</td></tr>';
+          return '<tr>' +
+            '<td data-label="User"><span class="audit-name">' + safeName + '</span></td>' +
+            '<td data-label="Username"><span class="audit-username">@' + safeUname + '</span></td>' +
+            '<td data-label="' + escapeHtml(t('col.login', 'เข้าสู่ระบบ')) + '">' + inFmt + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.logout', 'ออกจากระบบ')) + '">' + outFmt + '</td>' +
+            '<td data-label="' + escapeHtml(t('col.duration', 'ระยะเวลา')) + '"><span class="audit-duration">' + dur + '</span></td>' +
+            '</tr>';
         }).join('');
       })
       .catch(function () {
-        body.innerHTML = '<tr><td colspan="4" class="ad-empty">' + t('empty.serverConnFail', 'ไม่สามารถเชื่อมต่อ server ได้') + '</td></tr>';
+        body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.serverConnFail', 'ไม่สามารถเชื่อมต่อ server ได้') + '</td></tr>';
       });
   },
 
@@ -243,7 +246,7 @@ export default {
       var pname = (cj2.after && cj2.after.project_name)
                || (cj2.before && cj2.before.project_name)
                || (cj2.after && cj2.after.name);
-      var s = (pname ? this._esc(pname) : 'Project');
+      var s = '📁 ' + (pname ? this._esc(pname) : 'Project');
       if (pid) s += ' <span class="action-target-code">' + this._esc(pid) + '</span>';
       return s;
     }
@@ -254,7 +257,7 @@ export default {
     var self = this;
     var body = document.getElementById('action-log-body');
     if (!body) return;
-    body.innerHTML = '<tr><td colspan="5" class="ad-empty">' + t('common.loadingFromDb', 'กำลังโหลดจาก DB...') + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('common.loadingFromDb', '⏳ กำลังโหลดจาก DB...') + '</td></tr>';
 
     // filters are hidden inputs now (custom dropdowns above)
     var actionVal = (document.getElementById('action-log-filter-type') || {}).value || '';
@@ -270,18 +273,19 @@ export default {
       .then(function (d) {
         var countEl = document.getElementById('action-log-count');
         if (!d.ok || !Array.isArray(d.logs)) {
-          body.innerHTML = '<tr><td colspan="5" class="ad-empty">' + t('empty.noActionLogData', 'ไม่พบข้อมูล action log') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogData', 'ไม่พบข้อมูล action log') + '</td></tr>';
           if (countEl) countEl.textContent = '';
           return;
         }
         if (countEl) countEl.textContent = d.logs.length + ' record' + (d.logs.length === 1 ? '' : 's');
         if (d.logs.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="ad-empty">' + t('empty.noActionLogFiltered', 'ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก') + '</td></tr>';
+          body.innerHTML = '<tr><td colspan="5" class="audit-empty">' + t('empty.noActionLogFiltered', 'ยังไม่มีประวัติการแก้ไขโดย admin ตามตัวกรองที่เลือก') + '</td></tr>';
           return;
         }
         body.innerHTML = d.logs.map(function (l) {
-          var dt = l.edit_time ? formatDateStd(l.edit_time) : (l.edit_date || '—');
-          var adminHtml = '<div class="ad-who"><div><b>' + self._esc(l.display_name || '—') + '</b><span>' + self._esc(l.username || '—') + '</span></div></div>';
+          var dt = l.edit_time ? formatDate(new Date(l.edit_time).toISOString()) : (l.edit_date || '—');
+          var adminHtml = '<span class="audit-name">' + self._esc(l.display_name || '—') + '</span>' +
+                          '<br><span class="audit-username" style="font-size:.74rem">@' + self._esc(l.username || '—') + '</span>';
 
           var meta = self._actionLabels[l.action_type] || { icon: '', text: l.action_type || 'unknown', variant: '' };
           var actionText = t('action.' + l.action_type, meta.text);
