@@ -111,6 +111,7 @@ const chatSchema = z.object({
     model:     z.string().trim().max(64).optional(),
     effort:    z.string().trim().max(16).optional(),
     useRouter: z.coerce.boolean().optional(),
+    regenerate: z.boolean().optional(),   // replace the session's last turn instead of appending
 });
 
 const historyAddSchema = z.object({

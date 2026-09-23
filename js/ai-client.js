@@ -48,6 +48,7 @@ const AIClient = {
     /** Read SSE stream from backend in real-time */
     async _streamFromBackend(skillId, prompt, systemPrompt, onChunk, onDone, rates, sessionId, onError, opts = {}) {
         const startTime = Date.now();
+        let liveSessionId = sessionId || null;   // a new chat's id arrives in the first `session` event
         const inputRate = (rates && rates.inputRate) || 0.50;
         const outputRate = (rates && rates.outputRate) || 1.50;
 
@@ -70,6 +71,7 @@ const AIClient = {
             // Server validates model/effort against its allowlist and falls back to its default.
             if (opts.model)  body.model  = opts.model;
             if (opts.effort) body.effort = opts.effort;
+            if (opts.regenerate) body.regenerate = true;
             if (sessionId) body.sessionId = sessionId;
             const res = await fetch(`${this.BACKEND_URL}/api/chat`, {
                 method: 'POST',
@@ -91,7 +93,7 @@ const AIClient = {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
                     durationMs: Date.now() - startTime,
-                    sessionId: sessionId || null,
+                    sessionId: liveSessionId,
                     blocked: true,
                 });
                 return;
@@ -119,6 +121,9 @@ const AIClient = {
 
                     if (event.type === 'chunk') {
                         onChunk(event.text);
+
+                    } else if (event.type === 'session') {
+                        liveSessionId = event.sessionId;
 
                     } else if (event.type === 'tool_call' || event.type === 'tool_result') {
                         // tool activity (RAG search etc.) for the live badge
@@ -157,7 +162,7 @@ const AIClient = {
                         await onDone({
                             inputTokens: 0, outputTokens: 0, cost: 0,
                             durationMs: Date.now() - startTime,
-                            sessionId: sessionId || null,
+                            sessionId: liveSessionId,
                             blocked: true,
                         });
                         return;
@@ -170,7 +175,7 @@ const AIClient = {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
                     durationMs: Date.now() - startTime,
-                    sessionId: sessionId || null,
+                    sessionId: liveSessionId,
                     stopped: true,
                 });
             }
@@ -182,7 +187,7 @@ const AIClient = {
                 await onDone({
                     inputTokens: 0, outputTokens: 0, cost: 0,
                     durationMs: Date.now() - startTime,
-                    sessionId: sessionId || null,
+                    sessionId: liveSessionId,
                     stopped: true,
                 });
                 return;
@@ -200,7 +205,7 @@ const AIClient = {
             await onDone({
                 inputTokens: 0, outputTokens: 0, cost: 0,
                 durationMs: Date.now() - startTime,
-                sessionId: sessionId || null,
+                sessionId: liveSessionId,
                 blocked: true,
             });
         } finally {

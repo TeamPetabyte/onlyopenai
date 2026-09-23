@@ -97,8 +97,50 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
     }
 
     // Post-process: syntax highlight + copy buttons
+    // highlight.js ships no ABAP grammar, and nearly every answer here is ABAP
+    const ABAP_KEYWORDS = 'report program include function-pool class-pool form endform perform using changing '
+        + 'tables data types constants field-symbols parameters select-options statics type ref to like value '
+        + 'begin end of occurs with header line default key unique non-unique sorted hashed standard table '
+        + 'class endclass definition implementation public private protected section inheriting from final '
+        + 'abstract create method endmethod methods class-methods class-data interface endinterface interfaces '
+        + 'importing exporting returning raising exceptions receiving optional preferred parameter '
+        + 'function endfunction call function method transaction screen new cast conv corresponding '
+        + 'if elseif else endif case when others endcase do enddo while endwhile loop at endloop into '
+        + 'assigning reference exit continue check return try catch cleanup endtry raise exception '
+        + 'select single endselect distinct up rows where and or not in is between order by group having '
+        + 'as for all entries join inner left outer on appending insert update modify delete read '
+        + 'append collect sort clear free refresh move move-corresponding write message start-of-selection '
+        + 'end-of-selection initialization at selection-screen top-of-page authority-check commit rollback work '
+        + 'concatenate split condense replace translate find shift separated respecting blanks occurrences '
+        + 'binary search transporting index let base bound supplied assigned initial';
+    let abapRegistered = false;
+    function registerAbap() {
+        if (abapRegistered || window.hljs.getLanguage('abap')) return;
+        abapRegistered = true;
+        window.hljs.registerLanguage('abap', () => ({
+            name: 'ABAP',
+            case_insensitive: true,
+            keywords: {
+                $pattern: /[\w-]+/,   // hyphenated words: move-corresponding, sy-subrc
+                keyword: ABAP_KEYWORDS,
+                literal: 'abap_true abap_false abap_undefined space',
+                built_in: 'sy-subrc sy-tabix sy-index sy-datum sy-uzeit sy-uname sy-dbcnt sy-langu sy-mandt '
+                    + 'lines strlen xstrlen condense_string boolc xsdbool',
+            },
+            contains: [
+                { scope: 'comment', begin: /^\*/, end: /$/ },   // * in column 1
+                { scope: 'comment', begin: /"/, end: /$/ },
+                { scope: 'string', begin: /'/, end: /'/ },
+                { scope: 'string', begin: /`/, end: /`/ },
+                { scope: 'string', begin: /\|/, end: /\|/, contains: [{ scope: 'subst', begin: /\{/, end: /\}/ }] },
+                { scope: 'number', begin: /\b\d+\b/ },
+            ],
+        }));
+    }
+
     function postProcess(rootEl) {
         if (!rootEl || !libsReady()) return;
+        registerAbap();
 
         // Force safe link attributes.
         rootEl.querySelectorAll('a[href]').forEach(a => {

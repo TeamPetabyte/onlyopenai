@@ -895,6 +895,7 @@ export default {
       description:    (g('es-desc').value || '').trim(),
       openaiPromptId: (g('es-openai').value || '').trim(),
       content:        g('es-content').value || '',
+      create:         g('es-mode').value === 'add',
     };
     if (!payload.id)               { errEl.textContent = t('err.enterSkillId', 'กรุณากรอก Skill ID'); return; }
     if (!payload.content.trim())   { errEl.textContent = t('err.enterContent', 'กรุณากรอก Content (system prompt)'); return; }

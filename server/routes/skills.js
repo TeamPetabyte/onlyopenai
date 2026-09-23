@@ -66,6 +66,10 @@ router.get('/api/skills/:id', requireTrainer, (req, res) => {
 router.post('/api/skills', requireTrainer, async (req, res) => {
     try {
         const body = req.body || {};
+        // "Add Skill" must not silently replace a live prompt that already has this id
+        if (body.create && skillPrompts.getSkill(body.id)) {
+            return res.status(409).json({ ok: false, error: `Skill "${body.id}" already exists — edit it instead` });
+        }
         const result = await skillPrompts.upsertSkill({
             id:             body.id,
             label:          body.label,

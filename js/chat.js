@@ -202,6 +202,8 @@ const ICON = {
 
         // --- New chat ---
         function newChat() {
+            // the running turn would pin its session onto the new chat when it finishes
+            if (State.isRunning) { showToast(t('u.err.pleaseWait'), 'error'); return; }
             toggleSidebar(false);
             // ล้าง hash ด้วย replaceState — ไม่ปั๊ม history
             try {
@@ -550,6 +552,7 @@ const ICON = {
 
         function deleteSession(e, sessionId) {
             if (e && e.stopPropagation) e.stopPropagation();
+            if (State.isRunning && sessionId === State.currentSessionId) { showToast(t('u.err.pleaseWait'), 'error'); return; }
             _pendingDeleteSessionId = sessionId;
             const sess = (State.sessions || []).find(s => s.id === sessionId);
             const titleEl = document.getElementById('confirm-delete-target');
@@ -631,28 +634,30 @@ const ICON = {
         }
 
         // --- Send message ---
-        async function sendMessage() {
+        // regen = { prompt, displayText } re-sends a stored turn (file content included) instead of the input box
+        async function sendMessage(regen) {
             if (State.isRunning) return;
             const inputEl = document.getElementById('chat-input');
-            let userText = inputEl.value.trim();
-            if (!userText && !State.attachedFile) { showToast(t('u.err.enterMessage'), 'error'); return; }
+            let userText = regen ? '' : inputEl.value.trim();
+            if (!regen && !userText && !State.attachedFile) { showToast(t('u.err.enterMessage'), 'error'); return; }
             if (State.balance <= 0) {
                 showToast(t('u.err.creditDepletedContactAdmin'), 'error');
                 return;
             }
             const selectedSkillId = State.selectedSkill || 'auto';
             const skill = PRICING.skills.find(s => s.id === selectedSkillId) || PRICING.skills[0];
-            const displayText = userText || '[File: ' + (State.attachedFile ? State.attachedFile.name : '') + ']';
-            let prompt = userText;
+            const displayText = regen ? regen.displayText : (userText || '[File: ' + (State.attachedFile ? State.attachedFile.name : '') + ']');
+            let prompt = regen ? regen.prompt : userText;
             // เก็บชื่อไฟล์ก่อน removeFile() ล้าง — ไฟล์ที่แก้แล้วต้องกลับไปชื่อเดิม
-            const uploadedName = State.attachedFile ? State.attachedFile.name : null;
-            if (State.attachedFile) prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content;
+            const uploadedName = regen ? regen.uploadedName : (State.attachedFile ? State.attachedFile.name : null);
+            if (!regen && State.attachedFile) prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content;
             // server's chatSchema caps the prompt at 100k chars; keep the file and text so the user can trim
             if (prompt.length > 100000) { showToast(tf('u.err.promptTooLong', { n: prompt.length.toLocaleString() }), 'error'); return; }
-            if (State.attachedFile) removeFile();
-            inputEl.value = ''; inputEl.style.height = 'auto';
+            if (!regen && State.attachedFile) removeFile();
+            if (!regen) { inputEl.value = ''; inputEl.style.height = 'auto'; }
 
-            const userMsg = { role: 'user', content: displayText, timestamp: new Date().toISOString() };
+            // prompt = what the model got (file included), kept for Regenerate
+            const userMsg = { role: 'user', content: displayText, prompt, uploadedName, timestamp: new Date().toISOString() };
             State.currentMessages.push(userMsg);
 
             const area = document.getElementById('chat-area');
@@ -876,7 +881,7 @@ const ICON = {
                 rates,
                 State.currentSessionId,   // thread into an existing chat
                 onChatBlocked,             // 402/429 → block UI
-                { model: State.selectedModel, effort: State.selectedEffort, onTool, onRouted }
+                { model: State.selectedModel, effort: State.selectedEffort, onTool, onRouted, regenerate: !!regen }
             );
         }
 
@@ -1263,9 +1268,9 @@ const ICON = {
             msgs.pop();
             renderChatMessages(msgs);
 
-            const inputEl = document.getElementById('chat-input');
-            inputEl.value = lastUser.content;
-            await sendMessage();
+            // messages loaded from the server already hold the full prompt in content
+            await sendMessage({ prompt: lastUser.prompt || lastUser.content, displayText: lastUser.content,
+                                uploadedName: lastUser.uploadedName || null });
         }
 
         // --- Usage modal ---

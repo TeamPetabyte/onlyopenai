@@ -43,7 +43,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     if (!HAS_API_KEY) { res.json({ ok: false, useMock: true, reason: 'no_api_key' }); return; }
 
     // prompt มาจาก tbl_prompt, ราคาจาก tbl_pricing — ไม่รับจาก body
-    const { prompt, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort } = req.body;
+    const { prompt, useRouter = true, sessionId, skillId, model: bodyModel, effort: bodyEffort, regenerate } = req.body;
     if (!prompt) { res.status(400).json({ ok: false, error: 'prompt required' }); return; }
 
     // เกตเดียวเช็ค pool + daily cap (error code แยกให้ UI); fail-closed —
@@ -80,6 +80,20 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                     return res.status(404).json({ ok: false, error: 'Session not found' });
                 }
                 chatSessionId = n;
+                if (regenerate) {
+                    // drop the turn being redone, so it's neither replayed as history nor stored twice
+                    // (its billing row in tbl_response stays)
+                    const del = await pool.query(
+                        `DELETE FROM tbl_chat_message
+                          WHERE session_id = $1
+                            AND message_id >= (SELECT MAX(message_id) FROM tbl_chat_message
+                                                WHERE session_id = $1 AND role = 'user')`, [n]);
+                    if (del.rowCount) {
+                        await pool.query(
+                            `UPDATE tbl_chat_session SET message_count = GREATEST(0, message_count - $1)
+                              WHERE session_id = $2`, [del.rowCount, n]);
+                    }
+                }
             } else {
                 const title = String(prompt).replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
                 const ins = await pool.query(
@@ -134,6 +148,8 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         if (res.writableEnded) return;
         try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch (_) {}
     };
+    // a new chat's id goes out first — a Stop before `done` would otherwise lose it
+    if (chatSessionId && !sessionId) sendEvent({ type: 'session', sessionId: chatSessionId });
     const startTime = Date.now();
     let inputTokens = 0, outputTokens = 0, cachedTokens = 0, reasoningTokens = 0, fullText = '';
     // Responses path only; stays 0 on Chat Completions.
@@ -232,198 +248,212 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
         const reqEffort = resolveEffort(bodyEffort);
         const acc = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0, fullText: '' };
 
-        if (modelPath === 'responses') {
-            await runResponsesTurn({
-                oai, userId: req.session.userId, model: reqModel, effort: reqEffort,
-                instructions: finalSystemPrompt, userPrompt: finalUserPrompt,
-                history: chatHistory,   // replay this session's prior turns
-                tools: chatTools, sendEvent, acc,
-                isAborted: () => clientAborted,
-                setStream: (s) => { currentOpenAIStream = s; },
-                release: targetRelease,
-            });
-            inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
-            cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
-            fullText = acc.fullText;
-            apiCalls = acc.apiCalls || 0; toolTurns = acc.toolTurns || 0;
-            continuations = acc.continuations || 0;
-        } else {
+        // a failure after OpenAI already charged (tool call 2 times out, a later stream dies)
+        // still bills and saves what was used; only a failure before any usage takes the error path
+        let turnErr = null;
+        try {
+            if (modelPath === 'responses') {
+                await runResponsesTurn({
+                    oai, userId: req.session.userId, model: reqModel, effort: reqEffort,
+                    instructions: finalSystemPrompt, userPrompt: finalUserPrompt,
+                    history: chatHistory,   // replay this session's prior turns
+                    tools: chatTools, sendEvent, acc,
+                    isAborted: () => clientAborted,
+                    setStream: (s) => { currentOpenAIStream = s; },
+                    release: targetRelease,
+                });
+                inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
+                cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
+                fullText = acc.fullText;
+                apiCalls = acc.apiCalls || 0; toolTurns = acc.toolTurns || 0;
+                continuations = acc.continuations || 0;
+            } else {
 
-        const messages = [
-            { role: 'system', content: finalSystemPrompt },
-            ...chatHistory,   // replay this session's prior turns
-            { role: 'user',   content: finalUserPrompt },
-        ];
+            const messages = [
+                { role: 'system', content: finalSystemPrompt },
+                ...chatHistory,   // replay this session's prior turns
+                { role: 'user',   content: finalUserPrompt },
+            ];
 
-        const MAX_TOOL_TURNS = 3;
-        // โดนตัดด้วย token cap → ให้เขียนต่ออัตโนมัติ — cap แยกจาก tool-turn budget
-        const MAX_LENGTH_CONTINUATIONS = 4;
-        let lastFinishReason = null;
-        let lengthContinuations = 0;
-        let toolTurn = 0;
-        while (toolTurn < MAX_TOOL_TURNS) {
-            if (clientAborted) break;
-            const streamArgs = {
-                model: reqModel, stream: true, max_completion_tokens: 3000,
-                // ไม่มีบรรทัดนี้ chunk.usage เป็น null แล้วเงินถูกคิดจาก ตัวอักษร/3.5
-                stream_options: { include_usage: true },
-                messages,
-                tools:        chatTools,
-                tool_choice:  'auto',
-            };
-            // Only send temperature for models that accept a custom value.
-            if (OAI_TEMPERATURE !== null && !isTempUnsupported()) {
-                streamArgs.temperature = OAI_TEMPERATURE;
-            }
-            // 401 from project key → fall back to global key; drop temperature if the model rejects it.
-            let stream;
-            try {
-                stream = await oai.chat.completions.create(streamArgs);
-            } catch (e) {
-                if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in streamArgs)) {
-                    markTempUnsupported();                   // stop sending it next time
-                    delete streamArgs.temperature;
-                    console.warn(`[chat] model ${reqModel} rejects custom temperature — retrying without it`);
-                    stream = await oai.chat.completions.create(streamArgs);
-                } else if ((e?.status === 401) && oai !== openai && openai) {
-                    await markProjectKeyInvalid(req.session.userId, 'chat stream 401');
-                    console.warn('[chat] stream: project key 401 — retrying with global');
-                    stream = await openai.chat.completions.create(streamArgs);
-                } else {
-                    throw e;
-                }
-            }
-            currentOpenAIStream = stream;
-
-            let pendingToolCalls = [];
-            let finishReason    = null;
-            let turnText        = '';   // this API call's text only (for continuation re-prompts)
-
-            try {
-                for await (const chunk of stream) {
-                    if (clientAborted) break;
-                    const delta = chunk.choices[0]?.delta;
-                    finishReason = chunk.choices[0]?.finish_reason || finishReason;
-
-                    if (delta?.content) {
-                        fullText += delta.content;
-                        turnText += delta.content;
-                        sendEvent({ type: 'chunk', text: delta.content });
-                    }
-
-                    if (delta?.tool_calls) {
-                        for (const tc of delta.tool_calls) {
-                            const idx = tc.index ?? 0;
-                            if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
-                            if (tc.id)                     pendingToolCalls[idx].id                    += tc.id;
-                            if (tc.function?.name)         pendingToolCalls[idx].function.name         += tc.function.name;
-                            if (tc.function?.arguments)    pendingToolCalls[idx].function.arguments    += tc.function.arguments;
-                        }
-                    }
-
-                    if (chunk.usage) {
-                        inputTokens     += chunk.usage.prompt_tokens     || 0;
-                        outputTokens    += chunk.usage.completion_tokens || 0;
-                        cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
-                        reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
-                    }
-                }
-            } catch (streamErr) {
-                // APIUserAbortError on controller.abort() is a clean user Stop, not a failure.
+            const MAX_TOOL_TURNS = 3;
+            // โดนตัดด้วย token cap → ให้เขียนต่ออัตโนมัติ — cap แยกจาก tool-turn budget
+            const MAX_LENGTH_CONTINUATIONS = 4;
+            let lastFinishReason = null;
+            let lengthContinuations = 0;
+            let toolTurn = 0;
+            while (toolTurn < MAX_TOOL_TURNS) {
                 if (clientAborted) break;
-                throw streamErr;
-            } finally {
-                currentOpenAIStream = null;
-            }
-            lastFinishReason = finishReason;
-
-            // User stopped mid-stream → don't loop into another tool turn
-            if (clientAborted) break;
-
-            // finish=length → ต่อได้ไม่เกิน MAX_LENGTH_CONTINUATIONS
-            if (finishReason === 'length' && lengthContinuations < MAX_LENGTH_CONTINUATIONS) {
-                lengthContinuations++;
-                console.warn(`[chat] response truncated (length) — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
-                messages.push({ role: 'assistant', content: turnText });
-                messages.push({ role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.' });
-                continue;
-            }
-
-            // ถ้าไม่มี tool calls → จบ
-            if (finishReason !== 'tool_calls' || pendingToolCalls.length === 0) break;
-
-            // tool calls → execute and loop; attach the search query for the UI badge
-            const rQuery = pendingToolCalls.map(tc => ragQueryOf(tc.function.name, tc.function.arguments)).find(q => q != null);
-            sendEvent({ type: 'tool_call', tools: pendingToolCalls.map(tc => tc.function.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
-
-            messages.push({
-                role:       'assistant',
-                tool_calls: pendingToolCalls.map(tc => ({
-                    id: tc.id, type: 'function',
-                    function: { name: tc.function.name, arguments: tc.function.arguments },
-                })),
-            });
-
-            for (const tc of pendingToolCalls) {
-                // โมเดลส่ง arguments พังได้ — throw ตรงนี้จะทิ้งทั้ง turn โดยไม่คิดเงิน
-                let args = {};
-                try { args = JSON.parse(tc.function.arguments || '{}'); }
-                catch (_) { console.warn('[chat] bad tool arguments from model for', tc.function.name); }
-                const result = await executeTool(tc.function.name, args, { release: targetRelease });
-                if (tc.function.name === 'search_knowledge') sendEvent(ragResultEvent(result));
-                messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
-            }
-            toolTurn++;
-        }
-
-        // ครบ tool turns แต่ยังไม่มีคำตอบ → ยิงปิดท้าย tool_choice:'none' กันหน้าเปล่า
-        if (!clientAborted && fullText.length === 0 && lastFinishReason === 'tool_calls') {
-            console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
-            const finalArgs = {
-                model: reqModel, stream: true, max_completion_tokens: 3000,
-                stream_options: { include_usage: true },   // without it this turn is never billed
-                messages,
-                tools:       chatTools,
-                tool_choice: 'none',
-            };
-            if (OAI_TEMPERATURE !== null && !isTempUnsupported()) {
-                finalArgs.temperature = OAI_TEMPERATURE;
-            }
-            try {
-                let finalStream;
+                const streamArgs = {
+                    model: reqModel, stream: true, max_completion_tokens: 3000,
+                    // ไม่มีบรรทัดนี้ chunk.usage เป็น null แล้วเงินถูกคิดจาก ตัวอักษร/3.5
+                    stream_options: { include_usage: true },
+                    messages,
+                    tools:        chatTools,
+                    tool_choice:  'auto',
+                };
+                // Only send temperature for models that accept a custom value.
+                if (OAI_TEMPERATURE !== null && !isTempUnsupported()) {
+                    streamArgs.temperature = OAI_TEMPERATURE;
+                }
+                // 401 from project key → fall back to global key; drop temperature if the model rejects it.
+                let stream;
                 try {
-                    finalStream = await oai.chat.completions.create(finalArgs);
+                    stream = await oai.chat.completions.create(streamArgs);
                 } catch (e) {
-                    if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in finalArgs)) {
-                        markTempUnsupported();
-                        delete finalArgs.temperature;
-                        finalStream = await oai.chat.completions.create(finalArgs);
+                    if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in streamArgs)) {
+                        markTempUnsupported();                   // stop sending it next time
+                        delete streamArgs.temperature;
+                        console.warn(`[chat] model ${reqModel} rejects custom temperature — retrying without it`);
+                        stream = await oai.chat.completions.create(streamArgs);
+                    } else if ((e?.status === 401) && oai !== openai && openai) {
+                        await markProjectKeyInvalid(req.session.userId, 'chat stream 401');
+                        console.warn('[chat] stream: project key 401 — retrying with global');
+                        stream = await openai.chat.completions.create(streamArgs);
                     } else {
                         throw e;
                     }
                 }
-                currentOpenAIStream = finalStream;
-                for await (const chunk of finalStream) {
+                currentOpenAIStream = stream;
+
+                let pendingToolCalls = [];
+                let finishReason    = null;
+                let turnText        = '';   // this API call's text only (for continuation re-prompts)
+
+                try {
+                    for await (const chunk of stream) {
+                        if (clientAborted) break;
+                        const delta = chunk.choices[0]?.delta;
+                        finishReason = chunk.choices[0]?.finish_reason || finishReason;
+
+                        if (delta?.content) {
+                            fullText += delta.content;
+                            turnText += delta.content;
+                            sendEvent({ type: 'chunk', text: delta.content });
+                        }
+
+                        if (delta?.tool_calls) {
+                            for (const tc of delta.tool_calls) {
+                                const idx = tc.index ?? 0;
+                                if (!pendingToolCalls[idx]) pendingToolCalls[idx] = { id: '', function: { name: '', arguments: '' } };
+                                if (tc.id)                     pendingToolCalls[idx].id                    += tc.id;
+                                if (tc.function?.name)         pendingToolCalls[idx].function.name         += tc.function.name;
+                                if (tc.function?.arguments)    pendingToolCalls[idx].function.arguments    += tc.function.arguments;
+                            }
+                        }
+
+                        if (chunk.usage) {
+                            inputTokens     += chunk.usage.prompt_tokens     || 0;
+                            outputTokens    += chunk.usage.completion_tokens || 0;
+                            cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
+                            reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
+                        }
+                    }
+                } catch (streamErr) {
+                    // APIUserAbortError on controller.abort() is a clean user Stop, not a failure.
                     if (clientAborted) break;
-                    const delta = chunk.choices[0]?.delta;
-                    if (delta?.content) {
-                        fullText += delta.content;
-                        sendEvent({ type: 'chunk', text: delta.content });
-                    }
-                    if (chunk.usage) {
-                        inputTokens     += chunk.usage.prompt_tokens     || 0;
-                        outputTokens    += chunk.usage.completion_tokens || 0;
-                        cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
-                        reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
-                    }
+                    throw streamErr;
+                } finally {
+                    currentOpenAIStream = null;
                 }
-            } catch (finalErr) {
-                if (!clientAborted) console.error('[chat] forced final-turn call failed:', finalErr.message);
-            } finally {
-                currentOpenAIStream = null;
+                lastFinishReason = finishReason;
+
+                // User stopped mid-stream → don't loop into another tool turn
+                if (clientAborted) break;
+
+                // finish=length → ต่อได้ไม่เกิน MAX_LENGTH_CONTINUATIONS
+                if (finishReason === 'length' && lengthContinuations < MAX_LENGTH_CONTINUATIONS) {
+                    lengthContinuations++;
+                    console.warn(`[chat] response truncated (length) — continuing (${lengthContinuations}/${MAX_LENGTH_CONTINUATIONS})`);
+                    messages.push({ role: 'assistant', content: turnText });
+                    messages.push({ role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text or restart the file.' });
+                    continue;
+                }
+
+                // ถ้าไม่มี tool calls → จบ
+                if (finishReason !== 'tool_calls' || pendingToolCalls.length === 0) break;
+
+                // tool calls → execute and loop; attach the search query for the UI badge
+                const rQuery = pendingToolCalls.map(tc => ragQueryOf(tc.function.name, tc.function.arguments)).find(q => q != null);
+                sendEvent({ type: 'tool_call', tools: pendingToolCalls.map(tc => tc.function.name), ...(rQuery != null ? { search: { query: rQuery } } : {}) });
+
+                messages.push({
+                    role:       'assistant',
+                    tool_calls: pendingToolCalls.map(tc => ({
+                        id: tc.id, type: 'function',
+                        function: { name: tc.function.name, arguments: tc.function.arguments },
+                    })),
+                });
+
+                for (const tc of pendingToolCalls) {
+                    // โมเดลส่ง arguments พังได้ — throw ตรงนี้จะทิ้งทั้ง turn โดยไม่คิดเงิน
+                    let args = {};
+                    try { args = JSON.parse(tc.function.arguments || '{}'); }
+                    catch (_) { console.warn('[chat] bad tool arguments from model for', tc.function.name); }
+                    const result = await executeTool(tc.function.name, args, { release: targetRelease });
+                    if (tc.function.name === 'search_knowledge') sendEvent(ragResultEvent(result));
+                    messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+                }
+                toolTurn++;
             }
+
+            // ครบ tool turns แต่ยังไม่มีคำตอบ → ยิงปิดท้าย tool_choice:'none' กันหน้าเปล่า
+            if (!clientAborted && fullText.length === 0 && lastFinishReason === 'tool_calls') {
+                console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
+                const finalArgs = {
+                    model: reqModel, stream: true, max_completion_tokens: 3000,
+                    stream_options: { include_usage: true },   // without it this turn is never billed
+                    messages,
+                    tools:       chatTools,
+                    tool_choice: 'none',
+                };
+                if (OAI_TEMPERATURE !== null && !isTempUnsupported()) {
+                    finalArgs.temperature = OAI_TEMPERATURE;
+                }
+                try {
+                    let finalStream;
+                    try {
+                        finalStream = await oai.chat.completions.create(finalArgs);
+                    } catch (e) {
+                        if ((e?.status === 400) && /temperature/i.test(e?.message || '') && ('temperature' in finalArgs)) {
+                            markTempUnsupported();
+                            delete finalArgs.temperature;
+                            finalStream = await oai.chat.completions.create(finalArgs);
+                        } else {
+                            throw e;
+                        }
+                    }
+                    currentOpenAIStream = finalStream;
+                    for await (const chunk of finalStream) {
+                        if (clientAborted) break;
+                        const delta = chunk.choices[0]?.delta;
+                        if (delta?.content) {
+                            fullText += delta.content;
+                            sendEvent({ type: 'chunk', text: delta.content });
+                        }
+                        if (chunk.usage) {
+                            inputTokens     += chunk.usage.prompt_tokens     || 0;
+                            outputTokens    += chunk.usage.completion_tokens || 0;
+                            cachedTokens    += chunk.usage.prompt_tokens_details?.cached_tokens         || 0;
+                            reasoningTokens += chunk.usage.completion_tokens_details?.reasoning_tokens   || 0;
+                        }
+                    }
+                } catch (finalErr) {
+                    if (!clientAborted) console.error('[chat] forced final-turn call failed:', finalErr.message);
+                } finally {
+                    currentOpenAIStream = null;
+                }
+            }
+            }   // end Chat Completions path
+        } catch (e) {
+            turnErr = e;
+            if (modelPath === 'responses') {   // acc fills call by call, so it holds what was charged
+                inputTokens = acc.inputTokens; outputTokens = acc.outputTokens;
+                cachedTokens = acc.cachedTokens; reasoningTokens = acc.reasoningTokens;
+                fullText = acc.fullText;
+            }
+            if (!inputTokens && !outputTokens && !fullText) throw e;
+            console.error('[chat] turn failed mid-way, billing what was used:', e.message);
         }
-        }   // end Chat Completions path
 
         if (inputTokens === 0) {
             inputTokens  = Math.ceil((prompt.length + finalSystemPrompt.length) / 3.5);
@@ -645,7 +675,12 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             }
         }
 
-        sendEvent({ type: 'done', inputTokens, outputTokens, cost, durationMs, detectedSkill, sessionId: chatSessionId, stopped: clientAborted });
+        if (turnErr) {
+            const safe = safeError(turnErr, req);
+            sendEvent({ type: 'error', error: safe.error, ref: safe.ref });
+        } else {
+            sendEvent({ type: 'done', inputTokens, outputTokens, cost, durationMs, detectedSkill, sessionId: chatSessionId, stopped: clientAborted });
+        }
         if (!res.writableEnded) res.end();
 
     } catch (err) {
