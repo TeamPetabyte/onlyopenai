@@ -5,15 +5,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PipekAI — Admin Dashboard</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.16.2" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.16.2" />
-    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.16.2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1.16.3" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192.png?v=1.16.3" />
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png?v=1.16.3" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <!-- tokens.css MUST load before style.css — defines --sidebar-w, --surface-0, --accent, etc. -->
-    <link rel="stylesheet" href="css/tokens.css?v=1.16.2" />
+    <link rel="stylesheet" href="css/tokens.css?v=1.16.3" />
 
     <!-- Apply the saved theme before first paint (no flash); same key and default as chat. -->
     <script>
@@ -51,8 +51,8 @@
         // Sync icon/label once DOM is ready (the buttons aren't in <head>)
         document.addEventListener('DOMContentLoaded', _refreshThemeUI);
     </script>
-    <link rel="stylesheet" href="css/components.css?v=1.16.2" />
-    <link rel="stylesheet" href="css/style.css?v=1.16.2" />
+    <link rel="stylesheet" href="css/components.css?v=1.16.3" />
+    <link rel="stylesheet" href="css/style.css?v=1.16.3" />
     <style>
         /* ── Admin extras ─────────────────────────── */
         .admin-badge {
@@ -1694,6 +1694,8 @@
                         <label class="modal-label" data-i18n="modal.testSkill.modelLabel">โมเดล</label>
                         <select class="modal-input" id="lab-model" onchange="admin.onLabModelChange(this.value)">
                             <option value="gpt-6-astra">GPT-6 Astra</option>
+                            <option value="gpt-6-sol">GPT-6 Sol</option>
+                            <option value="gpt-6-luna">GPT-6 Luna</option>
                             <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
                             <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
                             <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
@@ -1798,6 +1800,8 @@
                         <label class="modal-label" data-i18n="modal.testSkill.modelLabel">โมเดล</label>
                         <select class="modal-input" id="ev-model" onchange="admin.onEvalModelChange(this.value)">
                             <option value="gpt-6-astra">GPT-6 Astra</option>
+                            <option value="gpt-6-sol">GPT-6 Sol</option>
+                            <option value="gpt-6-luna">GPT-6 Luna</option>
                             <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
                             <option value="gpt-5.6-terra" selected>GPT-5.6 Terra</option>
                             <option value="gpt-5.6-luna">GPT-5.6 Luna</option>

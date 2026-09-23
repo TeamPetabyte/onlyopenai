@@ -79,7 +79,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 | Web | Express, CORS, Helmet |
 | Auth | session cookie (HttpOnly) + CSRF, bcrypt, `express-rate-limit` |
 | DB | PostgreSQL (`pg`) + SQL migrations |
-| AI | `openai` SDK — Responses API (gpt-6-astra, gpt-5.6-sol/terra/luna) and Chat Completions (gpt-5.5); `gpt-4o-mini` router |
+| AI | `openai` SDK — Responses API (gpt-6-astra/sol/luna, gpt-5.6-sol/terra/luna) and Chat Completions (gpt-5.5); `gpt-4o-mini` router |
 | ABAP | `@abaplint/core` (MIT) for syntax / variable / type checks, no SAP system needed |
 | Frontend build | Vite + `@tailwindcss/vite` (`npm run build` → `dist/`) |
 | Validation | `zod` |
@@ -167,7 +167,7 @@ HTTP. It needs a reachable Postgres: `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`
 ## 🤖 Models & Pricing
 
 - **Answer models** (picked per message in the UI, registry in `server/lib/models.js`):
-  `gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra` (default), `gpt-5.6-luna` on the
+  `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra` (default), `gpt-5.6-luna` on the
   Responses API with reasoning effort; `gpt-5.5` on Chat Completions. Anything
   else falls back to `OPENAI_MODEL`.
 - **Router model:** `gpt-4o-mini` (cheap/fast skill classification on every message).
