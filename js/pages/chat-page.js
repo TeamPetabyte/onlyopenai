@@ -7,3 +7,4 @@ import '../pricing.js';
 import '../mock-ai.js';
 import '../ai-client.js';
 import '../chat.js';
+import '../select-menu.js';

@@ -4,3 +4,4 @@ import '../config.js';
 import '../auth.js';
 import '../pricing.js';
 import '../admin.js';
+import '../select-menu.js';
