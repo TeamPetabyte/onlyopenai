@@ -14,8 +14,9 @@ async function spentToday(userId) {
 
 // checkChatBudget คือเกตเดียว — แยก error pool หมด vs ชน cap ให้ UX คนละข้อความ
 
-async function getEffectiveDailyCap(userId) {
-    // effective = daily_cap + bonus_balance; ไม่มี cap = null
+async function getEffectiveDailyCap(userId, spent = 0) {
+    // bonus_balance is already drawn down by today's spend over the base, so today's ceiling is
+    // max(base, spent) + what's left — base + bonus would count the overage twice. no cap = null
     const r = await pool.query(
         `SELECT daily_cap AS base, COALESCE(bonus_balance, 0) AS bonus
            FROM tbl_user
@@ -26,7 +27,7 @@ async function getEffectiveDailyCap(userId) {
     if (base === null || base === undefined) return null;
     const baseNum  = parseFloat(base);
     const bonusNum = parseFloat(r.rows[0].bonus) || 0;
-    return { base: baseNum, bonus: bonusNum, effective: baseNum + bonusNum };
+    return { base: baseNum, bonus: bonusNum, effective: Math.max(baseNum, spent) + bonusNum };
 }
 
 async function getProjectPool(projectId) {
@@ -56,9 +57,9 @@ async function checkChatBudget(userId) {
         };
     }
 
-    const cap = await getEffectiveDailyCap(userId);
+    const spent = await spentToday(userId);
+    const cap = await getEffectiveDailyCap(userId, spent);
     if (cap !== null) {
-        const spent = await spentToday(userId);
         if (spent >= cap.effective) {
             return {
                 ok: false,

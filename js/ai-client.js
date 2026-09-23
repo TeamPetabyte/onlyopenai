@@ -20,8 +20,9 @@ const AIClient = {
             this._modelName = data.model;
             console.log(`[AIClient] ${data.message}`);
         } catch {
-            this._mode = 'mock';
-            console.log('[AIClient] Server offline → MockAI');
+            // not cached: one slow health check must not switch the page to fake answers for good
+            console.warn('[AIClient] /api/health unreachable — trying the backend anyway');
+            return 'openai';
         }
         return this._mode;
     },
@@ -144,7 +145,6 @@ const AIClient = {
 
                     } else if (event.type === 'use_mock') {
                         // server deliberately asked for mock (e.g. no API key)
-                        this._mode = 'mock';
                         console.warn('[AIClient] Server requested MockAI:', event.reason);
                         await MockAI.run(skillId, prompt, onChunk, onDone);
                         return;

@@ -14,6 +14,7 @@ export default {
         });
       });
       allLogs.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+      allLogs = allLogs.slice(0, 200);   // the feed shows the newest; totals elsewhere use every row
 
       if (allLogs.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>' + t('empty.noActivity', 'ยังไม่มี activity ใดๆ') + '</p></div>';

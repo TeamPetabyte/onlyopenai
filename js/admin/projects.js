@@ -285,7 +285,7 @@ export default {
     if (!p) { flash(t('err.projectNotFound', 'ไม่พบ project'), 'error'); return; }
 
     var members = (this._cachedDBUsers || []).filter(function (u) { return u.projectId === projectId; });
-    var credits = (typeof p.credits === 'number' ? p.credits : 0);
+    var credits = (typeof p.balance === 'number' ? p.balance : 0);   // the pool the delete clears
 
     this._pendingDeleteProject = { id: projectId, name: p.name, memberCount: members.length };
 

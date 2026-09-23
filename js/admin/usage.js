@@ -330,7 +330,7 @@ export default {
         grid.innerHTML =
           '<div class="mini-card"><div class="mini-card-label">Total Requests</div>' +
           '<div class="mini-card-value">' + totalRequests.toLocaleString() + '</div>' +
-          '<div class="mini-card-sub">' + (selectedProj ? tf('lbl.inProject', { project: selectedProj.name }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน')) + '</div></div>' +
+          '<div class="mini-card-sub">' + (selectedProj ? tf('lbl.inProject', { project: escapeHtml(selectedProj.name) }, 'ใน {project}') : t('lbl.allUsersCombined', 'ทุก users รวมกัน')) + '</div></div>' +
 
           '<div class="mini-card"><div class="mini-card-label">Total Tokens</div>' +
           '<div class="mini-card-value">' + (totalTokens >= 1000 ? (totalTokens / 1000).toFixed(1) + 'K' : totalTokens) + '</div>' +

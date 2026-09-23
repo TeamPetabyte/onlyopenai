@@ -381,6 +381,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
             console.warn(`[chat] hit MAX_TOOL_TURNS (${MAX_TOOL_TURNS}) with no answer yet — forcing a final turn`);
             const finalArgs = {
                 model: reqModel, stream: true, max_completion_tokens: 3000,
+                stream_options: { include_usage: true },   // without it this turn is never billed
                 messages,
                 tools:       chatTools,
                 tool_choice: 'none',
@@ -650,7 +651,10 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     } catch (err) {
         console.error('[chat] Error:', err.message);
         if (err.status === 401 || err.status === 429) {
-            sendEvent({ type: 'use_mock', reason: err.status === 429 ? 'quota_exceeded' : 'invalid_key' });
+            // show the real cause — a fake MockAI answer here would look like a real one
+            sendEvent({ type: 'error', error: err.status === 429
+                ? 'OpenAI is rate-limiting or out of quota — try again shortly'
+                : 'OpenAI rejected the API key — tell an admin' });
         } else {
             // ข้อความจาก SDK/pg บอกชื่อตาราง/พาธ — ส่งแค่ ref เหมือน route อื่น
             const safe = safeError(err, req);

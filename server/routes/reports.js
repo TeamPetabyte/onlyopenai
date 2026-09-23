@@ -124,7 +124,7 @@ router.get('/api/transactions', requireAdmin, async (req, res) => {
                     COUNT(*)::int                         AS event_count,
                     SUM(amount_display)::numeric(12, 2)   AS amount
                 FROM v_user_credit_transaction
-                WHERE tx_month >= $1::date
+                WHERE tx_month >= date_trunc('month', $1::date)::date
                   AND tx_month <= $2::date
                   ${projWhere}
                   ${testWhere}
@@ -226,7 +226,7 @@ router.get('/api/transactions/export', requireAdmin, expensiveRateLimiter, async
                     COUNT(*)::int                         AS event_count,
                     SUM(amount_display)::numeric(12, 2)   AS amount
                 FROM v_user_credit_transaction
-                WHERE tx_month >= $1::date
+                WHERE tx_month >= date_trunc('month', $1::date)::date
                   AND tx_month <= $2::date
                   ${projWhere}
                   ${testWhere}

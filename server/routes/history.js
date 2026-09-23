@@ -35,9 +35,12 @@ router.get('/api/history', requireAuth, async (req, res) => {
                 ORDER BY r.created_at DESC LIMIT 100`, [userId]);
         } else {
             r = await pool.query(`
-                SELECT r.*, p.project_name,
-                       r.input_param  AS prompt,
-                       r.output_param AS response,
+                -- every row (the admin totals sum these); text only for the 20 newest per user,
+                -- the most the usage page shows
+                SELECT r.response_id, r.project_id, r.model, r.created_at, r.user_id,
+                       r.input_tokens, r.output_tokens, r.total_tokens, p.project_name,
+                       CASE WHEN ROW_NUMBER() OVER w <= 20 THEN r.input_param  END AS prompt,
+                       CASE WHEN ROW_NUMBER() OVER w <= 20 THEN r.output_param END AS response,
                        r.input_cached_tokens     AS cached_tokens,
                        r.output_reasoning_tokens AS reasoning_tokens,
                        ${PRICING_COST_EXPR} AS cost,
@@ -46,7 +49,8 @@ router.get('/api/history', requireAuth, async (req, res) => {
                 JOIN tbl_project p ON r.project_id = p.project_id
                 LEFT JOIN tbl_user u ON r.user_id = u.user_id
                 ${PRICING_LATERAL_JOIN}
-                ORDER BY r.created_at DESC LIMIT 200`);
+                WINDOW w AS (PARTITION BY r.user_id ORDER BY r.created_at DESC)
+                ORDER BY r.created_at DESC`);
         }
         res.json({ ok: true, history: r.rows });
     } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }

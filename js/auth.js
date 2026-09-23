@@ -58,7 +58,8 @@
                 const path = (window.location.pathname || '').toLowerCase();
                 const onPwPage    = path.indexOf('change-password') >= 0;
                 const onLoginPage = path.indexOf('login') >= 0;
-                if (res.status === 423 && !onPwPage) {
+                // on the login page 423 means locked out (wrong passwords), not must-change-password
+                if (res.status === 423 && !onPwPage && !onLoginPage) {
                     try {
                         const s = JSON.parse(localStorage.getItem('agenthub_session') || 'null');
                         if (s) { s.mustChangePassword = true; localStorage.setItem('agenthub_session', JSON.stringify(s)); }
@@ -137,7 +138,8 @@ const Auth = {
             // Skip the password-change page itself — it's the only escape hatch.
             var path = (window.location.pathname || '').toLowerCase();
             var onPwPage = path.indexOf('change-password') >= 0;
-            if (res.status === 423 && !onPwPage) {
+            var onLoginPage = path.indexOf('login') >= 0;
+            if (res.status === 423 && !onPwPage && !onLoginPage) {
                 self._markPwChangeRequired();
                 window.location.href = '/change-password';
             }

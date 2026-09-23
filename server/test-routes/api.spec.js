@@ -256,6 +256,12 @@ test.describe('tenant isolation', () => {
         }
     });
 
+    test('admin-wide history answers (feeds the usage totals)', async () => {
+        const r = await srv.req('GET', '/api/history', { auth: admin });
+        assert.equal(r.status, 200, r.text);
+        assert.ok(Array.isArray(r.json.history));
+    });
+
     test('a user cannot read another user profile', async () => {
         const r = await srv.req('GET', `/api/users/${otherId}`, { auth: user });
         assert.equal(r.status, 403);

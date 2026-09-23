@@ -56,12 +56,15 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
             'table','thead','tbody','tr','th','td',
             // no <img>: a model answer could embed a src that leaks the reader's IP
         ],
-        ALLOWED_ATTR: ['href','title','alt','src','class','name','id','start','type'],
+        // no id/name: model output must not shadow page ids; class is narrowed by the hook below
+        ALLOWED_ATTR: ['href','title','alt','class','start','type'],
         FORBID_ATTR: ['style','onerror','onload','onclick','onmouseover'],
         ALLOW_DATA_ATTR: false,
         // http(s)/mailto/tel only; blocks javascript: and data:
         ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|#|\/)/i,
     };
+
+    let purifyHooked = false;
 
     function escapeHtml(t) {
         return String(t)
@@ -75,6 +78,17 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         if (!libsReady()) return escapeHtml(text);
         try {
             const raw = window.marked.parse(normalizeModelBlocks(text));
+            if (!purifyHooked) {
+                // class only as marked's `language-xxx` on <code> — else an answer could reuse page
+                // classes (e.g. a full-screen overlay link)
+                window.DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+                    if (data.attrName === 'class'
+                        && !(node.nodeName === 'CODE' && /^language-[\w-]+$/.test(data.attrValue))) {
+                        data.keepAttr = false;
+                    }
+                });
+                purifyHooked = true;
+            }
             return window.DOMPurify.sanitize(raw, PURIFY_CONFIG);
         } catch (e) {
             console.warn('[md] render failed, falling back to escape:', e.message);

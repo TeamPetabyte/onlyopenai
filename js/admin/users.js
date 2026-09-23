@@ -1,5 +1,5 @@
 // users.js — หน้า Users + modal เพิ่ม/แก้/ลบ/รีเซ็ตรหัส
-import { escapeHtml, flash, formatDateStd, formatTHB, hideModal, showModal } from './helpers.js';
+import { escapeHtml, flash, jsArg, formatDateStd, formatTHB, hideModal, showModal } from './helpers.js';
 
 export default {
   // --- Users page --- sticky filter: Set ของ project ids, "__none__" = ไม่มี project
@@ -102,7 +102,7 @@ export default {
           + '<div style="min-width:78px;text-align:center">' + statusBadge + '</div>'
           // Action
           + '<button class="btn-icon-edit" title="Edit user" aria-label="Edit user ' + escapeHtml(u.username) + '" '
-          +   'onclick="admin.openEditUser(\'' + escapeHtml(u.username) + '\')">'
+          +   'onclick="admin.openEditUser(\'' + jsArg(u.username) + '\')">'
           +   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
           +   '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'
           + '</button>'
@@ -139,7 +139,7 @@ export default {
       ? 'title="' + escapeHtml(t('tt.lockedUser', 'ถูก lock จาก failed login — เปิด Edit User เพื่อปลดล็อก')) + '"'
       : 'title="' + escapeHtml(s === 'active' ? t('tt.clickToDisable', 'คลิกเพื่อปิดการใช้งาน') : t('tt.clickToEnable', 'คลิกเพื่อเปิดการใช้งาน')) + '"';
     var onclick = username
-      ? 'onclick="admin.toggleUserStatus(\'' + escapeHtml(username) + '\', event)"'
+      ? 'onclick="admin.toggleUserStatus(\'' + jsArg(username) + '\', event)"'
       : '';
     return '<span ' + onclick + ' ' + titleAttr
       + ' style="display:inline-block;padding:3px 10px;border-radius:10px;'
@@ -489,7 +489,10 @@ export default {
     if (surname.length > 50) { errEl.textContent = t('err.lastnameTooLong', 'นามสกุลยาวเกินไป (สูงสุด 50)'); return; }
 
     var statusIdMap = { active: 1, inactive: 2, locked: 3 };
-    var accStatusId = statusIdMap[status] || 1;
+    // only when the admin changed it: the dropdown shows a timed lockout as 'locked', and
+    // echoing that back would make it permanent (and any status write logs the user out)
+    var origStatus  = String(u.accStatus || 'active').toLowerCase();
+    var accStatusId = status !== origStatus ? (statusIdMap[status] || 1) : undefined;
 
     fetch(BASE + '/api/users/' + u.id, {
       method: 'PUT',
@@ -659,7 +662,7 @@ export default {
     if (err) err.textContent = '';
     if (btn) { btn.disabled = true; btn.textContent = t('btn.savingEllipsis', 'กำลังบันทึก...'); }
 
-    // ใช้ endpoint update เดิม — ต้อง fetch ค่าปัจจุบันมาก่อน กันเขียนทับ field ที่คนอื่นแก้
+    // password only — echoing the cached name/balance/project back would overwrite them with stale values
     var users = this.getUsersWithHistory();
     var u = users.find(function (x) { return x.id === pending.id; });
     if (!u) {
@@ -672,14 +675,7 @@ export default {
     fetch(BASE + '/api/users/' + u.id, {
       method: 'PUT',
       headers: Auth.authHeaders(),
-      body: JSON.stringify({
-        displayName: u.displayName,
-        role:        u.role || 'user',
-        plan:        u.plan || 'starter',
-        balance:     u.balance,
-        projectId:   u.projectId,
-        password:    pw,
-      }),
+      body: JSON.stringify({ password: pw }),
     })
       .then(function (r) { return r.json(); })
       .then(function (d) {

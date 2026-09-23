@@ -181,11 +181,11 @@ router.get('/api/quota-status', requireAuth, async (req, res) => {
     const uid = req.session?.userId;
     if (!uid) return res.status(401).json({ ok: false, error: 'unauthorized' });
     try {
-        const cap = await getEffectiveDailyCap(uid);
+        const spent = await spentToday(uid);
+        const cap = await getEffectiveDailyCap(uid, spent);
         const u = await pool.query(`SELECT project_id FROM tbl_user WHERE user_id=$1`, [uid]);
         const projectId = u.rows[0]?.project_id;
         const pool_ = await getProjectPool(projectId);
-        const spent = await spentToday(uid);
         const ratio = cap ? Math.min(1, spent / cap.effective) : null;
         res.json({
             ok: true,

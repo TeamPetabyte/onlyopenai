@@ -646,7 +646,10 @@ const ICON = {
             let prompt = userText;
             // เก็บชื่อไฟล์ก่อน removeFile() ล้าง — ไฟล์ที่แก้แล้วต้องกลับไปชื่อเดิม
             const uploadedName = State.attachedFile ? State.attachedFile.name : null;
-            if (State.attachedFile) { prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content; removeFile(); }
+            if (State.attachedFile) prompt = (prompt ? prompt + '\n\n' : '') + '[File: ' + State.attachedFile.name + ']\n' + State.attachedFile.content;
+            // server's chatSchema caps the prompt at 100k chars; keep the file and text so the user can trim
+            if (prompt.length > 100000) { showToast(tf('u.err.promptTooLong', { n: prompt.length.toLocaleString() }), 'error'); return; }
+            if (State.attachedFile) removeFile();
             inputEl.value = ''; inputEl.style.height = 'auto';
 
             const userMsg = { role: 'user', content: displayText, timestamp: new Date().toISOString() };

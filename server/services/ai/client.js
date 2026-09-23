@@ -178,7 +178,7 @@ async function ensureAssistant(vectorStoreId = null) {
 
 // Vector store + file search (RAG).
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
-const KNOWLEDGE_DIR = path_mod.join(__dirname, 'knowledge');
+const KNOWLEDGE_DIR = path_mod.join(__dirname, '..', '..', 'knowledge');   // server/knowledge
 // ชนิดไฟล์ที่ vector store อ่านออกเอง (.txt + เอกสาร + .html สำหรับ SAP offline library)
 const KB_FILE_RE = /\.(txt|md|pdf|docx?|html?)$/i;
 
