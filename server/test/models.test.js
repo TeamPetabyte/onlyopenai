@@ -11,6 +11,8 @@ test('resolveModel: an explicit known model is honoured, with its API path', () 
         { model: 'gpt-5.6-sol', path: 'responses' });
     assert.deepEqual(models.resolveModel('gpt-6-astra', DEFAULT),
         { model: 'gpt-6-astra', path: 'responses' });
+    assert.deepEqual(models.resolveModel('gpt-6.1-sol', DEFAULT),
+        { model: 'gpt-6.1-sol', path: 'responses' });
     assert.deepEqual(models.resolveModel('gpt-6-sol', DEFAULT),
         { model: 'gpt-6-sol', path: 'responses' });
     assert.deepEqual(models.resolveModel('gpt-6-luna', DEFAULT),

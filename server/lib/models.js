@@ -4,6 +4,7 @@
 
 const ALLOWED_MODELS = {
     'gpt-6-astra':   { path: 'responses', label: 'GPT-6 Astra',   supportsEffort: true },
+    'gpt-6.1-sol':   { path: 'responses', label: 'GPT-6.1 Sol',   supportsEffort: true },
     'gpt-6-sol':     { path: 'responses', label: 'GPT-6 Sol',     supportsEffort: true },
     'gpt-6-luna':    { path: 'responses', label: 'GPT-6 Luna',    supportsEffort: true },
     'gpt-5.6-sol':   { path: 'responses', label: 'GPT-5.6 Sol',   supportsEffort: true },
