@@ -1,15 +1,17 @@
-// client.js — OpenAI clients: global + per-project (พร้อม 401 fallback), assistant/vector store
+// client.js — OpenAI clients: global + per-project (พร้อม 401 fallback), vector store
 const fs_mod   = require('fs');
 const path_mod = require('path');
 const cryptoStore = require('../../crypto');
-const { PHASE4_TOOLS, ASSISTANT_INSTRUCTIONS } = require('./tool-defs');
+const { PHASE4_TOOLS } = require('./tool-defs');
 
 module.exports = function createAiClient({ pool }) {
 const HAS_API_KEY = !!(
     process.env.OPENAI_API_KEY &&
     !process.env.OPENAI_API_KEY.startsWith('sk-xxx')
 );
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const _models = require('../../lib/models');
+// an env value outside the registry (e.g. a retired gpt-4o) falls back to the product default
+const MODEL = Object.hasOwn(_models.ALLOWED_MODELS, process.env.OPENAI_MODEL || '') ? process.env.OPENAI_MODEL : 'gpt-5.6-terra';
 // model ใหม่ปฏิเสธ temperature ที่ตั้งเอง — เจอ reject ครั้งแรกแล้วเลิกส่งถาวรผ่าน _tempUnsupported
 const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
     ? (process.env.OPENAI_TEMPERATURE.trim() === '' ? null : Number(process.env.OPENAI_TEMPERATURE))
@@ -17,7 +19,6 @@ const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
 let _tempUnsupported = false;
 
 // registry model อยู่ lib/models.js — gpt-5.6 วิ่ง Responses API, gpt-5.5 วิ่ง Chat Completions
-const _models = require('../../lib/models');
 const resolveModel  = (requested) => _models.resolveModel(requested, MODEL);
 const resolveEffort = _models.resolveEffort;
 
@@ -132,50 +133,6 @@ async function safeChatCompletion(oai, args, userId) {
 }
 
 
-// Assistant: load from env or create once.
-let ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || null;
-
-async function ensureAssistant(vectorStoreId = null) {
-    if (!HAS_API_KEY) return null;
-    if (ASSISTANT_ID) {
-        // ถ้ามี vector store ใหม่ให้ patch assistant
-        if (vectorStoreId) {
-            try {
-                await openai.beta.assistants.update(ASSISTANT_ID, {
-                    tools: PHASE4_TOOLS,
-                    tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } }
-                });
-                console.log(`✅ Assistant patched with vector store + Phase4 tools: ${vectorStoreId}`);
-            } catch (e) { console.warn('[assistant] patch failed:', e.message); }
-        }
-        return ASSISTANT_ID;
-    }
-    try {
-        const createParams = {
-            name:         'PetabyteAi SAP Expert',
-            instructions: ASSISTANT_INSTRUCTIONS,
-            model:        MODEL,
-            tools:        PHASE4_TOOLS,
-        };
-        if (vectorStoreId) {
-            createParams.tool_resources = { file_search: { vector_store_ids: [vectorStoreId] } };
-        }
-        const assistant = await openai.beta.assistants.create(createParams);
-        ASSISTANT_ID = assistant.id;
-        const envPath = path_mod.join(__dirname, '..', '..', '.env');   // server/.env — ไม่ใช่ services/ai/.env
-        let envContent = fs_mod.readFileSync(envPath, 'utf8');
-        if (!envContent.includes('OPENAI_ASSISTANT_ID')) {
-            envContent += `\nOPENAI_ASSISTANT_ID=${ASSISTANT_ID}\n`;
-            fs_mod.writeFileSync(envPath, envContent);
-        }
-        console.log(`✅ Assistant created: ${ASSISTANT_ID}`);
-        return ASSISTANT_ID;
-    } catch (e) {
-        console.warn('[assistant] Failed to create:', e.message);
-        return null;
-    }
-}
-
 // Vector store + file search (RAG).
 let VECTOR_STORE_ID = process.env.OPENAI_VECTOR_STORE_ID || null;
 const KNOWLEDGE_DIR = path_mod.join(__dirname, '..', '..', 'knowledge');   // server/knowledge
@@ -283,11 +240,10 @@ async function syncNewKnowledgeFiles() {
 
 
 function startKnowledgeInit() {
-// Startup: init Vector Store → Assistant (async, non-blocking)
+// Startup: init Vector Store (async, non-blocking)
 if (HAS_API_KEY) {
     ensureVectorStore()
-        .then(vsId => ensureAssistant(vsId))
-        .then(id  => { if (id) console.log(`✅ System ready: assistant=${id} vs=${VECTOR_STORE_ID}`); })
+        .then(vsId => { if (vsId) console.log(`✅ System ready: vs=${vsId}`); })
         .then(()  => syncNewKnowledgeFiles())
         .catch(e  => console.error('[startup]', e.message));
 }
@@ -300,9 +256,8 @@ return {
     resolveModel, resolveEffort,
     openai, PHASE4_TOOLS,
     getProjectOpenAI, invalidateProjectClient, markProjectKeyInvalid, safeChatCompletion,
-    ensureAssistant, ensureVectorStore, seedKnowledgeFiles, syncNewKnowledgeFiles,
+    ensureVectorStore, seedKnowledgeFiles, syncNewKnowledgeFiles,
     startKnowledgeInit,
-    getAssistantId: () => ASSISTANT_ID,
     getVectorStoreId: () => VECTOR_STORE_ID,
     KNOWLEDGE_DIR, KB_FILE_RE,
 };

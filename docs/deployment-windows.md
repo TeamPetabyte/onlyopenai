@@ -54,7 +54,7 @@ copy .env.production.example .env
 notepad .env
 ```
 แก้ค่าให้ครบ (ดูคำอธิบายในไฟล์) — ที่ต้องใส่แน่ ๆ:
-- `DB_PASS`, `OPENAI_API_KEY`, `OPENAI_ASSISTANT_ID`, `OPENAI_VECTOR_STORE_ID`, `ENCRYPTION_KEY` → **ใช้ค่าเดิมจาก .env ที่เทสได้แล้ว**
+- `DB_PASS`, `OPENAI_API_KEY`, `OPENAI_VECTOR_STORE_ID`, `ENCRYPTION_KEY` → **ใช้ค่าเดิมจาก .env ที่เทสได้แล้ว**
 - `ALLOWED_ORIGINS` → ใส่ URL สาธารณะที่เพื่อนจะใช้ เช่น `https://app.yourcompany.com` (ตั้งทีหลังในขั้นที่ 5 ก็ได้ แล้วค่อยกลับมาแก้)
 
 > 💡 วิธีง่ายสุด: copy ไฟล์ `server\.env` ตัวที่ใช้เทสได้แล้วมาทับ แล้วแก้แค่ `NODE_ENV=production` กับ `ALLOWED_ORIGINS`

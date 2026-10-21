@@ -10,7 +10,7 @@ function isSkillPlaceholder(content) {
 }
 
 
-// ลำดับตัดสิน: paste เปล่าตัดสินจากโค้ด (ไม่เรียก LLM) → gpt-4o-mini เลือกจาก catalog → ต่ำ/ใช้ไม่ได้
+// ลำดับตัดสิน: paste เปล่าตัดสินจากโค้ด (ไม่เรียก LLM) → ROUTER_MODEL เลือกจาก catalog → ต่ำ/ใช้ไม่ได้
 // ตกไป code-shape แล้ว catch-all; ไม่มี skill เฉพาะเมื่อไม่ใช่เรื่อง ABAP จริง ๆ. source ติดไปกับ event
 
 // กติกา code-shape อยู่ lib/abap-scan; สองตัวนี้แค่เช็คว่า skill มีใน catalog และไม่ใช่ placeholder.
@@ -41,6 +41,7 @@ const ROUTER_HEAD_CHARS     = 1500;
 const ROUTER_TAIL_CHARS     = 1500;
 const ROUTER_MIN_CONFIDENCE = 0.5;
 const ROUTER_HISTORY_TURNS  = 2;
+const ROUTER_MODEL          = 'gpt-6-luna';
 
 /** Head + tail window of the message: declarations at the top and the logic/instruction at the bottom matter most. */
 function routerWindow(text) {
@@ -110,30 +111,32 @@ Schema: {"id": "<skill_id or 'none'>", "confidence": 0.0-1.0, "reason": "<one sh
 
     try {
         const client = oai || openai;
-        // no userId here, so errors throw to /api/chat; response_format forces JSON
-        const messages = [{ role: 'system', content: sys }];
+        // no userId here, so errors throw to /api/chat; json_object forces JSON
+        const input = [{ role: 'system', content: sys }];
         if (recent) {
-            messages.push({ role: 'user', content:
+            input.push({ role: 'user', content:
                 'Earlier turns, for context only — classify the NEW message that follows:\n' + recent });
         }
-        messages.push({ role: 'user', content: routerWindow(fullText) });
+        input.push({ role: 'user', content: routerWindow(fullText) });
 
+        // classification needs no reasoning: effort none keeps the router at ~1.8 s
         const routerArgs = {
-            model:           'gpt-4o-mini',
-            max_tokens:      120,
-            temperature:     0,
-            response_format: { type: 'json_object' },
-            messages,
+            model:             ROUTER_MODEL,
+            reasoning:         { effort: 'none' },
+            max_output_tokens: 300,
+            text:              { format: { type: 'json_object' } },
+            store:             false,
+            input,
         };
-        const resp = await client.chat.completions.create(routerArgs).catch(async (e) => {
+        const resp = await client.responses.create(routerArgs).catch(async (e) => {
             // chat works only if the router survives, so trade attribution for availability
             if ((e?.status === 401) && client !== openai && openai) {
                 console.warn('[router] catalog: 401 from project key — retrying with global');
-                return await openai.chat.completions.create(routerArgs);
+                return await openai.responses.create(routerArgs);
             }
             throw e;
         });
-        const raw = resp.choices[0]?.message?.content || '{}';
+        const raw = resp.output_text || '{}';
         const parsed = JSON.parse(raw);
         const id     = String(parsed.id || 'none');
         const conf   = Number(parsed.confidence || 0);

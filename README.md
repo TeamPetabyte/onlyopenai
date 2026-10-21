@@ -15,7 +15,7 @@ billing is built in.
 ## ✨ Features
 
 - **Streaming chat** (SSE) with an SAP-specialist persona
-- **Skill router** — `gpt-4o-mini` classifies each message and applies the
+- **Skill router** — `gpt-6-luna` classifies each message and applies the
   best-matching prompt; skills whose code-shape rule fires add their knowledge
 - **7 skills** — 6 review skills (obsolete statements, SELECT best practice,
   SELECT in loop, LIKE, commented-out code, general best practice) and
@@ -52,7 +52,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
                                               │  serves API + built frontend (dist/)
                                               ├──▶ PostgreSQL  (users, credits, history, prompts, pricing)
                                               ├──▶ abaplint    (in-process ABAP parser, per-project release)
-                                              └──▶ OpenAI      (gpt-6 / gpt-5.6 / gpt-5.5 answer · gpt-4o-mini router · vector store)
+                                              └──▶ OpenAI      (gpt-6 / gpt-5.6 / gpt-5.5 answer · gpt-6-luna router · vector store)
 ```
 
 - **Backend:** Node.js + Express — `server/server.js` wires `routes/` (HTTP) and
@@ -79,7 +79,7 @@ Browser ──HTTPS──▶ Cloudflare tunnel ──▶ Node/Express server (:3
 | Web | Express, CORS, Helmet |
 | Auth | session cookie (HttpOnly) + CSRF, bcrypt, `express-rate-limit` |
 | DB | PostgreSQL (`pg`) + SQL migrations |
-| AI | `openai` SDK — Responses API (gpt-6-astra, gpt-6.1-sol, gpt-6-sol/luna, gpt-5.6-sol/terra/luna) and Chat Completions (gpt-5.5); `gpt-4o-mini` router |
+| AI | `openai` SDK — Responses API (gpt-6-astra, gpt-6.1-sol, gpt-6-sol/luna, gpt-5.6-sol/terra/luna) and Chat Completions (gpt-5.5); `gpt-6-luna` router |
 | ABAP | `@abaplint/core` (MIT) for syntax / variable / type checks, no SAP system needed |
 | Frontend build | Vite + `@tailwindcss/vite` (`npm run build` → `dist/`) |
 | Validation | `zod` |
@@ -155,7 +155,7 @@ HTTP. It needs a reachable Postgres: `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`
 | `OPENAI_API_KEY` | OpenAI key for chat |
 | `OPENAI_MODEL` | fallback answer model when the client sends none or an unknown one |
 | `OPENAI_TEMPERATURE` | number to use; empty to omit (reasoning models reject it) |
-| `OPENAI_ASSISTANT_ID` / `OPENAI_VECTOR_STORE_ID` | assistant + vector store ids |
+| `OPENAI_VECTOR_STORE_ID` | vector store id for the knowledge base |
 | `ENCRYPTION_KEY` | 64-hex AES key used to encrypt per-project OpenAI keys — losing it makes those keys unreadable |
 | `ALLOWED_ORIGINS` | comma-separated allowed origins for CORS (include your domain) |
 | `CHAT_RATE_LIMIT_PER_MIN`, `MAX_BALANCE`, `LOCKOUT_*`, `LOGIN_MAX_PER_15MIN`, `LOG_*` | tunables |
@@ -170,7 +170,7 @@ HTTP. It needs a reachable Postgres: `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`
   `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra` (default), `gpt-5.6-luna` on the
   Responses API with reasoning effort; `gpt-5.5` on Chat Completions. Anything
   else falls back to `OPENAI_MODEL`.
-- **Router model:** `gpt-4o-mini` (cheap/fast skill classification on every message).
+- **Router model:** `gpt-6-luna` at reasoning effort `none` (cheap/fast skill classification on every message).
 - **Target release:** each project carries `target_release`; the prompt tells the
   model which ABAP release the code must compile on and abaplint checks it
   against the same version (`v731` is checked with abaplint's `v702` grammar).

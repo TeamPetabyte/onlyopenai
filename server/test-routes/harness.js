@@ -47,7 +47,7 @@ async function start() {
         // real-looking key so HAS_API_KEY is true and the budget gate runs; base URL is a dead port
         OPENAI_API_KEY: 'sk-route-test-dummy',
         OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
-        OPENAI_ADMIN_KEY: '', OPENAI_ASSISTANT_ID: '', OPENAI_VECTOR_STORE_ID: '',
+        OPENAI_ADMIN_KEY: '', OPENAI_VECTOR_STORE_ID: '',
         HTTPS_PROXY: '', HTTP_PROXY: '',
         ENCRYPTION_KEY: '00'.repeat(32),
         ALLOWED_ORIGINS: '',

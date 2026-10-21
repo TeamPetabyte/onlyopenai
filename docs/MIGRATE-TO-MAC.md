@@ -6,7 +6,7 @@ The app is plain Node.js + PostgreSQL + static files — fully cross-platform.
 ## 0. Before leaving the current machine
 - [ ] **Back up `server/.env`** — it is gitignored (not on GitHub). Copy the file
       somewhere safe (password manager / encrypted note). You need these values:
-      `OPENAI_API_KEY`, `OPENAI_ADMIN_KEY`, `OPENAI_ASSISTANT_ID`,
+      `OPENAI_API_KEY`, `OPENAI_ADMIN_KEY`,
       `OPENAI_VECTOR_STORE_ID`, `DB_PASS`, `ENCRYPTION_KEY`.
       > ⚠ `ENCRYPTION_KEY` MUST be identical on the new machine, or encrypted
       > project API keys in the DB become unreadable.

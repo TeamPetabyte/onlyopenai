@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const models = require('../lib/models');
 
-const DEFAULT = 'gpt-4o-mini';
+const DEFAULT = 'gpt-5.6-terra';
 
 test('resolveModel: an explicit known model is honoured, with its API path', () => {
     assert.deepEqual(models.resolveModel('gpt-5.6-sol', DEFAULT),
@@ -28,7 +28,7 @@ test('resolveModel: gpt-5.6 is an alias for sol', () => {
 
 test('resolveModel: an unknown or missing model falls back to the deployment default', () => {
     for (const req of ['nope', '', null, undefined]) {
-        assert.deepEqual(models.resolveModel(req, DEFAULT), { model: DEFAULT, path: 'chat' });
+        assert.deepEqual(models.resolveModel(req, DEFAULT), { model: DEFAULT, path: 'responses' });
     }
 });
 
