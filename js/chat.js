@@ -19,7 +19,7 @@ const ICON = {
         // --- State ---
         const State = {
             selectedSkill: 'auto',
-            selectedModel: 'gpt-5.6-terra',   // model picker default
+            selectedModel: 'gpt-6.1-sol',   // model picker default
             selectedEffort: 'medium',          // reasoning effort default
             isRunning: false,
             balance: 100,

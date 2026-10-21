@@ -11,7 +11,7 @@ const HAS_API_KEY = !!(
 );
 const _models = require('../../lib/models');
 // an env value outside the registry (e.g. a retired gpt-4o) falls back to the product default
-const MODEL = Object.hasOwn(_models.ALLOWED_MODELS, process.env.OPENAI_MODEL || '') ? process.env.OPENAI_MODEL : 'gpt-5.6-terra';
+const MODEL = Object.hasOwn(_models.ALLOWED_MODELS, process.env.OPENAI_MODEL || '') ? process.env.OPENAI_MODEL : 'gpt-6.1-sol';
 // model ใหม่ปฏิเสธ temperature ที่ตั้งเอง — เจอ reject ครั้งแรกแล้วเลิกส่งถาวรผ่าน _tempUnsupported
 const OAI_TEMPERATURE = (process.env.OPENAI_TEMPERATURE !== undefined)
     ? (process.env.OPENAI_TEMPERATURE.trim() === '' ? null : Number(process.env.OPENAI_TEMPERATURE))

@@ -128,7 +128,7 @@ DB_PASS=<strong-random-32-chars>
 
 # OpenAI
 OPENAI_API_KEY=sk-proj-...          # ← key สำหรับ app
-OPENAI_MODEL=gpt-5.6-terra
+OPENAI_MODEL=gpt-6.1-sol
 OPENAI_ADMIN_KEY=sk-admin-...       # ← admin key (ปิด sync = optional)
 OPENAI_VECTOR_STORE_ID=vs_...
 

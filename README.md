@@ -167,7 +167,7 @@ HTTP. It needs a reachable Postgres: `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`
 ## 🤖 Models & Pricing
 
 - **Answer models** (picked per message in the UI, registry in `server/lib/models.js`):
-  `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra` (default), `gpt-5.6-luna` on the
+  `gpt-6-astra`, `gpt-6.1-sol` (default), `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` on the
   Responses API with reasoning effort; `gpt-5.5` on Chat Completions. Anything
   else falls back to `OPENAI_MODEL`.
 - **Router model:** `gpt-6-luna` at reasoning effort `none` (cheap/fast skill classification on every message).
