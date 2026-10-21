@@ -866,9 +866,10 @@ const ICON = {
 
                     // ดึงตัวเลขจริงหลังหักเงิน — ไม่รอ poll 60s
                     refreshQuotaWarning();
+                    // blocked = every failure path in ai-client; its bubble already says why
                     if (result.stopped) {
                         showToast(t('u.stop.stoppedGenerating'), 'success');
-                    } else {
+                    } else if (!result.blocked) {
                         showToast(t('u.done'), 'success');
                     }
                     State.isRunning = false;
