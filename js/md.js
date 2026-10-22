@@ -1,7 +1,7 @@
 // Markdown rendering for chat: marked → DOMPurify → hljs, plus copy/download buttons.
 const ICON_COPY = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg>';
-// Exposes global MD: render(text), postProcess(el), attachMessageCopy(el, rawText).
+// Exposes global MD: render(text), postProcess(el, baseName), attachMessageCopy(el, rawText).
 // While streaming, callers render escaped plain text and swap to markdown at the end.
 
 (function () {
@@ -155,7 +155,8 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         }));
     }
 
-    function postProcess(rootEl) {
+    // baseName = the file the user attached, so a code block downloads as <name>.<its language's ext>
+    function postProcess(rootEl, baseName) {
         if (!rootEl || !libsReady()) return;
         registerAbap();
 
@@ -196,6 +197,14 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
             btn.innerHTML = ICON_COPY + '<span class="msg-action-label">Copy</span>';
             btn.addEventListener('click', () => copyTextTo(codeEl.innerText, btn));
             head.appendChild(btn);
+            const dl = document.createElement('button');
+            dl.type = 'button';
+            dl.className = 'code-copy-btn code-dl-btn';
+            dl.setAttribute('aria-label', 'ดาวน์โหลดโค้ด');
+            dl.innerHTML = ICON_DOWNLOAD + '<span class="msg-action-label">Download</span>';
+            dl.addEventListener('click', () =>
+                downloadText(codeEl.innerText.replace(/\s+$/, '') + '\n', codeFilename(lang, baseName)));
+            head.appendChild(dl);
             pre.appendChild(head);
         });
     }
@@ -220,15 +229,7 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         return actions;   // caller can append more buttons (e.g. Regenerate)
     }
 
-    // When the answer carries a corrected source file, download the code alone so the .abap compiles.
-    function downloadableBody(rawText) {
-        const t = String(rawText || '');
-        const blocks = [...t.matchAll(/```(?:\w+)?\r?\n([\s\S]*?)```/g)].map(m => m[1]);
-        if (!blocks.length) return t;                       // prose answer — save as-is
-        return blocks.reduce((a, b) => (b.length > a.length ? b : a)).replace(/\s+$/, '') + '\n';
-    }
-
-    // Download button: save the AI response as a file
+    // Download button: the whole answer as Markdown; code blocks have their own Download
     function attachMessageDownload(actionsEl, rawText, filename) {
         if (!actionsEl) return;
         if (actionsEl.querySelector('.msg-action-download')) return;   // idempotent
@@ -239,34 +240,28 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         dlBtn.setAttribute('aria-label', 'ดาวน์โหลดคำตอบ');
         dlBtn.innerHTML = '<span class="msg-action-icon">' + ICON_DOWNLOAD + '</span><span class="msg-action-label">Download</span>';
         dlBtn.addEventListener('click', () =>
-            downloadText(downloadableBody(rawText),
-                filename ? withExtension(filename, rawText) : guessFilename(rawText)));
+            downloadText(rawText, baseOf(filename, 'pipekai-answer') + (filename ? '-answer' : '') + '.md'));
 
         actionsEl.appendChild(dlBtn);
         return dlBtn;
     }
 
-    // Extension from the fenced block's language, so ABAP downloads as .abap not .txt.
+    // Extension from the fenced block's language, so ABAP downloads as .abap and SQL as .sql.
     const LANG_EXT = {
-        abap: 'abap', javascript: 'js', typescript: 'ts', python: 'py',
-        java: 'java', json: 'json', sql: 'sql', xml: 'xml', html: 'html',
-        css: 'css', bash: 'sh', shell: 'sh', sh: 'sh', yaml: 'yml', yml: 'yml',
+        abap: 'abap', cds: 'cds', ddl: 'ddls', ddls: 'ddls', sql: 'sql',
+        javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py',
+        java: 'java', json: 'json', xml: 'xml', html: 'html', css: 'css', csv: 'csv',
+        bash: 'sh', shell: 'sh', sh: 'sh', yaml: 'yml', yml: 'yml', ini: 'ini', properties: 'properties',
         c: 'c', cpp: 'cpp', csharp: 'cs', go: 'go', ruby: 'rb', php: 'php',
-        markdown: 'md', md: 'md', plaintext: 'txt', text: 'txt',
+        markdown: 'md', md: 'md', plaintext: 'txt', text: 'txt', txt: 'txt',
     };
-    // Uploads often arrive without an extension; take it from the code block's language.
-    function withExtension(name, rawText) {
-        if (/\.[A-Za-z0-9]{1,6}$/.test(name)) return name;
-        const m = /^```(\w+)?/m.exec(String(rawText || ''));
-        return name + '.' + (LANG_EXT[(m && m[1] || '').toLowerCase()] || 'txt');
+    // attached "ZTEST.abap" → "ZTEST"; nothing attached → "<fallback>-<timestamp>"
+    function baseOf(filename, fallback) {
+        if (filename) return String(filename).replace(/\.[A-Za-z0-9]{1,10}$/, '');
+        return fallback + '-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     }
-
-    function guessFilename(rawText) {
-        const m = /^```(\w+)?/m.exec(String(rawText || ''));
-        const lang = m && m[1] ? m[1].toLowerCase() : '';
-        const ext = LANG_EXT[lang] || 'txt';
-        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        return `pipekai-response-${ts}.${ext}`;
+    function codeFilename(lang, baseName) {
+        return baseOf(baseName, 'pipekai-code') + '.' + (LANG_EXT[String(lang || '').toLowerCase()] || 'txt');
     }
 
     // Client-side download via Blob + <a download>

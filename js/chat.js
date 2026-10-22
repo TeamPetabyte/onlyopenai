@@ -297,14 +297,14 @@ const ICON = {
                     const bubble = document.createElement('div');
                     bubble.className = 'msg-bubble md-rendered';
                     bubble.innerHTML = MD.render(msg.content || '');
-                    MD.postProcess(bubble);
-                    div.appendChild(bubble);
-                    const actions = MD.attachMessageCopy(bubble, msg.content || '');
                     // ชื่อไฟล์จาก turn ที่ถาม — ดาวน์โหลดได้ชื่อเดียวกับตอน live
                     const askedWith = (messages[idx - 1] || {}).content || '';
                     const fileTag = /\[File:\s*([^\]\n]+)\]/.exec(askedWith);
-                    if (actions) MD.attachMessageDownload(actions, msg.content || '',
-                        fileTag ? fileTag[1].trim() : undefined);
+                    const askedFile = fileTag ? fileTag[1].trim() : undefined;
+                    MD.postProcess(bubble, askedFile);
+                    div.appendChild(bubble);
+                    const actions = MD.attachMessageCopy(bubble, msg.content || '');
+                    if (actions) MD.attachMessageDownload(actions, msg.content || '', askedFile);
                     if (actions && isLast) addRegenerateButton(actions);
                     if (msg.skillId || (msg.skillsUsed && msg.skillsUsed.length)) {
                         const sb = document.createElement('div');
@@ -825,7 +825,7 @@ const ICON = {
                     if (responseMsgEl && streamBubble) {
                         streamBubble.classList.add('md-rendered');
                         streamBubble.innerHTML = MD.render(accumulated);
-                        MD.postProcess(streamBubble);
+                        MD.postProcess(streamBubble, uploadedName);
                         const actions = MD.attachMessageCopy(streamBubble, accumulated);
                         if (actions) MD.attachMessageDownload(actions, accumulated, uploadedName);
                         if (actions) addRegenerateButton(actions);

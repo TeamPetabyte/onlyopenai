@@ -299,6 +299,7 @@ button { cursor: pointer; background: none; border: 0; }
     transition: background var(--duration-fast);
 }
 .code-copy-btn:hover { background: rgba(255, 255, 255, .08); }
+.code-copy-btn + .code-dl-btn { margin-left: 0; }
 .code-copy-btn.is-copied { background: rgba(52, 211, 153, .18); border-color: rgba(52, 211, 153, .4); color: #6ee7b7; }
 /* hljs palette for the dark code card (vendor github theme is light) */
 .msg-bubble pre .hljs-comment, .msg-bubble pre .hljs-quote { color: #7c8aa5; font-style: italic; }
