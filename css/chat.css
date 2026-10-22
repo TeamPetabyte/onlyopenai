@@ -218,6 +218,9 @@ button { cursor: pointer; background: none; border: 0; }
     border-radius: 18px 18px 4px 18px; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
 }
 :root[data-theme="dark"] .chat-msg.user .msg-bubble { background: #2f6fe0; }
+.msg-file { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; margin-top: 8px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, .18); font: 500 12.5px var(--font-mono); white-space: nowrap; }
+.msg-file span { overflow: hidden; text-overflow: ellipsis; }
+.msg-file.only { margin-top: 0; }
 
 /* assistant: mascot avatar on the left, content column on the right */
 .chat-msg.assistant {

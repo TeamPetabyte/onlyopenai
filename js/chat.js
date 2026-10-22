@@ -289,7 +289,7 @@ const ICON = {
                 if (msg.role === 'user') {
                     const div = document.createElement('div');
                     div.className = 'chat-msg user';
-                    div.innerHTML = '<div class="msg-bubble">' + esc(msg.content) + '</div>';
+                    div.innerHTML = userBubbleHtml(msg.content);
                     area.appendChild(div);
                 } else if (msg.role === 'assistant') {
                     const div = document.createElement('div');
@@ -663,7 +663,7 @@ const ICON = {
             const area = document.getElementById('chat-area');
             const emptyEl = document.getElementById('chat-empty'); if (emptyEl) emptyEl.remove();
             const userDiv = document.createElement('div'); userDiv.className = 'chat-msg user';
-            userDiv.innerHTML = '<div class="msg-bubble">' + esc(displayText) + '</div>';
+            userDiv.innerHTML = userBubbleHtml(prompt);
             area.appendChild(userDiv); area.scrollTop = area.scrollHeight;
 
             // ปุ่ม send กลายเป็นปุ่ม stop; isRunning กันส่งซ้ำ
@@ -1188,6 +1188,14 @@ const ICON = {
         }
         function handleInputKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+        // user turn = typed text, then "[File: name]\n<content>" when a file was attached (chat.js send, stored as-is)
+        function userBubbleHtml(raw) {
+            raw = String(raw || '');
+            const m = /(?:^|\n\n)\[File:\s*([^\]\n]+)\]\n/.exec(raw);
+            const text = m ? raw.slice(0, m.index) : raw;
+            const chip = m ? '<span class="msg-file' + (text ? '' : ' only') + '">' + ICON.file + '<span>' + esc(m[1].trim()) + '</span></span>' : '';
+            return '<div class="msg-bubble">' + esc(text) + chip + '</div>';
+        }
         // escape เครื่องหมายคำพูดด้วย — esc() ถูกใช้ใน attribute
         function esc(t) {
             return String(t)
