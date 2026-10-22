@@ -113,8 +113,10 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     let chatHistory = [];
     if (chatSessionId && sessionId) {   // existing session only — a fresh one has no past
         try {
-            const HIST_MAX_MSGS  = 12;
-            const HIST_MAX_CHARS = 24000;   // ~6k tokens of replayed context
+            // whole chat, newest first, until the budget; models take ~1M tokens but input above
+            // 272K tokens bills at 2x, so history + earlier files + prompt stay well under that
+            const HIST_MAX_MSGS  = 400;
+            const HIST_MAX_CHARS = 400000;   // ~100K tokens of code, more for Thai text
             const h = await pool.query(
                 `SELECT role, content FROM tbl_chat_message
                   WHERE session_id=$1 AND role IN ('user','assistant')
@@ -128,7 +130,7 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                 used += text.length;
             }
             chatHistory.reverse();                    // chronological for the model
-            // files attached earlier in this chat survive the 12-message / 24k window
+            // files attached earlier in this chat stay even after their turn falls out of the budget
             const f = await pool.query(
                 `SELECT content FROM tbl_chat_message
                   WHERE session_id=$1 AND role='user' AND content LIKE '%[File:%'
