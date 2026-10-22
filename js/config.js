@@ -30,7 +30,7 @@
     const API_BASE = resolveBase();
 
     // Shown in the UI footers; bump alongside the git tag on every release.
-    const APP_VERSION = 'v1.17.1';
+    const APP_VERSION = 'v1.17.2';
 
     window.AppConfig = {
         API_BASE: API_BASE,
