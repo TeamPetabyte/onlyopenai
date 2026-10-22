@@ -229,7 +229,7 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         return actions;   // caller can append more buttons (e.g. Regenerate)
     }
 
-    // Download button: the whole answer as Markdown; code blocks have their own Download
+    // Download button: the whole answer as plain text; code blocks have their own Download
     function attachMessageDownload(actionsEl, rawText, filename) {
         if (!actionsEl) return;
         if (actionsEl.querySelector('.msg-action-download')) return;   // idempotent
@@ -240,7 +240,7 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         dlBtn.setAttribute('aria-label', 'ดาวน์โหลดคำตอบ');
         dlBtn.innerHTML = '<span class="msg-action-icon">' + ICON_DOWNLOAD + '</span><span class="msg-action-label">Download</span>';
         dlBtn.addEventListener('click', () =>
-            downloadText(rawText, baseOf(filename, 'pipekai-answer') + (filename ? '-answer' : '') + '.md'));
+            downloadText(rawText, baseOf(filename, 'pipekai-answer') + (filename ? '-answer' : '') + '.txt'));
 
         actionsEl.appendChild(dlBtn);
         return dlBtn;
