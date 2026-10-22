@@ -1,8 +1,8 @@
-// attached-files.test.js — earlier attachments stay in context, once each, newest version wins.
+// chat-context.test.js — earlier attachments stay in context once each; history fills to the budget.
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { splitFile, stripFileBody, earlierFilesBlock } = require('../lib/attached-files');
+const { splitFile, stripFileBody, earlierFilesBlock, buildChatContext, HIST_MAX_CHARS } = require('../lib/chat-context');
 
 const turn = (text, name, body) => (text ? text + '\n\n' : '') + `[File: ${name}]\n${body}`;
 
@@ -39,4 +39,24 @@ test('earlierFilesBlock: newest version of each file, none re-attached now, with
     assert.ok(!capped.includes('BIG.abap') && capped.includes('SMALL.abap'));
 
     assert.strictEqual(earlierFilesBlock(['no files'], 'q'), '');
+});
+
+test('buildChatContext: whole chat when it fits, oldest turns dropped past the budget', () => {
+    const rows = [
+        { role: 'user', content: turn('review', 'ZA.abap', 'REPORT za.') },
+        { role: 'assistant', content: 'looks fine' },
+        { role: 'user', content: 'and line 1?' },
+    ];
+    const small = buildChatContext(rows, 'next');
+    assert.strictEqual(small.dropped, 0);
+    assert.ok(small.pct >= 0 && small.pct < 5);
+    assert.ok(small.history[0].content.startsWith('Files attached earlier'));
+    assert.strictEqual(small.history.length, 4);
+
+    const big = 'x'.repeat(HIST_MAX_CHARS / 2 + 1);
+    const full = buildChatContext([{ role: 'user', content: big }, { role: 'assistant', content: big },
+        { role: 'user', content: 'q' }], '');
+    assert.strictEqual(full.dropped, 1);
+    assert.strictEqual(full.pct, 100);
+    assert.strictEqual(buildChatContext([], '').pct, 0);
 });

@@ -256,6 +256,16 @@ test.describe('tenant isolation', () => {
         }
     });
 
+    test('the context meter reads only the caller\'s own chat', async () => {
+        const s = await srv.req('POST', '/api/chat/sessions', { auth: user, body: { title: 'ctx' } });
+        assert.equal(s.status, 200, s.text);
+        const mine = await srv.req('GET', `/api/chat/sessions/${s.json.session.id}/context`, { auth: user });
+        assert.equal(mine.status, 200, mine.text);
+        assert.deepEqual({ pct: mine.json.pct, dropped: mine.json.dropped }, { pct: 0, dropped: 0 });
+        const asAdmin = await srv.req('GET', `/api/chat/sessions/${s.json.session.id}/context`, { auth: admin });
+        assert.equal(asAdmin.status, 404, 'another account read this chat');
+    });
+
     test('admin-wide history answers (feeds the usage totals)', async () => {
         const r = await srv.req('GET', '/api/history', { auth: admin });
         assert.equal(r.status, 200, r.text);

@@ -90,6 +90,31 @@ const ICON = {
             } catch { }
         }
 
+        // context ring: how full the model's view of this chat is (server/lib/chat-context.js)
+        let ctxPct = 0;
+        async function refreshContextMeter() {
+            const el = document.getElementById('ctx-meter');
+            const id = State.currentSessionId;
+            if (!el) return;
+            if (!id) { el.hidden = true; ctxPct = 0; return; }
+            try {
+                const d = await fetch(BASE + '/api/chat/sessions/' + id + '/context', { headers: Auth.authHeaders() }).then(r => r.json());
+                if (!d.ok || State.currentSessionId !== id) return;
+                const tip = d.dropped ? tf('u.ctx.full', { n: d.dropped })
+                    : tf(d.pct >= 80 ? 'u.ctx.warn' : 'u.ctx.used', { pct: d.pct });
+                // say it once, when the chat first crosses 80% or starts losing old messages
+                if ((d.pct >= 80 && ctxPct < 80) || (d.dropped && ctxPct < 100)) showToast(tip, d.dropped ? 'error' : 'info');
+                ctxPct = d.pct;
+                document.getElementById('ctx-fill').setAttribute('stroke-dasharray', d.pct + ' 100');
+                document.getElementById('ctx-pct').textContent = d.pct + '%';
+                el.classList.toggle('is-warn', d.pct >= 80 && !d.dropped);
+                el.classList.toggle('is-full', !!d.dropped);
+                el.title = tip;
+                el.setAttribute('aria-label', tip);
+                el.hidden = false;
+            } catch { }
+        }
+
         async function apiGetSession(sessionId) {
             try {
                 const d = await fetch(BASE + '/api/chat/sessions/' + sessionId, { headers: Auth.authHeaders() }).then(r => r.json());
@@ -213,6 +238,7 @@ const ICON = {
             } catch (_) { }
             State.currentSessionId = null;
             State.currentMessages = [];
+            refreshContextMeter();
             const area = document.getElementById('chat-area');
             area.innerHTML = `
         <div class="chat-empty" id="chat-empty">
@@ -269,6 +295,8 @@ const ICON = {
 
             renderChatMessages(State.currentMessages);
             renderSessionList();
+            ctxPct = 100;   // opening a chat shows the ring without re-announcing it
+            refreshContextMeter();
         }
 
         // --- Render messages ---
@@ -866,6 +894,7 @@ const ICON = {
 
                     // ดึงตัวเลขจริงหลังหักเงิน — ไม่รอ poll 60s
                     refreshQuotaWarning();
+                    refreshContextMeter();
                     // blocked = every failure path in ai-client; its bubble already says why
                     if (result.stopped) {
                         showToast(t('u.stop.stoppedGenerating'), 'success');

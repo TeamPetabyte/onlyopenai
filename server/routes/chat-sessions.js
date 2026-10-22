@@ -1,5 +1,6 @@
 // chat-sessions.js — session แชท: list/get/create/rename/delete/export
 const express = require('express');
+const { buildChatContext } = require('../lib/chat-context');
 
 module.exports = function (ctx) {
 const router = express.Router();
@@ -177,6 +178,19 @@ router.delete('/api/chat/sessions/:id', requireAuth, async (req, res) => {
 });
 
 // GET /api/chat/sessions/:id/export   → plain markdown file
+// GET /api/chat/sessions/:id/context → { pct, dropped } — how full the model's view of this chat is
+router.get('/api/chat/sessions/:id/context', requireAuth, async (req, res) => {
+    const sess = await loadOwnedSession(req, res, req.params.id);
+    if (!sess) return;
+    try {
+        const m = await pool.query(
+            `SELECT role, content FROM tbl_chat_message
+              WHERE session_id=$1 AND role IN ('user','assistant') ORDER BY message_id`, [sess.session_id]);
+        const { pct, dropped } = buildChatContext(m.rows, '');
+        res.json({ ok: true, pct, dropped });
+    } catch (e) { res.status(500).json({ ok: false, ...safeError(e, req) }); }
+});
+
 router.get('/api/chat/sessions/:id/export', requireAuth, async (req, res) => {
     const sess = await loadOwnedSession(req, res, req.params.id);
     if (!sess) return;

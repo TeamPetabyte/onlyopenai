@@ -4,7 +4,7 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const crypto = require('crypto');
-const { stripFileBody, earlierFilesBlock } = require('../lib/attached-files');
+const { buildChatContext } = require('../lib/chat-context');
 const {
     applyCodePlaceholder,
     buildPreAnalysis,
@@ -113,30 +113,11 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
     let chatHistory = [];
     if (chatSessionId && sessionId) {   // existing session only — a fresh one has no past
         try {
-            // whole chat, newest first, until the budget; models take ~1M tokens but input above
-            // 272K tokens bills at 2x, so history + earlier files + prompt stay well under that
-            const HIST_MAX_MSGS  = 400;
-            const HIST_MAX_CHARS = 400000;   // ~100K tokens of code, more for Thai text
             const h = await pool.query(
                 `SELECT role, content FROM tbl_chat_message
                   WHERE session_id=$1 AND role IN ('user','assistant')
-                  ORDER BY message_id DESC LIMIT $2`, [chatSessionId, HIST_MAX_MSGS]);
-            let used = 0;
-            for (const m of h.rows) {                 // newest → oldest
-                // file bodies replay once, in the files block below, not inside every old turn
-                const text = m.role === 'user' ? stripFileBody(m.content) : String(m.content || '');
-                if (chatHistory.length && used + text.length > HIST_MAX_CHARS) break;
-                chatHistory.push({ role: m.role, content: text.slice(0, HIST_MAX_CHARS) });
-                used += text.length;
-            }
-            chatHistory.reverse();                    // chronological for the model
-            // files attached earlier in this chat stay even after their turn falls out of the budget
-            const f = await pool.query(
-                `SELECT content FROM tbl_chat_message
-                  WHERE session_id=$1 AND role='user' AND content LIKE '%[File:%'
-                  ORDER BY message_id DESC LIMIT 20`, [chatSessionId]);
-            const filesBlock = earlierFilesBlock(f.rows.map(r => r.content), prompt);
-            if (filesBlock) chatHistory.unshift({ role: 'user', content: filesBlock });
+                  ORDER BY message_id`, [chatSessionId]);
+            chatHistory = buildChatContext(h.rows, prompt).history;
         } catch (e) {
             console.warn('[chat] history load skipped:', e.message);
         }
