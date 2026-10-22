@@ -4,6 +4,7 @@ const express = require('express');
 module.exports = function (ctx) {
 const router = express.Router();
 const crypto = require('crypto');
+const { stripFileBody, earlierFilesBlock } = require('../lib/attached-files');
 const {
     applyCodePlaceholder,
     buildPreAnalysis,
@@ -120,12 +121,20 @@ router.post('/api/chat', requireAuth, chatRateLimiter, validate(schemas.chat), a
                   ORDER BY message_id DESC LIMIT $2`, [chatSessionId, HIST_MAX_MSGS]);
             let used = 0;
             for (const m of h.rows) {                 // newest → oldest
-                const text = String(m.content || '');
+                // file bodies replay once, in the files block below, not inside every old turn
+                const text = m.role === 'user' ? stripFileBody(m.content) : String(m.content || '');
                 if (chatHistory.length && used + text.length > HIST_MAX_CHARS) break;
                 chatHistory.push({ role: m.role, content: text.slice(0, HIST_MAX_CHARS) });
                 used += text.length;
             }
             chatHistory.reverse();                    // chronological for the model
+            // files attached earlier in this chat survive the 12-message / 24k window
+            const f = await pool.query(
+                `SELECT content FROM tbl_chat_message
+                  WHERE session_id=$1 AND role='user' AND content LIKE '%[File:%'
+                  ORDER BY message_id DESC LIMIT 20`, [chatSessionId]);
+            const filesBlock = earlierFilesBlock(f.rows.map(r => r.content), prompt);
+            if (filesBlock) chatHistory.unshift({ role: 'user', content: filesBlock });
         } catch (e) {
             console.warn('[chat] history load skipped:', e.message);
         }
