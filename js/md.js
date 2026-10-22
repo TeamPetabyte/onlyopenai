@@ -41,7 +41,24 @@ const ICON_DOWNLOAD = '<svg class="ic sm" aria-hidden="true" viewBox="0 0 24 24"
         // opened but never closed → treat the remainder as the code block
         t = t.replace(/<(?:modified\s+)?code>\s*([\s\S]*)$/i, '\n\n```abap\n$1\n```\n');
         t = t.replace(/<\/?analysis>/gi, '');
-        return t;
+        return sourcesOutsideFence(t);
+    }
+
+    // a "📚 Sources:" line left inside an unclosed (or empty) code fence belongs after it
+    function sourcesOutsideFence(text) {
+        const lines = String(text).split('\n');
+        const isFence = (l) => /^\s*(```|~~~)/.test(l);
+        let src = -1;
+        for (let i = lines.length - 1; i >= 0; i--) { if (/^\s*📚/.test(lines[i])) { src = i; break; } }
+        if (src < 0) return text;
+        let open = -1;
+        for (let i = 0; i < src; i++) if (isFence(lines[i])) open = open < 0 ? i : -1;
+        if (open < 0) return text;
+        const after = lines.findIndex((l, i) => i > src && isFence(l));
+        if (after >= 0) lines.splice(after, 1);   // the fence the model closed after the line
+        if (lines.slice(open + 1, src).every(l => !l.trim())) lines.splice(open, src - open);   // empty block
+        else lines.splice(src, 0, '```');
+        return lines.join('\n');
     }
 
     // DOMPurify config: tight allowlist, anything else is stripped.

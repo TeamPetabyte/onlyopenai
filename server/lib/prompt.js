@@ -24,6 +24,7 @@ const PROMPT_COMMON_APPENDIX = `
 - SAP manual excerpts contain page footers like "© 2009 SAP AG. All rights reserved. 225" and headings like "Unit 4: Dynamic Programming" / "Lesson: Using Field Symbols" — read the page number and unit/lesson FROM THE EXCERPT and include them when present.
 - NEVER guess or invent a page number. If the excerpt shows no page/unit marker, cite the filename alone.
 - If nothing came from the documents, end with "📚 Sources: general knowledge (ไม่ได้อ้างอิงจากคลังเอกสาร)" — the reader must always know where an answer came from.
+- The Sources line is plain text on its own line AFTER every code block is closed — never inside a \`\`\` block, and never open a code block you do not fill.
 - The org's own development standards (naming conventions, error handling, documentation rules) are supplied to you below whenever they are available — comply with them and cite them. Search for them yourself ONLY if no such section is present.
 - The library contains manuals from different eras (BC402/BC405/BC410/BC412/BC430 and others). If sources conflict, precedence is: (1) the org's own development standards, (2) the most modern syntax/approach. When a retrieved technique is classical/legacy (classical dynpros, SELECT...ENDSELECT, TABLES work areas), say so explicitly instead of presenting it as current best practice.
 
